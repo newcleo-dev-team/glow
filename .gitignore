@@ -1,0 +1,15 @@
+# Ignore the __pycache__ directory
+glow/__pycache__/
+
+# Ignore specific directories
+.venv/
+tests/outputs
+docs/_build
+
+# Ignore other common Python artifacts
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg
+*.egg-info/
