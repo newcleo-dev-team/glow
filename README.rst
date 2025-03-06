@@ -82,7 +82,7 @@ released under the |LICENSE| **License**.
     version and for the installation instructions.
   - The present version of |TOOL| is distributed as a **beta** version, meaning
     that the implementation is still in progress. Should users find any issue,
-    please refer to the :doc:`How to Contribute` section to know how to report
+    please refer to the :ref:`how-to-contribute` section to know how to report
     it.
 
 Project Structure
@@ -174,8 +174,8 @@ In addition, since *SALOME* comes with an embedded Python console, users can
 import the |TOOL| modules and exploit its functionalities directly.
 
 To see some of the |TOOL| functionalities in action, please refer to the script
-files present in the `test/examples` folder. They are intended to show few case
-studies and how they are managed in |TOOL|.
+files present in the ``test/examples`` folder. They are intended to show few
+case studies and how they are managed in |TOOL|.
 
 Documentation
 -------------
@@ -193,6 +193,8 @@ executing the following command in the folder ``docs/``:
 
 To see the available templates for generating the documentation in *PDF*
 format and to choose among them, please look at the ``docs/conf.py`` file.
+
+.. _how-to-contribute:
 
 How to Contribute
 -----------------
