@@ -82,7 +82,7 @@ released under the |LICENSE| **License**.
     version and for the installation instructions.
   - The present version of |TOOL| is distributed as a **beta** version, meaning
     that the implementation is still in progress. Should users find any issue,
-    please refer to the :ref:`how-to-contribute` section to know how to report
+    please refer to the `How to Contribute`_ section to know how to report
     it.
 
 Project Structure
@@ -194,7 +194,7 @@ executing the following command in the folder ``docs/``:
 To see the available templates for generating the documentation in *PDF*
 format and to choose among them, please look at the ``docs/conf.py`` file.
 
-.. _how-to-contribute:
+.. _How to Contribute:
 
 How to Contribute
 -----------------
