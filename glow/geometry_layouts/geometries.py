@@ -8,10 +8,10 @@ from abc import ABC, abstractmethod
 from typing import Any, List, Tuple, Union
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, extract_sorted_sub_shapes, extract_sub_shapes, \
-    get_basic_properties, get_min_distance, get_point_coordinates, \
-    get_shape_name, make_arc_edge, make_cdg, make_circle, make_edge, \
-    make_face, make_rotation, make_translation, make_vector, \
-    make_vector_from_points, make_vertex, make_vertex_on_curve, \
+    get_basic_properties, get_bounding_box, get_min_distance, \
+    get_point_coordinates, get_shape_name, make_arc_edge, make_cdg, \
+    make_circle, make_edge, make_face, make_rotation, make_translation, \
+    make_vector, make_vector_from_points, make_vertex, make_vertex_on_curve, \
     remove_from_study, update_salome_study
 
 
