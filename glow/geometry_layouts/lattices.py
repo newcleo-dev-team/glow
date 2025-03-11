@@ -799,55 +799,84 @@ class Lattice():
                 f"requested '{symmetry}'symmetry operation cannot be "
                 "applied.")
         match symmetry:
+            case SymmetryType.THIRD:
+                # ------------------
+                # R120 symmetry case
+                # ------------------
+                # Build the shape identifying the symmetry
+                face = self.__handle_third_symmetry()
+                # Update the lattice type of geometry
+                self.type_geo = LatticeGeometryType.R120
             case SymmetryType.SIXTH:
                 # ------------------
                 # SA60 symmetry case
                 # ------------------
-                # Extract the lattice portion corresponding to the symmetry
-                self.__handle_hex_symmetry(6)
-                 # Update the lattice type of geometry
+                # Build the shape identifying the symmetry
+                face = self.__handle_sixth_symmetry()
+                # Update the lattice type of geometry
                 self.type_geo = LatticeGeometryType.SA60
             case SymmetryType.TWELFTH:
                 # -----------------
                 # S30 symmetry case
                 # -----------------
-                # Extract the lattice portion corresponding to the symmetry
-                self.__handle_hex_symmetry(12)
+                # Build the shape identifying the symmetry
+                face = self.__build_triangle_on_lattice(0.0, 1/12)
                 # Update the lattice type of geometry
                 self.type_geo = LatticeGeometryType.SYMMETRIES_TWO
             case _:
                 raise AssertionError(
                     f"The provided '{symmetry}' symmetry type is not "
                     "admitted for lattices with hexagonal cells.")
-
-    def __handle_hex_symmetry(self, param: float) -> None:
-        """
-        Method that handles the symmetry application for hexagonal cells
-        lattices. Given the position of two of the vertices of a triangle,
-        with the third being the lattice center, a triangular shape is built.
-        This shape identifies the type of symmetry to apply.
-        A 'common' operation is performed between the shape and the lattice
-        compound so to extract the part of interest for the symmetry.
-
-        Parameters
-        ----------
-        param : float
-            Parameter for identifying the triangle vertices (6 for 'SIXTH',
-            12 for 'TWELFTH' symmetry type)
-        """
-        if self.cells_rot == 0.0:
-            # Build the triangle identifying the symmetry type
-            face = self.__build_triangle_on_lattice(0.75 - 1/(2*param),
-                                                    0.75 + 1/(2*param))
-        elif self.cells_rot == 90.0:
-            # Build the triangle identifying the symmetry type
-            face = self.__build_triangle_on_lattice(0.0, 1/param)
-        else:
-            raise AssertionError("The cells rotation of "
-                                  f"{self.cells_rot}° is not admitted.")
         # Perform the 'common' operation to extract the symmetry type
         # on the lattice and update the stored compound object
         self.lattice_symm = make_common(self.lattice_cmpd, face)
+
+    def __build_vertices(self, u_params: List[float]) -> List[Any]:
+        """
+        Method that builds a list of vertices on the construction circle of
+        the lattice box, with the first element being the lattice center.
+        The position of the points along the curve is expressed in terms of
+        a parameter in the [0-1] range, whose values are given as input.
+
+        Parameters
+        ----------
+        u_params  : List[float]
+            List of parameters in the [0-1] range identifying the positions
+            of the points
+
+        Returns
+        -------
+        A list of vertex objects built on the lattice box construction circle.
+        """
+        # Initialize the list with the lattice center
+        points = [self.lattice_center]
+        points += [
+            make_vertex_on_curve(self.lattice_box.figure.out_circle, u)
+            for u in u_params]
+        # Return the built list of vertex objects
+        return points
+
+    def __handle_sixth_symmetry(self) -> Any:
+        """
+        Method that handles the construction of the shape surface that
+        identifies a sixth symmetry for lattices with hexagonal cells.
+        The shape vertices are built depending on the rotation angle of
+        the cells, allowing to handle both 0° and 90° cases.
+        A face object is then built from the identified points.
+
+        Returns
+        -------
+        A face object representing the sixth symmetry shape.
+        """
+        if self.cells_rot == 0.0:
+            # Build the triangle identifying the symmetry type
+            return self.__build_triangle_on_lattice(1/(12), 1 - 1/(12))
+        elif self.cells_rot == 90.0:
+            # Build the triangle identifying the symmetry type
+            return self.__build_triangle_on_lattice(0.0, 1/6)
+        else:
+            raise AssertionError("The cells rotation of "
+                                  f"{self.cells_rot}° is not admitted.")
 
     def __handle_rect_symmetry(
             self, b_box: List[float], param: float) -> Any:
@@ -888,6 +917,28 @@ class Lattice():
         # Return the face
         return rect.face
 
+    def __handle_third_symmetry(self) -> Any:
+        """
+        Method that handles the construction of the shape surface that
+        identifies a third symmetry for lattices with hexagonal cells.
+        The shape vertices are built depending on the rotation angle of
+        the cells, allowing to handle both 0° and 90° cases.
+        A face object is then built from the identified points.
+
+        Returns
+        -------
+        A face object representing the third symmetry shape.
+        """
+        if self.cells_rot == 0.0:
+            points = self.__build_vertices([1 - 1/12, 1/12, 1/4])
+        elif self.cells_rot == 90.0:
+            points = self.__build_vertices([0, 1/6, 1/3])
+        else:
+            raise AssertionError("The cells rotation of "
+                                          f"{self.cells_rot}° is not admitted.")
+        # Return a face built from the vertices
+        return self.__build_face_from_vertices(points)
+
     def __build_triangle_on_lattice(
             self, vert2_u: float, vert3_u: float) -> Any:
         """
@@ -909,11 +960,7 @@ class Lattice():
         The GEOM face object identifying the triangle
         """
         # Build the three vertices of the triangle
-        points = [self.lattice_center,
-                  make_vertex_on_curve(
-                      self.lattice_box.figure.out_circle, vert2_u),
-                  make_vertex_on_curve(
-                      self.lattice_box.figure.out_circle, vert3_u)]
+        points = self.__build_vertices([vert2_u, vert3_u])
         # Return the face object built on the vertices
         return self.__build_face_from_vertices(points)
 

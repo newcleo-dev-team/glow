@@ -104,6 +104,8 @@ class SymmetryType(Enum):
               Identifying a complete lattice
     HALF    : int = 2
               Identifying an half of the lattice
+    THIRD   : int = 3
+              Identifying a third of the lattice
     QUARTER : int = 4
               Identifying a quarter of the lattice
     SIXTH   : int = 6
@@ -115,6 +117,7 @@ class SymmetryType(Enum):
     """
     FULL    : int = 0
     HALF    : int = 2
+    THIRD   : int = 3
     QUARTER : int = 4
     SIXTH   : int = 6
     EIGHTH  : int = 8
