@@ -327,19 +327,17 @@ def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
         for edge_no in bc.edge_indxs:
             # Write the index of the lattice border edge
             file.write(f"{edge_no}\n")
-        # Handle the different BC types
-        if bc.type == BoundaryType.AXIAL_SYMMETRY:
-            # Write the X-Y coordinates of the border edge origin and the
-            # angle between its vertices
-            file.write("* ax, ay, angle\n")
-            file.write(f"  {bc.tx:6f} {bc.ty:6f} {bc.angle:6f}\n")
-        elif bc.type == BoundaryType.TRANSLATION:
-            # Write the X-Y coordinates of the borders axes
-            file.write("* tx, ty, angle\n")
-            file.write(f"  {bc.tx:6f} {bc.ty:6f} {0:6f}\n")
-        else:
+        # Check if the BC type is allowed
+        if bc.type not in [BoundaryType.AXIAL_SYMMETRY,
+                           BoundaryType.ROTATION,
+                           BoundaryType.TRANSLATION]:
             raise AssertionError(
-                f"Treatment of type {bc.type} not implemented")
+                f"The '{bc.type}' BC type cannot be treated by the SALT "
+                "module of DRAGON5.")
+        # Write the X-Y coordinates of the border axes
+        file.write("* tx, ty, angle\n")
+        file.write(f"  {bc.tx:6f} {bc.ty:6f} {bc.angle:6f}\n")
+
 
 def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """

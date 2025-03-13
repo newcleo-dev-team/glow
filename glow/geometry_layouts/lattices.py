@@ -930,9 +930,9 @@ class Lattice():
         A face object representing the third symmetry shape.
         """
         if self.cells_rot == 0.0:
-            points = self.__build_vertices([1 - 1/12, 1/12, 1/4])
+            points = self.__build_vertices([1/4, 7/12, 2/3])
         elif self.cells_rot == 90.0:
-            points = self.__build_vertices([0, 1/6, 1/3])
+            points = self.__build_vertices([0, 1-1/6, 1-1/3])
         else:
             raise AssertionError("The cells rotation of "
                                           f"{self.cells_rot}° is not admitted.")
