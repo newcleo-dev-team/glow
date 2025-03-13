@@ -515,10 +515,27 @@ class Boundary:
                 if get_min_distance(self.lattice_o, self.border) > 1e-7:
                     # M=1 case
                     self.tx = lx
+                # Assign the BC type
+                self.type = BoundaryType.AXIAL_SYMMETRY
             case LatticeGeometryType.RECTANGLE_TRAN:
-                raise RuntimeError(
-                    f"The {self.type_geo} lattice geometry type is not "
-                    "currently handled.")
+                # The BC information for the case of a cartesian geometry
+                # with TRAN BCs follows the axes definition below:
+                #             M=3
+                #        ************
+                #        *          *
+                #    M=2 *          * M=4
+                #        ************
+                #             M=1
+                if abs(dy) < 1e-7:
+                    # The sign of 'dx' discriminates between the M=1 (dx > 0)
+                    # and M=3 (dx < 0)
+                    self.ty = (dx/abs(dx)) * lx
+                else:
+                    # The sign of 'dy' discriminates between the M=4 (dy > 0)
+                    # and M=2 (dy < 0)
+                    self.tx = -(dy/abs(dy)) * ly
+                # Assign the BC type
+                self.type = BoundaryType.TRANSLATION
             case LatticeGeometryType.RECTANGLE_SYM | \
                  LatticeGeometryType.RECTANGLE_EIGHT:
                 # The border origin must be defined so that the angle between
@@ -535,6 +552,8 @@ class Boundary:
                 # Set axes definition
                 self.tx = self.ox
                 self.ty = self.oy
+                # Assign the BC type
+                self.type = BoundaryType.AXIAL_SYMMETRY
             case LatticeGeometryType.SA60:
                 # The BC information for the case of an hexagonal geometry
                 # with SA60 symmetry follows the axes definition below:
@@ -546,6 +565,8 @@ class Boundary:
                 if get_min_distance(self.lattice_o, self.border) > 1e-7:
                     # M=1 case
                     self.tx = lx
+                # Assign the BC type
+                self.type = BoundaryType.AXIAL_SYMMETRY
             case LatticeGeometryType.HEXAGON_TRAN:
                 # The BC information for the case of an hexagonal geometry
                 # with translation on its sides follows the axes definition
@@ -574,6 +595,8 @@ class Boundary:
                     # and M=3 (dx < 0)
                     self.tx = 3/2 * lx
                     self.ty = (dx/abs(dx)) * ly
+                # Assign the BC type
+                self.type = BoundaryType.TRANSLATION
             case LatticeGeometryType.RA60:
                 raise RuntimeError(
                     f"The {self.type_geo} lattice geometry type is not "
