@@ -668,9 +668,11 @@ class GenericCell(ABC):
         """
         Method that rotates all the geometrical elements the cell is made of
         by a given angle in degrees.
-        The cell GEOM face is rebuild from the rotated elements and so both
-        the subfaces of the cell technological geometry and those coming from
-        the cell sectorization are derived as well.
+        The cell face object is rebuild from the rotated base elements it is
+        it is made of.
+        The dictionaries associating the cell regions to the properties and
+        the sectorization options are updated with the rotated versions of
+        the regions themselves.
 
         Parameters
         ----------
@@ -682,34 +684,60 @@ class GenericCell(ABC):
         # Build the Z-axis of rotation positioned in the cell center
         z_axis = make_vector_from_points(
             self.figure.o, make_vertex((center[0], center[1], 1)))
-        rotation = math.radians(angle)
 
-        # Rotate the main figure (face, borders, vertices) of the cell
-        self.figure.rotate(angle)
-        # Rotate the cell inner circles
+        # Rotate the cell geometrical elements around its central axis
+        self.rotate_from_axis(angle, z_axis)
+
+        # Update the cell rotation
+        self.rotation += math.radians(angle)
+
+    def rotate_from_axis(self, angle: float, axis: Any) -> None:
+        """
+        Method that rotates all the geometrical elements the cell is made of
+        by a given angle in degrees around the given axis object.
+        The cell face object is rebuild from the rotated base elements it is
+        it is made of.
+        The dictionaries associating the cell regions to the properties and
+        the sectorization options are updated with the rotated versions of
+        the regions themselves.
+
+        Parameters
+        ----------
+        angle : float
+                The angle of rotation in degree
+        axis  : Any
+                The axis object around which the rotation takes place
+        """
+        rotation = math.radians(angle)
+        # Rotate the cell basic elements around the given axis
+        self.figure.rotate_from_axis(angle, axis)
         for circle in self.inner_circles:
-            circle.rotate(angle)
+            circle.rotate_from_axis(angle, axis)
         # Rotate the whole face object representing the cell technological
         # geometry
-        self.face = make_rotation(self.face, z_axis, rotation)
+        self.face = make_rotation(self.face, axis, rotation)
 
         # Re-build the dictionary of cell technological regions VS properties
         # with rotated zones
         new_dict = {}
         for f, p in self.tech_geom_props.items():
             # Add a new entry with the rotated region
-            new_dict[make_rotation(f, z_axis, rotation)] = p
+            new_dict[make_rotation(f, axis, rotation)] = p
+            # add_to_study(make_rotation(f, axis, rotation), "TECHREGION")
         # Copy the just built dictionary back into the old one
         self.tech_geom_props = deepcopy(new_dict)
 
-        # Rotate the sectorized cell face, if any, without re-applying the
-        # sectorization
+        # Rotate the sectorized cell face, if any, and the regins in the
+        # corresponding dictionary
         if self.sectorized_face:
             self.sectorized_face = make_rotation(
-                self.sectorized_face, z_axis, rotation)
-
-        # Update the cell rotation
-        self.rotation += math.radians(angle)
+                self.sectorized_face, axis, rotation)
+            new_dict = {}
+            for f, p in self.tech_geom_sect_opts.items():
+                # Add a new entry with the rotated region
+                new_dict[make_rotation(f, axis, rotation)] = p
+            # Copy the just built dictionary back into the old one
+            self.tech_geom_sect_opts = deepcopy(new_dict)
 
     def translate(self, new_pos: Tuple[float, float, float]) -> Self:
         """
