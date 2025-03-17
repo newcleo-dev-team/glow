@@ -117,19 +117,35 @@ class GenericSurface(ABC):
         # Build the Z-axis of rotation positioned in the figure center
         z_axis = make_vector_from_points(
             self.o, make_vertex((center[0], center[1], 1)))
+        # Rotate the surface elements
+        self.rotate_from_axis(angle, z_axis)
+
+    def rotate_from_axis(self, angle: float, axis: Any) -> None:
+        """
+        Method that rotates the surface geometry. The face, its border
+        edges, vertices and construction circle are rotated by the given
+        angle expressed in degrees around the given axis.
+
+        Parameters
+        ----------
+        angle : float
+                The rotation angle in degrees
+        axis  : Any
+                The axis object around which the rotation takes place
+        """
         # Convert the rotation angle in radians
         self.rotation = math.radians(angle)
         # Rotate the GEOM face of the surface, if any has been built
         if self.face:
-            self.face = make_rotation(self.face, z_axis, self.rotation)
+            self.face = make_rotation(self.face, axis, self.rotation)
         for i in range(len(self.vertices)):
             self.vertices[i] = make_rotation(
-                self.vertices[i], z_axis, self.rotation)
+                self.vertices[i], axis, self.rotation)
         # Re-build the borders
         self.borders = self._build_borders()
         # Rotate the construction circle
         self.out_circle = make_rotation(
-            self.out_circle, z_axis, self.rotation)
+            self.out_circle, axis, self.rotation)
 
     def translate(self, new_pos: Tuple[float, float, float]) -> None:
         """

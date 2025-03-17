@@ -1129,7 +1129,7 @@ class Lattice():
 
         # Translate the lattice box, if any
         if self.lattice_box:
-            self.lattice_box.translate(new_pos)
+            self.lattice_box = self.lattice_box.translate(new_pos)
 
         # Translate the lattice compound on which a symmetry operation has
         # been applied, if any
@@ -1759,26 +1759,29 @@ class Lattice():
             # FIXME put into log
             print("No rotation is performed as the given angle is 0.0°")
             return
+        # Convert the rotation angle in radians
+        rotation = math.radians(angle)
 
         # Build the Z-axis of rotation
         z_axis = make_vector((0, 0, 1))
-        # Rotate the lattice compound
-        self.lattice_cmpd = make_rotation(
-            self.lattice_cmpd, z_axis, math.radians(angle))
+        # Rotate the lattice compounds
+        self.lattice_cmpd = make_rotation(self.lattice_cmpd, z_axis, rotation)
+        self.lattice_tech = make_rotation(self.lattice_tech, z_axis, rotation)
+        self.lattice_org = make_rotation(self.lattice_org, z_axis, rotation)
         # Re-build the lattice edges from the compound
         self.lattice_edges = make_partition(
             [self.lattice_cmpd], [], ShapeType.EDGE)
         # Rotate each cell of the lattice
         for cell in self.lattice_cells:
-            cell.rotate(angle)
+            cell.rotate_from_axis(angle, z_axis)
         # Rotate the lattice box, if any
         if self.lattice_box:
-            self.lattice_box.rotate(angle)
+            self.lattice_box.rotate_from_axis(angle, z_axis)
         # Rotate the lattice compound on which a symmetry operation has been
         # applied, if any
         if self.symmetry_type != SymmetryType.FULL:
             self.lattice_symm = make_rotation(
-                self.lattice_symm, z_axis, math.radians(angle))
+                self.lattice_symm, z_axis, rotation)
 
         # FIXME re-evaluate lattice characteristic dimensions??
 
