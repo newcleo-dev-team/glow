@@ -1129,7 +1129,7 @@ class Lattice():
 
         # Translate the lattice box, if any
         if self.lattice_box:
-            self.lattice_box.translate(new_pos)
+            self.lattice_box = self.lattice_box.translate(new_pos)
 
         # Translate the lattice compound on which a symmetry operation has
         # been applied, if any
