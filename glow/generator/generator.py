@@ -271,11 +271,11 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             xc, yc, _, _, _, _, R, x1, y1, _, x2, y2, _ = edge.data[1:]
             # Calculate the angles (in degree) of the vertices wrt the
             # circle center
-            angle_1 = math.atan2((y1-yc), (x1-xc)) * (180/math.pi)
-            angle_2 = math.atan2((y2-yc), (x2-xc)) * (180/math.pi)
+            angle_1 = math.atan2((y1-yc), (x1-xc)) * (180/math.pi) % 360
+            angle_2 = math.atan2((y2-yc), (x2-xc)) * (180/math.pi) % 360
             # Since it is necessary to have positive value for the angles
             # difference, the absolute value is considered
-            delta_angle = abs(abs(angle_2) - abs(angle_1))
+            delta_angle = (angle_2 - angle_1) % 360
 
             # Write the info about the X-Y coordinates of the arc circle
             # center, its radius, the angle of the first point of the arc

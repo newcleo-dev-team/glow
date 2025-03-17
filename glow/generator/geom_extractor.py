@@ -598,9 +598,21 @@ class Boundary:
                 # Assign the BC type
                 self.type = BoundaryType.TRANSLATION
             case LatticeGeometryType.RA60:
-                raise RuntimeError(
-                    f"The {self.type_geo} lattice geometry type is not "
-                    "currently handled.")
+                # The BC information for the case of an hexagonal geometry
+                # with RA60 symmetry follows the axes definition below:
+                #           *
+                #   M=2   *   *    M=3
+                #       *       *
+                #     *************
+                #           M=1
+                if get_min_distance(self.lattice_o, self.border) > 1e-7:
+                    # M=1 case
+                    self.tx = lx
+                    # Assign the BC type
+                    self.type = BoundaryType.TRANSLATION
+                else:
+                    # M=2/3 cases
+                    self.type = BoundaryType.ROTATION
             case LatticeGeometryType.R120:
                 # The BC information for the case of an hexagonal geometry
                 # with R120 symmetry follows the axes definition below:
