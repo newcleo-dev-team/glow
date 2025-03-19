@@ -81,6 +81,9 @@ class LatticeGeometryType(Enum):
                       translation
     R120            : int = 11
                       Lozenge geometry with R120 rotation and translation
+    S30             : int = 12
+                      Triangle geometry identifying a symmetry of one twelfth
+                      of an assembly
     """
     ISOTROPIC       : int = 0
     SYMMETRIES_TWO  : int = 1
@@ -92,6 +95,7 @@ class LatticeGeometryType(Enum):
     HEXAGON_TRAN    : int = 9
     RA60            : int = 10
     R120            : int = 11
+    S30             : int = 12
 
 
 class SymmetryType(Enum):
@@ -166,7 +170,8 @@ TYPEGEO_VS_BC : Dict[LatticeGeometryType, List[BoundaryType]] = {
     LatticeGeometryType.RA60             : [BoundaryType.TRANSLATION,
                                             BoundaryType.ROTATION],
     LatticeGeometryType.R120             : [BoundaryType.TRANSLATION,
-                                            BoundaryType.ROTATION]
+                                            BoundaryType.ROTATION],
+    LatticeGeometryType.S30              : [BoundaryType.AXIAL_SYMMETRY]
 }
 
 RGB_COLORS = [(r, g, b) for r in range(0, 256, 10)

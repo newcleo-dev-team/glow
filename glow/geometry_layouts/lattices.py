@@ -159,12 +159,12 @@ class Lattice():
         if not all(
             [math.isclose(math.degrees(cell.rotation), cell_rot)
                 for cell in cells]):
-            raise AssertionError("The given cells do not share the same "
-                                 "rotation angle.")
+            raise RuntimeError("The given cells do not share the same "
+                               "rotation angle.")
         # Check if the rotation angle of the cells is valid
         if not cell_rot in self.VALID_CELLS_ANGLES:
-            raise AssertionError("Cells can only be rotated by any of the "
-                                 f"{self.VALID_CELLS_ANGLES}° angles")
+            raise RuntimeError("Cells can only have any of the "
+                               f"{self.VALID_CELLS_ANGLES}° rotation angles")
         # Return the rotation angle of all the cells
         return cell_rot
 
@@ -755,7 +755,7 @@ class Lattice():
                 # Build the face object for extracting the lattice symmetry
                 face = self.__handle_rect_symmetry(b_box, 1)
                 # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.SYMMETRIES_TWO
+                self.type_geo = LatticeGeometryType.RECTANGLE_SYM
             case SymmetryType.EIGHTH:
                 # --------------------
                 # EIGHTH symmetry case
@@ -822,7 +822,7 @@ class Lattice():
                 # Build the shape identifying the symmetry
                 face = self.__build_triangle_on_lattice(0.0, 1/12)
                 # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.SYMMETRIES_TWO
+                self.type_geo = LatticeGeometryType.S30
             case _:
                 raise AssertionError(
                     f"The provided '{symmetry}' symmetry type is not "
@@ -870,10 +870,10 @@ class Lattice():
         """
         if self.cells_rot == 0.0:
             # Build the triangle identifying the symmetry type
-            return self.__build_triangle_on_lattice(1/(12), 1 - 1/(12))
+            return self.__build_triangle_on_lattice(1/12, 1 - 1/12)
         elif self.cells_rot == 90.0:
             # Build the triangle identifying the symmetry type
-            return self.__build_triangle_on_lattice(0.0, 1/6)
+            return self.__build_triangle_on_lattice(2/3, 5/6)
         else:
             raise AssertionError("The cells rotation of "
                                   f"{self.cells_rot}° is not admitted.")
@@ -934,8 +934,8 @@ class Lattice():
         elif self.cells_rot == 90.0:
             points = self.__build_vertices([0, 1-1/6, 1-1/3])
         else:
-            raise AssertionError("The cells rotation of "
-                                          f"{self.cells_rot}° is not admitted.")
+            raise AssertionError(
+                f"The cells rotation of {self.cells_rot}° is not admitted.")
         # Return a face built from the vertices
         return self.__build_face_from_vertices(points)
 
