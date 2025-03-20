@@ -411,10 +411,10 @@ class Boundary:
     ----------
     border      : Any
                   A GEOM edge object representing a border of the lattice
-    symmetry    : int
-                  Index specifying the type of symmetry of the lattice
-    type        : int
+    type        : BoundaryType
                   Providing the type of BCs
+    type_geo    : LatticeGeometryType
+                  Providing the lattice type of geometry
     ox          : float
                   X-coordinate of the border start point (origin)
     oy          : float
@@ -424,16 +424,24 @@ class Boundary:
                   its second point, so that it is always positive
     edge_indxs  : List[int]
                   List of the indices of the edges the border is made of
+    lattice_o   : Any
+                  A vertex object representing the lattice origin
+    tx          : float
+                  The X-component of the border axis
+    ty          : float
+                  The Y-component of the border axis
     """
     def __init__(self, border: Any, bc_type: BoundaryType,
                  type_geo: LatticeGeometryType, lattice_o: Any) -> None:
         # Initialize instance attributes
         self.border     : Any = border
+        # FIXME the BC type should not be set when instantiating the class,
+        # but it depends on the 'LatticeGeometryType' value
         self.type       : BoundaryType = bc_type
         self.type_geo   : LatticeGeometryType = type_geo
         self.ox         : Union[float, None] = None
         self.oy         : Union[float, None] = None
-        self.angle      : Union[float, None] = None
+        self.angle      : float = 0.0
         self.edge_indxs : List[int] = []
         self.lattice_o  : Any = lattice_o
         self.tx         : float = 0.0
@@ -453,23 +461,19 @@ class Boundary:
 
     def __build_border_characteristics(self, lx: float, ly: float) -> None:
         """
-        Method that defines the characteristics of a lattice border being
-        a boundary condition.
-        These characteristics are defined in terms of the border origin and
-        its angle. The origin is defined as one of the extremes of the border
-        so that the border angle is positive: this because, for cartesian
-        lattices, APOLLO2 accepts only 0°, 45° or 90° for defining the 1/4 or
-        the 1/8 symmetries.
-
-        Other type of symmetries related to hexagonal lattices only requires
-        that the angle is positive. TODO: is it true???
+        Method that defines the characteristics of a lattice border that
+        represents a boundary for the lattice itself.
+        These characteristics are defined in terms of the associated BC type
+        (value of the 'BoundaryType' enumeration), the border axes and its
+        angle; these depend on the specific lattice type of geometry (as
+        value of the 'LatticeGeometryType' enumeration).
 
         Parameters
         ----------
         lx  : float
-              The X-characteristic dimension of the cell/lattice
+              The X-characteristic dimension of the lattice
         ly  : float
-              The Y-characteristic dimension of the cell/lattice
+              The Y-characteristic dimension of the lattice
         """
         # Only the 'AXIAL_SYMMETRY', 'TRANSLATION' and 'VOID type of BC are
         # handled
@@ -482,137 +486,107 @@ class Boundary:
         # Retrieve all the information from the GEOM edge object representing
         # one of the lattice borders
         data = get_kind_of_shape(self.border)
-        # data : type, x1, y1, z1, x2, y2, z2
-        # Get the X-Y coordinates of the first point of the edge and
-        # assume it to identify the border origin
-        self.ox, self.oy = data[1:3]
-        # Get the X-Y coordinates of the second point of the edge
-        x2, y2 = data[4:6]
-        # Get the distances (along X and Y-directions) of the second
-        # point from the first one
+        # Get the X-Y coordinates of the two points of the edge
+        self.ox, self.oy, _, x2, y2 = data[1:6]
+        # Calculate the X-Y distances between the start-end points
         dx = x2 - self.ox
         dy = y2 - self.oy
+        # Calculate the angle of the border in degrees
+        self.angle = math.degrees(math.atan2(y2-self.oy, x2-self.ox))
 
-        if (self.type == BoundaryType.AXIAL_SYMMETRY and
-            (self.type_geo == LatticeGeometryType.RECTANGLE_SYM or
-             self.type_geo == LatticeGeometryType.RECTANGLE_EIGHT)):
-            # The border origin must be defined so that the angle between the
-            # start-end points are positive. In case the X-Y distances are
-            # negative, the coordinates of the border origin are changed and
-            # the second point is used to identify the border origin.
-            if dx < 0.0:
-                # The X-distance must always be positive
-                dx = -1 * dx
-                # The X-origin must be changed
-                self.ox = x2
-            if dy < 0.0:
-                # The Y-distance must always be positive
-                dy = -1 * dy
-                # The Y-origin must be changed
-                self.oy = y2
-            # Set axes definition
-            self.tx = self.ox
-            self.ty = self.oy
+        # The border origin must be defined so that the angle between
+        # the start-end points is positive. If not, the edge start point
+        # is inverted.
+        if self.angle < -EPSILON or math.isclose(self.angle, 180.0):
+            self.angle = math.degrees(math.atan2(self.oy-y2, self.ox-x2))
+            self.ox = x2
+            self.oy = y2
 
-            # Calculate the angle of the border in degrees
-            self.angle = math.degrees(math.atan2(dy, dx))
-        elif (self.type == BoundaryType.TRANSLATION and
-              self.type_geo == LatticeGeometryType.HEXAGON_TRAN):
-            # The BC information for the case of an hexagonal geometry with
-            # translation on its sides follows the axes definition below:
-            #                     M=4 (0,-2ly)
-            #                    *****
-            #   M=3 (3/2lx,-ly) *     *  M=5 (-3/2lx,-ly)
-            #                  *       *
-            #   M=2 (3/2lx, ly) *     *  M=6 (-3/2lx, ly)
-            #                    *****
-            #                     M=1 (0, 2ly)
-            # Initialize axes definition
-            self.tx = 0.0
-            self.ty = 0.0
-            if abs(dx) < 1e-7:
-                raise AssertionError("The case of an hexagonal cell rotated "
-                    "by 90° has not been implemented yet.")
-            if abs(dy) < 1e-7:
-                # The sign of 'dx' discriminates between the M=1 (dx > 0) and
-                # M=4 (dx < 0)
-                self.ty = (dx/abs(dx)) * 2*ly
-            elif dy > 1e-7:
-                # The sign of 'dx' discriminates between the M=6 (dx > 0) and
-                # M=5 (dx < 0)
-                self.tx = -3/2 * lx
-                self.ty = (dx/abs(dx)) * ly
-            else:
-                # The sign of 'dx' discriminates between the M=2 (dx > 0) and
-                # M=3 (dx < 0)
-                self.tx = 3/2 * lx
-                self.ty = (dx/abs(dx)) * ly
+        # Initialize the border axes to the edge start point
+        self.tx = self.ox
+        self.ty = self.oy
 
-            # Calculate the angle of the border in degrees
-            self.angle = math.degrees(math.atan2(dy, dx))
-
-            if self.angle < -EPSILON:
-                self.angle += 180.0
-        elif (self.type == BoundaryType.AXIAL_SYMMETRY and
-              self.type_geo == LatticeGeometryType.SA60):
-            # The BC information for the case of an hexagonal geometry with
-            # SA60 symmetry follows the axes definition below:
-            #           *
-            #   M=2   *   *    M=3
-            #       *       *
-            #     *************
-            #           M=1
-            # Initialize axes and angle definitions
-            self.tx = 0.0
-            self.ty = 0.0
-            self.angle = 0.0
-            # Build a vertex at the edge middle point
-            middle_point = make_vertex_on_curve(self.border, 0.5)
-            # Calculate the distance of the edge middle point from the lattice
-            # origin
-            om_distance = get_min_distance(self.lattice_o, middle_point)
-            # Calculate the lattice apothem, given the 'lx' characteristic
-            # dimension (i.e. the lattice hexagon edge)
-            apothem = lx * math.sin(math.pi/3)
-
-            # Handle the M=1 case for the X-Y axes definition (i.e. the border
-            # is the hexagon edge)
-            if abs(om_distance - apothem) < 1e-7:
-                # M=1 case
-                self.tx = lx
-            # Calculate the border inclination angle (in degrees) so that is
-            # always in the 0°-180° range
-            self.angle = math.degrees(math.atan2(dy, dx))
-            if self.angle < -EPSILON:
-                self.angle += 180.0
-        elif (self.type == BoundaryType.AXIAL_SYMMETRY and
-              self.type_geo == LatticeGeometryType.SYMMETRIES_TWO):
-            # The BC information for the case of an hexagonal geometry with
-            # S30 symmetry follows the axes definition below:
-            #          *
-            #   M=2  * * M=3
-            #      *   *
-            #    *******
-            #       M=1
-            # Initialize axes and angle definitions
-            self.tx = 0.0
-            self.ty = 0.0
-            self.angle = 0.0
-            # Check the distance of the border from the lattice origin so to
-            # identify the S30 edge
-            if get_min_distance(self.lattice_o, self.border) > 1e-7:
-                # M=1 case
-                self.tx = lx
-            # Calculate the border inclination angle (in degrees) so that is
-            # always in the 0°-180° range
-            # FIXME Is it valid for all cases?
-            self.angle = math.degrees(math.atan2(dy, dx))
-            if self.angle < -EPSILON:
-                self.angle += 180.0
-        else:
-            raise AssertionError(
-                f"Wrong combination of {self.type_geo} geometry type and "
-                f"{self.type} BC type.")
+        # Assign the BC type depending on the lattice type of geometry. The
+        # geometries identified by 'RECTANGLE_TRAN' and 'HEXAGON_TRAN' need
+        # to re-evaluate the border axes.
+        match self.type_geo:
+            case (LatticeGeometryType.SYMMETRIES_TWO |
+                  LatticeGeometryType.RECTANGLE_SYM |
+                  LatticeGeometryType.RECTANGLE_EIGHT |
+                  LatticeGeometryType.SA60 |
+                  LatticeGeometryType.S30):
+                # Identifying a border characterized by the 'AXIAL_SYMMETRY'
+                # type of BC, which corresponds to the 'REFL' case in DRAGON5
+                self.type = BoundaryType.AXIAL_SYMMETRY
+            case LatticeGeometryType.RA60 | LatticeGeometryType.R120:
+                # Identifying a border characterized by any of the 'ROTATION'
+                # or 'TRANSLATION' types of BC, which correspond to the 'ROTA'
+                # or 'TRAN' cases respectively in DRAGON5. The position of the
+                # border wrt the lattice center guides the choice.
+                if get_min_distance(self.lattice_o, self.border) > 1e-7:
+                    self.type = BoundaryType.TRANSLATION
+                else:
+                    self.type = BoundaryType.ROTATION
+            case LatticeGeometryType.RECTANGLE_TRAN:
+                # The BC information for the case of a cartesian geometry
+                # with TRAN BCs follows the axes definition below:
+                #             M=3
+                #        ************
+                #        *          *
+                #    M=2 *          * M=4
+                #        ************
+                #             M=1
+                if math.isclose(math.sin(math.radians(self.angle)), 0.0):
+                    # The sign of 'dx' discriminates between the M=1 (dx > 0)
+                    # and M=3 (dx < 0)
+                    self.tx = 0.0
+                    self.ty = (dx/abs(dx)) * lx
+                elif math.isclose(math.sin(math.radians(self.angle)), 1.0):
+                    # The sign of 'dy' discriminates between the M=4 (dy > 0)
+                    # and M=2 (dy < 0)
+                    self.tx = -(dy/abs(dy)) * ly
+                    self.ty = 0.0
+                else:
+                    raise RuntimeError(
+                        f"The border has an angle of {self.angle}° which is "
+                        "not admitted")
+                # Assign the BC type
+                self.type = BoundaryType.TRANSLATION
+            case LatticeGeometryType.HEXAGON_TRAN:
+                # The BC information for the case of an hexagonal geometry
+                # with translation on its sides follows the axes definition
+                # below:
+                #                     M=4 (0,-2ly)
+                #                    *****
+                #   M=3 (3/2lx,-ly) *     *  M=5 (-3/2lx,-ly)
+                #                  *       *
+                #   M=2 (3/2lx, ly) *     *  M=6 (-3/2lx, ly)
+                #                    *****
+                #                     M=1 (0, 2ly)
+                if math.isclose(math.sin(math.radians(self.angle)), 1.0):
+                    raise RuntimeError("The case of an hexagonal lattice "
+                        "made by cells rotated by 0° is not handled.")
+                if abs(dy) < 1e-7:
+                    # The sign of 'dx' discriminates between the M=1 (dx > 0)
+                    # and M=4 (dx < 0)
+                    self.tx = 0.0
+                    self.ty = (dx/abs(dx)) * 2*ly
+                elif dy > 1e-7:
+                    # The sign of 'dx' discriminates between the M=6 (dx > 0)
+                    # and M=5 (dx < 0)
+                    self.tx = -3/2 * lx
+                    self.ty = (dx/abs(dx)) * ly
+                else:
+                    # The sign of 'dx' discriminates between the M=2 (dx > 0)
+                    # and M=3 (dx < 0)
+                    self.tx = 3/2 * lx
+                    self.ty = (dx/abs(dx)) * ly
+                # Assign the BC type
+                self.type = BoundaryType.TRANSLATION
+            case _:
+                raise RuntimeError(
+                    f"The {self.type_geo} lattice geometry type is not "
+                    "currently handled.")
 
     def find_edges_on_border(self,
                              boundaries: Any,
@@ -643,7 +617,7 @@ class Boundary:
         self.__build_border_characteristics(*dimensions)
         # Check if the boundary edge origin and its orientation angle have
         # been defined correctly.
-        if (self.ox is None or self.oy is None or self.angle is None):
+        if (self.ox is None or self.oy is None):
             raise AssertionError("No border line defined!")
 
         # Build a GEOM compound object by extracting from the given lattice
@@ -915,8 +889,7 @@ class LatticeDataExtractor():
                     # it is needed to retrieve the corresponding one in the
                     # lattice which was used to build the dictionary of edges
                     # IDs VS GEOM edges.
-                    edge = get_in_place(self.lattice.lattice_edges,
-                                        subface_edge)
+                    edge = get_in_place(self.lattice_edges, subface_edge)
                     if not edge:
                         raise AssertionError("No corresponding edge in the "
                                             "lattice could be retrieved for "
@@ -966,8 +939,9 @@ class LatticeDataExtractor():
         Method that constructs a list of boundary edges (connected to a single
         face). These edges are then sorted by boundary condition plane.
         """
-        # No boundaries to extract if a VOID BC is present
-        if self.lattice.boundary_type == BoundaryType.VOID:
+        # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
+        # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
+        if self.lattice.type_geo == LatticeGeometryType.ISOTROPIC:
             return
         # Initialize the list of 'Boundary' objects
         boundary_edges = []

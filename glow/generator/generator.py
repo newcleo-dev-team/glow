@@ -271,11 +271,11 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             xc, yc, _, _, _, _, R, x1, y1, _, x2, y2, _ = edge.data[1:]
             # Calculate the angles (in degree) of the vertices wrt the
             # circle center
-            angle_1 = math.atan2((y1-yc), (x1-xc)) * (180/math.pi)
-            angle_2 = math.atan2((y2-yc), (x2-xc)) * (180/math.pi)
+            angle_1 = math.atan2((y1-yc), (x1-xc)) * (180/math.pi) % 360
+            angle_2 = math.atan2((y2-yc), (x2-xc)) * (180/math.pi) % 360
             # Since it is necessary to have positive value for the angles
             # difference, the absolute value is considered
-            delta_angle = abs(abs(angle_2) - abs(angle_1))
+            delta_angle = (angle_2 - angle_1) % 360
 
             # Write the info about the X-Y coordinates of the arc circle
             # center, its radius, the angle of the first point of the arc
@@ -327,19 +327,17 @@ def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
         for edge_no in bc.edge_indxs:
             # Write the index of the lattice border edge
             file.write(f"{edge_no}\n")
-        # Handle the different BC types
-        if bc.type == BoundaryType.AXIAL_SYMMETRY:
-            # Write the X-Y coordinates of the border edge origin and the
-            # angle between its vertices
-            file.write("* ax, ay, angle\n")
-            file.write(f"  {bc.tx:6f} {bc.ty:6f} {bc.angle:6f}\n")
-        elif bc.type == BoundaryType.TRANSLATION:
-            # Write the X-Y coordinates of the borders axes
-            file.write("* tx, ty, angle\n")
-            file.write(f"  {bc.tx:6f} {bc.ty:6f} {0:6f}\n")
-        else:
+        # Check if the BC type is allowed
+        if bc.type not in [BoundaryType.AXIAL_SYMMETRY,
+                           BoundaryType.ROTATION,
+                           BoundaryType.TRANSLATION]:
             raise AssertionError(
-                f"Treatment of type {bc.type} not implemented")
+                f"The '{bc.type}' BC type cannot be treated by the SALT "
+                "module of DRAGON5.")
+        # Write the X-Y coordinates of the border axes
+        file.write("* tx, ty, angle\n")
+        file.write(f"  {bc.tx:6f} {bc.ty:6f} {bc.angle:6f}\n")
+
 
 def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
