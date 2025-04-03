@@ -1490,79 +1490,105 @@ class GenericCell(ABC):
                 # of properties
                 self.tech_geom_props[region] = {property_type: value}
 
-    def update_geometry(self, geo_type: GeometryType) -> None:
+    def update_geometry(self) -> None:
         """
-        Method for updating the cell geometry representation according to
-        the provided type.
-        The cell corresponding face object is updated with the one currently
-        selected in the SALOME study.
-
-        Parameters
-        ----------
-        geo_type  : GeometryType
-            The cell type of geometry to update, as value of the
-            'GeometryType' enumeration
+        Method for updating the cell geometry layout, present in the SALOME
+        study, with the one currently selected in the SALOME object browser.
         """
-        # Check if the displayed geometry coincides with the one to modify
-        if geo_type != self.displayed_geom:
-            raise RuntimeError(
-                f"Currently displaying the cell {self.displayed_geom.name} "
-                "geometry: this does not match with the indicated "
-                f"{geo_type.name} geometry type to modify.")
-        # Extract the geometrical object currently selected in the current
-        # SALOME study
+        # Get the geometric object selected in the SALOME object browser
         shape = get_selected_object()
         if not shape:
             raise RuntimeError("Please, select a shape to update the cell "
                                "geometry with.")
+        # Update the currently displayed geometry with the selected shape
+        self.update_geometry_from_face(self.displayed_geom, shape)
 
-        # Handle the different geometry type differently
+    def update_geometry_from_face(self,
+                                  geo_type: GeometryType,
+                                  shape: Any) -> None:
+        """
+        Method for updating the cell geometry layout, whose type is provided
+        as first argument, with the geometric shape passed as second argument.
+        A different treatment is provided according to the type of geometry to
+        update.
+
+        Parameters
+        ----------
+        geo_type : GeometryType
+            The cell type of geometry to update, as value of the
+            'GeometryType' enumeration
+        shape : Any
+            The geometric object to update the cell with
+        """
         match geo_type:
             case GeometryType.SECTORIZED:
-                # Extract the additional edges by comparing with the ones
-                # already present in the sectorized face
-                self.added_edges = []
-                for e1 in extract_sub_shapes(shape, ShapeType.EDGE):
-                    found = False
-                    for e2 in extract_sub_shapes(self.sectorized_face,
-                                                   ShapeType.EDGE):
-                        # Ignore the edge if it is already present in the
-                        # cell sectorized face
-                        if tuple(get_kind_of_shape(e1)[1:]) == tuple(
-                            get_kind_of_shape(e2)[1:]):
-                            found = True
-                            break
-                    if not found:
-                        self.added_edges.append(e1)
                 # Update the face object result of the cell sectorization
                 self.sectorized_face = shape
             case GeometryType.TECHNOLOGICAL:
-                # Reset the cell face object
+                # Build the cell regions if not already present
+                if geo_type != self.displayed_geom or not self.regions:
+                    self.__build_regions()
+                # Reset the face object to the main shape
                 self.face = self.figure.face
                 # Clear the previously stored 'Circle' objects
                 self.inner_circles.clear()
-                # Loop through all the edge objects of the cell to identify
-                # the presence of internal circles
-                for edge in extract_sub_shapes(shape, ShapeType.EDGE):
-                    # Get the information of the given edge object
-                    data = get_kind_of_shape(edge)
-                    if str(data[0]) == 'CIRCLE':
-                        # Add each circle to the cell according to its position
-                        self.add_circle(
-                            data[7], get_point_coordinates(make_cdg(edge)))
+                # Update the cell face with the edges found in the given shape
+                self.__update_cell_with_edges(shape)
+                # Re-build the dictionary storing the regions VS their
+                # properties.
+                self.tech_geom_props.clear()
+                for region in self.regions:
+                    for zone in extract_sub_shapes(self.face, ShapeType.FACE):
+                        if is_point_inside_shape(
+                            make_vertex_inside_face(zone), region.face):
+                            self.tech_geom_props[zone] = region.properties
             case _:
                 raise ValueError(
                     f"{geo_type}: unhandled type of geometry to update.")
 
-        # Update the dictionary storing the regions properties, given the
-        # 'Region' objects; since the cell geometry is shown in the 3D
-        # viewer, this list has been built and no check on its presence is
-        # necessary.
-        for region in self.regions:
-            for zone in self.tech_geom_props:
-                if get_min_distance(make_vertex_inside_face(zone),
-                                    region.face) < 1e-7:
-                    self.tech_geom_props[zone] = region.properties
+    def __update_cell_with_edges(self, shape: Any) -> None:
+        """
+        Method for updating the cell geometry layout with the edges found in
+        the given shape.
+        For any edge representing a circle, the corresponding 'Circle' object
+        is added; the same goes for an arc of a circle, where only one is
+        considered.
+        Any edge representing a segment is collected in a list to perform a
+        final partition operation with the built cell face.
+
+        Parameters
+        ----------
+        shape : Any
+            The geometric object to update the cell with
+        """
+        # Loop through all the edge objects of the cell to identify
+        # the presence of any added edges
+        arcs_data = []
+        edges_to_add = []
+        for edge in extract_sub_shapes(shape, ShapeType.EDGE):
+            # Get the information of the given edge object
+            data = get_kind_of_shape(edge)
+            if str(data[0]) == 'CIRCLE':
+                # Add each circle to the cell
+                self.add_circle(data[7], tuple(data[1:4]))
+            elif str(data[0]) == 'ARC_CIRCLE':
+                center = tuple(data[1:4])
+                radius = data[7]
+                # Check if the arc is part of a circle by verifying if
+                # its geometric characteristics (center, radius) have
+                # already been found
+                if (center, radius) not in arcs_data:
+                    arcs_data.append((center, radius))
+                    # Add a circle with the geometric characteristics
+                    # of the arc
+                    self.add_circle(radius, center)
+            elif str(data[0]) == 'SEGMENT':
+                edges_to_add.append(edge)
+        # Make a partition with the found segments to update the cell
+        if edges_to_add:
+            self.face = make_partition(
+                [self.face], edges_to_add, ShapeType.FACE)
+
 
 class RectCell(GenericCell):
     """
