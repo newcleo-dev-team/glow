@@ -1532,6 +1532,10 @@ class GenericCell(ABC):
                 self.face = self.figure.face
                 # Clear the previously stored 'Circle' objects
                 self.inner_circles.clear()
+                # Re-initialize the dictionary of cell regions VS properties
+                self.tech_geom_props = {
+                    region: {} for region in [self.face]
+                }
                 # Update the cell face with the edges found in the given shape
                 self.__update_cell_with_edges(shape)
                 # Re-build the dictionary storing the regions VS their
