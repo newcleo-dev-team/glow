@@ -323,14 +323,14 @@ class GenericCell(ABC):
         A partition operation between the cell face and the circle one
         is performed. The result is a geometric surface that comprises
         both faces.
-        In addition, the dictionaries associating the regions of the cell
-        technological geometry with the properties and with the sectorization
-        options respectively are updated.
+        In addition, the dictionaries associating the regions of the
+        cell technological geometry with the properties and with the
+        sectorization options respectively are updated.
 
         Parameters
         ----------
         circle  : Circle
-            The 'Circle' object to add to the cell
+            The 'Circle' object to add to the cell technological geometry
         """
         # Add the 'Circle' object to the list storing the circles within
         # the cell
@@ -339,89 +339,29 @@ class GenericCell(ABC):
         self.inner_circles = sorted(self.inner_circles,
                                     key=lambda item: item.radius)
 
-        # Build a partition between the cell and the circle faces
+        # Build a partition between the cell face and the circle one
         self.face = make_partition(
             [self.face, circle.face], [], ShapeType.FACE)
 
-        # ------------------------------------------------------------------
-        # Substitute the region where the circle has been added with the one
-        # resulting by cutting it with the added circle. The common part
-        # between the substituted subface and the added circle is included
-        # as well with a default value.
-        # ------------------------------------------------------------------
-        # Build a point on the border of the added circle to identify the
-        # region to cut
-        ref_point = make_vertex_on_curve(circle.borders[0], 0)
-        # Substitute the region with its cut version and add the common part
-        # with default value in the properties dictionary
-        for subface in self.tech_geom_props:
-            if is_point_inside_shape(ref_point, subface):
-                self.tech_geom_props[
-                    make_cut(subface, circle.face)
-                        ] = self.tech_geom_props.pop(subface)
-                self.tech_geom_props[
-                    make_common(subface, circle.face)
-                        ] = {}
-                break
+        # List of all the face objects contained in the cell technological
+        # geometry
+        subfaces = extract_sub_shapes(self.face, ShapeType.FACE)
+        # Update the dictionary associating to each region of the cell
+        # technological geometry its properties
+        self.__update_regions_association(subfaces, self.tech_geom_props, {})
 
-        # ----------------------------------------------------------------
-        # Update the sectorization options dictionary for circles centered
-        # in the cell only. In any case, perform a partition between the
-        # sectorized face and the added circle, if any sectorization has
-        # been applied yet.
-        # ----------------------------------------------------------------
-        # If no sectorization has been applied yet, return without updating
-        # the dictionary
+        # If no sectorization has been applied yet, return
         if not self.sectorized_face:
             return
-        # Update the dictionary for cell-centered circles
+        # Update the cell sectorized geometry with the updated cell face
+        self.sectorized_face = make_partition(
+                [self.sectorized_face], [self.face], ShapeType.FACE)
+        # If the added circle is centered in the cell, update the dictionary
+        # associating to each region of the cell technological geometry its
+        # sectorization options
         if get_min_distance(self.figure.o, circle.o) < 1e-5:
-            # Substitute the region with its cut version and add the common
-            # part with default value in the sectorization options dictionary,
-            # if any has been performed
-            for subface in self.tech_geom_sect_opts:
-                if is_point_inside_shape(ref_point, subface):
-                    self.tech_geom_sect_opts[
-                        make_cut(subface, circle.face)
-                            ] = self.tech_geom_sect_opts.pop(subface)
-                    self.tech_geom_sect_opts[
-                        make_common(subface, circle.face)
-                            ] = (1, 0)
-                    break
-
-            # Extract the regions sorted according to their distance from
-            # the cell center
-            sorted_faces = sorted(self.tech_geom_sect_opts.keys(),
-                key=lambda item: get_min_distance(
-                  self.figure.o, make_vertex_inside_face(item)))
-            # Extract the sectorization options for each region
-            sectors_angles = []
-            for region in sorted_faces:
-                sectors_angles.append(self.tech_geom_sect_opts[region])
-            # Apply the sectorization with the extracted options for each
-            # region
-            # FIXME simplify this passage by updating the dictionary of
-            # sectorization options directly. The partition operation, since
-            # valid both in the cell-centered circle and not can then be
-            # performed outside of the if-clause.
-            self._sectorize_cell([value[0] for value in sectors_angles],
-                                 [value[1] for value in sectors_angles],
-                                 self.is_windmill_applied)
-            # Partition the sectorization result with the externally added
-            # edges, if any
-            # TODO check the necessity to include an attribute for edges
-            # added to the sectorized face from within SALOME. When created
-            # in SALOME, they could be directly added to the sectorized face
-            if self.added_edges:
-                self.sectorized_face = make_partition(
-                    [self.sectorized_face],
-                    self.added_edges,
-                    ShapeType.FACE)
-        else:
-            # Perform a partition between the sectorized face and the added
-            # cicle only, whose position is not in the cell center
-            self.sectorized_face = make_partition(
-                [self.sectorized_face], [circle.face], ShapeType.FACE)
+            self.__update_regions_association(
+                subfaces, self.tech_geom_sect_opts, (1, 0))
 
     def remove_circle(self, radius: float = 1.0) -> None:
         """
