@@ -15,11 +15,11 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    is_point_inside_shape, make_cdg, make_common, make_cut, make_fuse, \
-    make_line, make_partition, make_rotation, make_translation, \
-    make_vector_from_points, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, make_vertex_on_lines_intersection, \
-    remove_from_study, set_color_face, update_salome_study
+    is_point_inside_shape, make_cdg, make_fuse, make_line, make_partition, \
+    make_rotation, make_translation, make_vector_from_points, make_vertex, \
+    make_vertex_inside_face, make_vertex_on_curve, \
+    make_vertex_on_lines_intersection, remove_from_study, set_color_face, \
+    update_salome_study
 from glow.generator.support import CellType, GeometryType, PropertyType, \
     generate_unique_random_colors
 
@@ -471,10 +471,11 @@ class GenericCell(ABC):
                     supp_dict[region] = deepcopy(
                         self.tech_geom_props[region])
             else:
-                # Add the entry associating the region face to its properties;
-                # here, the region does not have a corresponding 'Circle'
-                # object
-                supp_dict[region] = deepcopy(self.tech_geom_props[region])
+                if get_min_distance(make_cdg(region), self.figure.o) < 1e-5:
+                    # Add the entry associating the region face to its
+                    # properties; here, the region does not have a
+                    # corresponding 'Circle' object
+                    supp_dict[region] = deepcopy(self.tech_geom_props[region])
         # Sort the regions according to the distance from the cell center
         return sorted(supp_dict.keys(),
             key=lambda item: get_min_distance(
@@ -563,19 +564,21 @@ class GenericCell(ABC):
         # Loop through all the current regions of the cell technological
         # geometry
         for region in tech_regions:
-            # Initialize the entry
+            # Initialize the entry with a default value
             support_dict[region] = default_value
-            # Loop through all the regions and associated values
+            # Make a support point to identify the region
+            pnt = make_vertex_inside_face(region)
+            # Loop through all the regions and associated values stored in
+            # the given dictionary
             for zone, values in regions_dict.items():
-                # Check if a point inside the previous zone belongs to the
-                # new region; if so, add a new entry using the values once
-                # belonging to the zone
-                if get_min_distance(make_vertex_inside_face(zone),
-                                    region) < 1e-7:
+                # Check if the support point is inside any of the cell zones
+                # stored as keys of the given dictionary; if so, add a new
+                # entry region VS properties in the support dictionary
+                if is_point_inside_shape(pnt, zone):
+                    # print("Assigning value", values)
                     support_dict[region] = values
                     break
-        # Update the dictionary of regions of the technological geometry VS
-        # associated values
+        # Update the given dictionary
         regions_dict.clear()
         regions_dict.update(support_dict)
 
