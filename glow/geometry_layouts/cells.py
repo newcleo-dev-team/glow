@@ -348,12 +348,10 @@ class GenericCell(ABC):
         # Update the cell sectorized geometry with the updated cell face
         self.sectorized_face = make_partition(
                 [self.sectorized_face], [self.face], ShapeType.FACE)
-        # If the added circle is centered in the cell, update the dictionary
-        # associating to each region of the cell technological geometry its
-        # sectorization options
-        if get_min_distance(self.figure.o, circle.o) < 1e-5:
-            self.__update_regions_association(
-                subfaces, self.tech_geom_sect_opts, (1, 0))
+        # Update the dictionary associating to each region of the cell
+        # technological geometry its sectorization options. A sectorization
+        # operation is not performed.
+        self.__reapply_sectorization(True)
 
     def remove_circle(self, radius: float = 1.0) -> None:
         """
@@ -390,44 +388,21 @@ class GenericCell(ABC):
             raise RuntimeError("No circle could be found within the cell for "
                                f"the given radius '{radius}'")
         # Remove the 'Circle' object from the list
-        circle = self.inner_circles.pop(indx)
-
+        self.inner_circles.pop(indx)
         # Re-build the partition between the face and the remaining circles
         circle_faces = [circle.face for circle in self.inner_circles]
         self.face = make_partition(
             [self.face] + circle_faces, [], ShapeType.FACE)
 
-        # ----------------------------------------------------------------
-        # Substitute the region where the circle has been removed with the
-        # one resulting by fusing it with the removed circle
-        # ----------------------------------------------------------------
-        # Build a point on the border of the removed circle to identify the
-        # region to fuse
-        ref_point = make_vertex_on_curve(circle.borders[0], 0)
-        # Substitute the region with its fused version in the properties
-        # dictionary. Its properties are assigned to the fused region.
-        for subface in self.tech_geom_props:
-            if is_point_inside_shape(ref_point, subface):
-                self.tech_geom_props[
-                    make_fuse([subface, circle.face])
-                        ] = self.tech_geom_props.pop(subface)
-                break
-        # Substitute the region with its fused version in the sectorization
-        # options dictionary, if any has been performed. Its options are
-        # assigned to the fused region.
-        if self.sectorized_face:
-            for subface in self.tech_geom_sect_opts:
-                if is_point_inside_shape(ref_point, subface):
-                    self.tech_geom_sect_opts[
-                        make_fuse([subface, circle.face])
-                            ] = self.tech_geom_sect_opts.pop(subface)
-                    break
+        # Associate each region of the cell technological geometry to its
+        # properties
+        self.__update_regions_association(
+            self.extract_subfaces(), self.tech_geom_props, {})
+        # Re-build the regions-sectorization options association
+        # and re-apply the sectorization operation
+        self.__reapply_sectorization()
 
-        # Re-build the regions-properties/sectorization options association
-        # and re-apply the sectorization operation, if needed
-        self.__reapply_associations()
-
-    def __extract_sectorization_option_faces(self) -> List[Any]:
+    def __extract_cell_centered_faces(self) -> List[Any]:
         """
         Method that extracts a list of face objects corresponding to the
         cell regions of the technological geometry from which the circles
@@ -435,97 +410,68 @@ class GenericCell(ABC):
         This list is sorted according to the distance of each face from
         the cell center.
         """
-        # Remove entries corresponding to regions not centered in the cell
-        supp_dict = {}
+        # List of face objects for cell-centered regions
+        centered_regions = []
+        # List containing the cell 'Circle' objects, filtered so that
+        # only the cell-centered ones are considered
+        centered_circles = [c for c in self.inner_circles if
+                              get_min_distance(c.o, self.figure.o) < 1e-5]
         # Loop through all the regions of the cell technological geometry
         for region in self.tech_geom_props:
-            # Build a point inside the region to be used to retrieve the
-            # corresponding 'Circle' object, if the region is based on a
-            # circle, if not, none is found
-            point = make_vertex_inside_face(region)
-            found_circle = None
-            # Loop through all the cell 'Circle' objects to get the one that
-            # corresponds to the built region point, if the region comes from
-            # a circle
-            for circle in self.inner_circles:
-                # Use the min distance to get the circle the point lays on
-                if get_min_distance(point, circle.face) < 1e-5:
-                    found_circle = circle
+            # Continue with the next region if it is not cell-centered
+            if get_min_distance(make_cdg(region), self.figure.o) > 1e-5:
+                continue
+            # Check which 'Circle' object the current region refers to
+            for circle in centered_circles:
+                if is_point_inside_shape(make_vertex_inside_face(region),
+                                         circle.face):
+                    centered_regions.append(region)
                     break
-            # Filter out any found 'Circle' object that is not centered in the
-            # cell
-            if found_circle:
-                if get_min_distance(make_cdg(found_circle.face),
-                                    self.figure.o) < 1e-5:
-                    # Given the region that corresponds to the found 'Circle'
-                    # object build an entry associating the region face to its
-                    # properties
-                    supp_dict[region] = deepcopy(
-                        self.tech_geom_props[region])
             else:
-                if get_min_distance(make_cdg(region), self.figure.o) < 1e-5:
-                    # Add the entry associating the region face to its
-                    # properties; here, the region does not have a
-                    # corresponding 'Circle' object
-                    supp_dict[region] = deepcopy(self.tech_geom_props[region])
+                # Store the region not having a corresponding 'Circle' object
+                centered_regions.append(region)
         # Sort the regions according to the distance from the cell center
-        return sorted(supp_dict.keys(),
+        return sorted(centered_regions,
             key=lambda item: get_min_distance(
                 self.figure.o, make_vertex_inside_face(item)))
 
-    def __reapply_associations(self, to_skip: bool = False):
+    def __reapply_sectorization(self, to_skip: bool = False) -> None:
         """
-        Method that re-builds the association of regions with properties and
-        sectorization options (i.e. number of sectors and starting angle) and
-        re-apply the sectorization operation, if it has already been applied
-        beforehands.
-        If specified, the second update operation can be skipped.
+        Method that re-builds the association between cell's regions and
+        sectorization options (i.e. number of sectors and starting angle).
+        It re-applies the sectorization operation, if it has already been
+        applied beforehands. If specified by the given argument, this
+        operation can be skipped.
 
         Parameters
         ----------
         to_skip : bool
-            If True, skip the sectorization options dictionary update
+            If True, skip sectorization operation
         """
-        # Extract the regions of the cell technological geometry
-        regions = self.extract_subfaces()
-        # Associate each region of the cell technological geometry to its
-        # properties
-        self.__update_regions_association(regions, self.tech_geom_props, {})
-        # If specified, skip the association of regions to sectorization
+        # If no sectorization has been applied yet, return
+        if not self.sectorized_face:
+            return
+        # Update the association between cell's regions and sectorization
         # options
-        # FIXME check the actual necessity of this parameter
+        self.__update_regions_association(
+            self.__extract_cell_centered_faces(),
+            self.tech_geom_sect_opts,
+            (1, 0))
+        # Skip the sectorization, if requested
         if to_skip:
             return
-        self.__update_regions_association(
-            regions, self.tech_geom_sect_opts, (1, 0))
-
-        # Re-apply the sectorization, if it was present
-        if self.sectorized_face:
-            # Extract a list of face objects for the regions of the cell
-            # technological geometry sorted according to the distance from
-            # the cell center
-            sorted_faces = self.__extract_sectorization_option_faces()
-            supp_dict = {}
-            for region in sorted_faces:
-                if region in self.tech_geom_sect_opts:
-                    supp_dict[region] = deepcopy(
-                        self.tech_geom_sect_opts[region])
-            # Update the dictionary associating to each cell region its
-            # sectorization options
-            self.tech_geom_sect_opts.clear()
-            self.tech_geom_sect_opts.update(supp_dict)
-            # Extract a list of tuples containing the numbers of sectors and
-            # the sectorization starting angles
-            sectors_angles = list(self.tech_geom_sect_opts.values())
-            # Re-apply the sectorization with the updated options values
-            self._sectorize_cell([value[0] for value in sectors_angles],
-                                 [value[1] for value in sectors_angles],
-                                 self.is_windmill_applied)
-            # Partition the sectorization result with the externally added
-            # edges, if any
-            if self.added_edges:
-                self.sectorized_face = make_partition([
-                    self.sectorized_face], self.added_edges, ShapeType.FACE)
+        # Extract a list of tuples containing the numbers of sectors and
+        # the sectorization starting angles
+        sectors_angles = list(self.tech_geom_sect_opts.values())
+        # Re-apply the sectorization with the updated options values
+        self._sectorize_cell([value[0] for value in sectors_angles],
+                             [value[1] for value in sectors_angles],
+                             self.is_windmill_applied)
+        # Partition the sectorization result with the externally added
+        # edges, if any
+        if self.added_edges:
+            self.sectorized_face = make_partition(
+                [self.sectorized_face], self.added_edges, ShapeType.FACE)
 
     def __update_regions_association(self,
                                      tech_regions: List[Any],
@@ -875,7 +821,7 @@ class GenericCell(ABC):
         # Update the sectorization options for each zone of the cell
         # technological geometry
         self.tech_geom_sect_opts.clear()
-        for region, opts in zip(self.__extract_sectorization_option_faces(),
+        for region, opts in zip(self.__extract_cell_centered_faces(),
                                 zip(sectors_no, angles)):
             self.tech_geom_sect_opts[region] = opts
 
@@ -1473,7 +1419,7 @@ class GenericCell(ABC):
                 self.tech_geom_props = props
                 if self.sectorized_face:
                     self.__update_regions_association(
-                        self.__extract_sectorization_option_faces(),
+                        self.__extract_cell_centered_faces(),
                         sec_opts,
                         (1, 0))
                     self.tech_geom_sect_opts = sec_opts
