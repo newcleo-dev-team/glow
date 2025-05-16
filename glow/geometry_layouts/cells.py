@@ -190,21 +190,11 @@ class GenericCell(ABC):
         self.figure.build_face()
         # Initialize the cell-related instance attributes
         self.sectorized_face: Union[Any, None] = None
-        self._initialize_specific_cell()
-        self.face: Any = self.figure.face
-        self.inner_circles: List[Circle] = []
+        self.face: Any
+        self.inner_circles: List[Circle]
+        self.tech_geom_props: Dict[Any, Dict[PropertyType, str]]
+        self.tech_geom_sect_opts: Dict[Any, Tuple[int, float]]
         self.name: str = name
-        # Extract the cell subfaces, if any; otherwise use the cell face for
-        # initialization purposes
-        subfaces = self.extract_subfaces()
-        if not subfaces:
-            subfaces = [self.face]
-        self.tech_geom_props: Dict[Any, Dict[PropertyType, str]] = {
-            region: {} for region in subfaces
-        }
-        self.tech_geom_sect_opts: Dict[Any, Tuple[int, float]] = {
-            region: (1, 0) for region in subfaces
-        }
         self.face_entry_id: Union[str, None] = None
         self.rotation: float = 0.0
         self.regions: List[Region] = []
@@ -212,6 +202,8 @@ class GenericCell(ABC):
         self.is_windmill_applied: bool = False
         self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
         self.added_edges: List[Any] = []
+        self.__initialize_cell()
+        self._initialize_specific_cell()
 
     @abstractmethod
     def _initialize_specific_cell(self) -> None:
@@ -1468,30 +1460,54 @@ class GenericCell(ABC):
                 # Update the face object result of the cell sectorization
                 self.sectorized_face = shape
             case GeometryType.TECHNOLOGICAL:
-                # Build the cell regions if not already present
-                if geo_type != self.displayed_geom or not self.regions:
-                    self.__build_regions()
-                # Reset the face object to the main shape
-                self.face = self.figure.face
-                # Clear the previously stored 'Circle' objects
-                self.inner_circles.clear()
-                # Re-initialize the dictionary of cell regions VS properties
-                self.tech_geom_props = {
-                    region: {} for region in [self.face]
-                }
+                # Store the cell's dictionaries
+                props = deepcopy(self.tech_geom_props)
+                sec_opts = deepcopy(self.tech_geom_sect_opts)
+                # Re-initialize the cell geometry and its dictionaries
+                self.__initialize_cell()
                 # Update the cell face with the edges found in the given shape
                 self.__update_cell_with_edges(shape)
-                # Re-build the dictionary storing the regions VS their
-                # properties.
-                self.tech_geom_props.clear()
-                for region in self.regions:
-                    for zone in extract_sub_shapes(self.face, ShapeType.FACE):
-                        if is_point_inside_shape(
-                            make_vertex_inside_face(zone), region.face):
-                            self.tech_geom_props[zone] = region.properties
+                # Re-build the cell's dictionaries
+                self.__update_regions_association(
+                    self.extract_subfaces(), props, {})
+                self.tech_geom_props = props
+                if self.sectorized_face:
+                    self.__update_regions_association(
+                        self.__extract_sectorization_option_faces(),
+                        sec_opts,
+                        (1, 0))
+                    self.tech_geom_sect_opts = sec_opts
             case _:
                 raise ValueError(
                     f"{geo_type}: unhandled type of geometry to update.")
+
+    def __initialize_cell(self) -> None:
+        """
+        Method that initializes the cell geometry layout and its dictionaries
+        storing the cell's regions VS the corresponding properties and
+        sectorization options respectively.
+        The following operations are performed:
+        - the face is set to the one of the 'GenericSurface' used at
+          instantiation;
+        - the list storing the cell's 'Circle' objects is initialized with
+          an empty list;
+        - the property dictionaries are initialized with default values.
+        """
+        # Initialize the face object with the main shape
+        self.face = self.figure.face
+        # Clear the previously stored 'Circle' objects
+        self.inner_circles = []
+        # Extract the cell subfaces, if any; otherwise use the cell face for
+        # initialization purposes
+        subfaces = self.extract_subfaces()
+        if not subfaces:
+            subfaces = [self.face]
+        self.tech_geom_props: Dict[Any, Dict[PropertyType, str]] = {
+            region: {} for region in subfaces
+        }
+        self.tech_geom_sect_opts: Dict[Any, Tuple[int, float]] = {
+            region: (1, 0) for region in subfaces
+        }
 
     def __update_cell_with_edges(self, shape: Any) -> None:
         """
