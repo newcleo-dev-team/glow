@@ -47,17 +47,20 @@ v2 = make_vertex((0, -0.15, 0))
 v3 = make_vertex((0.15, 0, 0))
 v4 = make_vertex((-0.15, 0, 0))
 # Build the corresponding 'Circle' objects
-c1 = Circle(center=get_point_coordinates(v1), radius=0.075)
-c2 = Circle(center=get_point_coordinates(v2), radius=0.075)
-c3 = Circle(center=get_point_coordinates(v3), radius=0.075)
-c4 = Circle(center=get_point_coordinates(v4), radius=0.075)
-c1.build_face()
-c2.build_face()
-c3.build_face()
-c4.build_face()
-# Partition the original cell face with the 4 circles
+circles = [Circle(center=get_point_coordinates(v),
+                  radius=0.075) for v in [v1, v2, v3, v4]]
+for circle in circles:
+    circle.build_face()
+# Build circles positioned in the cell center
+center_circles = [Circle(radius=r) for r in [0.1, 0.35, 0.45]]
+for circle in center_circles:
+    circle.build_face()
+# Update the list of 'Circle' objects
+circles += center_circles
+
+# Partition the original cell face with all the circles
 updated_face = make_partition(
-    [rect_cell.face, c1.face, c2.face, c3.face, c4.face], [], ShapeType.FACE)
+    [rect_cell.face], [c.face for c in circles], ShapeType.FACE)
 # Update the cell geometric layout with the just built shape
 rect_cell.update_geometry_from_face(GeometryType.TECHNOLOGICAL, updated_face)
 # Show the result in the 3D viewer
