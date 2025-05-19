@@ -9,13 +9,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Self, Tuple, Union
 
-from glow.geometry_layouts.geometries import GenericSurface, Circle, \
+from glow.geometry_layouts.geometries import Surface, Circle, \
     Rectangle, Hexagon, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    is_point_inside_shape, make_cdg, make_fuse, make_line, make_partition, \
+    is_point_inside_shape, make_cdg, make_line, make_partition, \
     make_rotation, make_translation, make_vector_from_points, make_vertex, \
     make_vertex_inside_face, make_vertex_on_curve, \
     make_vertex_on_lines_intersection, remove_from_study, set_color_face, \
@@ -128,7 +128,7 @@ class GenericCell(ABC):
     ----------
     center  : Tuple[float, float, float]
         The X-Y-Z coordinates of the cell center
-    figure  : GenericSurface
+    figure  : Surface
         The figure representing the cell shape
     name    : str
         The name of the cell to be used in the current study
@@ -142,7 +142,7 @@ class GenericCell(ABC):
         representation
     face_entry_id   : Union[str, None]
         The ID of the cell face object used in the current study
-    figure          : GenericSurface
+    figure          : Surface
         The figure representing the cell shape
     inner_circles   : List[Circle]
         The list of 'Circle' objects representing the cell concentric circles
@@ -176,7 +176,7 @@ class GenericCell(ABC):
     # specific to the cell type
     VALID_SECTOR_NO_VS_ANGLE: Dict[int, List[float]] = {}
 
-    def __init__(self, figure: GenericSurface, name: str) -> None:
+    def __init__(self, figure: Surface, name: str) -> None:
         super().__init__()
         # Check that the class attribute providing the number of accepted
         # sectors and angles for the sectorization has been defined
@@ -185,9 +185,7 @@ class GenericCell(ABC):
             raise ValueError(f"{self.__name__} must define the "
                              "'VALID_SECTOR_NO_VS_ANGLE' attribute.'")
         # Store the geometrical figure this cell represents
-        self.figure: GenericSurface = figure
-        # Build the cell face from its borders
-        self.figure.build_face()
+        self.figure: Surface = figure
         # Initialize the cell-related instance attributes
         self.sectorized_face: Union[Any, None] = None
         self.face: Any
@@ -300,13 +298,8 @@ class GenericCell(ABC):
                 f"Another circle with the same radius '{radius}' and in the "
                 f"same posizion '{position if position else (0, 0, 0)}' is "
                 "already present.")
-        # Build a 'Circle' object
-        circle = Circle(center=position, radius=radius)
-        # Build the corresponding face
-        circle.build_face()
-
-        # Add the circle to the cell
-        self.__add_circle_to_pos(circle)
+        # Build a 'Circle' object and add it to the cell
+        self.__add_circle_to_pos(Circle(center=position, radius=radius))
 
     def __add_circle_to_pos(self, circle: Circle) -> None:
         """
@@ -1433,7 +1426,7 @@ class GenericCell(ABC):
         storing the cell's regions VS the corresponding properties and
         sectorization options respectively.
         The following operations are performed:
-        - the face is set to the one of the 'GenericSurface' used at
+        - the face is set to the one of the 'Surface' used at
           instantiation;
         - the list storing the cell's 'Circle' objects is initialized with
           an empty list;
@@ -1533,7 +1526,7 @@ class RectCell(GenericCell):
         representation
     face_entry_id   : Union[str, None]
         The ID of the cell face object used in the current study
-    figure          : GenericSurface
+    figure          : Surface
         The figure representing the cell shape
     height              : float
         The cell height
@@ -1684,7 +1677,7 @@ class HexCell(GenericCell):
         representation
     face_entry_id   : Union[str, None]
         The ID of the cell face object used in the current study
-    figure          : GenericSurface
+    figure          : Surface
         The figure representing the cell shape
     height              : float
         The cell height

@@ -6,10 +6,9 @@ import math
 
 from copy import deepcopy
 from typing import Any, Dict, List, Tuple, Union
-from warnings import WarningMessage
 
 from glow.geometry_layouts.cells import GenericCell, HexCell, RectCell, Region
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
+from glow.geometry_layouts.geometries import Surface, Hexagon, \
     Rectangle, build_hexagon, build_rectangle
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, \
@@ -463,7 +462,7 @@ class Lattice():
         """
         # Declare a list storing the geometrical figures that constitute
         # the box
-        box_surfaces: List[GenericSurface] = []
+        box_surfaces: List[Surface] = []
         center = get_point_coordinates(self.lattice_center)
         # Build the container for the lattice according to the cells geometry
         # type
@@ -912,8 +911,6 @@ class Lattice():
             symm_center,
             (b_box[3] - b_box[2]) / (2 - (1 - param)/(1 + param)),
             (b_box[1] - b_box[0]) / 2)
-        # Build the rectangle face object
-        rect.build_face()
         # Return the face
         return rect.face
 
@@ -1724,7 +1721,7 @@ class Lattice():
                           "one!!")
                     # Raise a warning, since no center can be clearly
                     # identified
-                    raise WarningMessage(
+                    raise RuntimeWarning(
                         "Warning: the updated compound appears to be placed "
                         "in a different position. The area is different as "
                         "well. Please, call the "
@@ -1776,7 +1773,7 @@ class Lattice():
                 get_basic_properties(shape)):
                 print("The new compound is different from the previous one!!")
                 # Raise a warning, since no center can be clearly identified
-                raise WarningMessage("Warning: the updated compound appears "
+                raise RuntimeWarning("Warning: the updated compound appears "
                                      "to be placed in a different position. "
                                      "The area is different as well. Please, "
                                      "call the 'update_geometry_from_center' "
