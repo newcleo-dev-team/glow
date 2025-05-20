@@ -12,11 +12,12 @@ from typing import Any, Dict, List, Tuple, Union, Self
 from glow.generator.support import BoundaryType, LatticeGeometryType, \
     PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
+from glow.geometry_layouts.utility import build_compound_borders
 from glow.interface.geom_interface import ShapeType, \
-    extract_sorted_sub_shapes, fuse_edges_in_wire, get_closed_free_boundary, \
-    get_in_place, get_kind_of_shape, get_min_distance, get_point_coordinates, \
-    get_shape_name, make_common, make_compound, make_face, make_fuse, \
-    make_vertex, make_vertex_inside_face, make_vertex_on_curve, set_shape_name
+    extract_sorted_sub_shapes, get_in_place, get_kind_of_shape, \
+    get_min_distance, get_point_coordinates, get_shape_name, make_common, \
+    make_compound, make_face, make_vertex, make_vertex_inside_face, \
+    make_vertex_on_curve, set_shape_name
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -731,7 +732,7 @@ class LatticeDataExtractor():
             # FIXME in case of cartesian-type lattice, it must be translated
             # so that the left-most corner coincides with the XYZ origin
         # Extract the lattice borders
-        self.borders = self.__build_borders(lattice_cmpd)
+        self.borders = build_compound_borders(lattice_cmpd)
         # Rebuild the lattice compound by performing a 'common' operation
         # with the lattice face identified by its borders
         lattice_face = make_face(self.borders)
@@ -751,42 +752,6 @@ class LatticeDataExtractor():
         self.lattice_edges.sort(
             key=lambda item: get_min_distance(item,
                                               self.lattice.lattice_center))
-
-    def __build_borders(self, lattice_cmpd: Any) -> List[Any]:
-        """
-        FIXME To extract a function from this method
-        Method that extracts the borders of the lattice from the GEOM
-        compound object storing the faces and edges of the lattice.
-
-        Parameters
-        ----------
-        lattice_cmpd  : Any
-                        The lattice GEOM compound object
-
-        Returns
-        -------
-        The list of GEOM edge objects that represent the lattice borders.
-        """
-        # Extract a list of closed boundaries from the lattice compound
-        closed_boundaries = get_closed_free_boundary(lattice_cmpd)
-        # Handle the case where more than a closed wire is extracted from
-        # the lattice compound
-        if len(closed_boundaries) > 1:
-            # Build a face for each of the extracted closed wires after
-            # fusing adjacent edges
-            shapes =  []
-            for wire in closed_boundaries:
-                wire_mod = fuse_edges_in_wire(wire)
-                shapes.append(make_face(wire_mod))
-            # Fuse all the faces into a single shape
-            shape = make_fuse(shapes)
-            # Return the edges of the fused shape
-            return extract_sorted_sub_shapes(shape, ShapeType.EDGE)
-
-        # Suppress vertices internal to the edges of the wire
-        borders_wire = fuse_edges_in_wire(closed_boundaries[0])
-        # Extract the edge objects of the border wire
-        return extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE)
 
     def build_faces(self) -> None:
         """

@@ -9,18 +9,18 @@ from typing import Any, Dict, List, Tuple, Union
 
 from glow.geometry_layouts.cells import GenericCell, HexCell, RectCell, Region
 from glow.geometry_layouts.geometries import Surface, Hexagon, \
-    Rectangle, build_hexagon, build_rectangle
+    Rectangle, build_hexagon
+from glow.geometry_layouts.utility import build_compound_borders, \
+    compare_compounds_rotation, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, \
-    extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
-    get_basic_properties, get_bounding_box, get_closed_free_boundary, \
-    get_inertia_matrix, get_min_distance, get_point_coordinates, \
+    extract_sorted_sub_shapes, extract_sub_shapes, get_basic_properties, \
+    get_bounding_box, get_min_distance, get_point_coordinates, \
     get_selected_object, is_point_inside_shape, make_cdg, make_common, \
-    make_compound, make_cut, make_edge, make_face, make_fuse, \
-    make_partition, make_rotation, make_translation, make_vector, \
-    make_vector_from_points, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, remove_from_study, set_color_face, \
-    update_salome_study
+    make_compound, make_cut, make_edge, make_face, make_partition, \
+    make_rotation, make_translation, make_vector, make_vector_from_points, \
+    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
+    remove_from_study, set_color_face, update_salome_study
 from glow.generator.support import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType, BoundaryType, CellType, TYPEGEO_VS_BC, \
     generate_unique_random_colors
@@ -476,8 +476,7 @@ class Lattice():
                 for thick in self.box_layers:
                     height += 2*thick
                     width += 2*thick
-                    box_surfaces.append(
-                        build_rectangle(height, width, center))
+                    box_surfaces.append(Rectangle(center, height, width))
                 # Perform a 'partition' operation to assemble the lattice box
                 box_face = make_partition(
                     [rect.face for rect in box_surfaces], [], ShapeType.FACE)
@@ -1157,7 +1156,7 @@ class Lattice():
         for cell in self.lattice_cells:
             # Update the cell position relative to the shifted lattice center
             # and apply translation
-            cell_to_center = update_shape_position_on_lattice(
+            cell_to_center = update_relative_pos(
                 cell.figure.o, pre_center, new_pos)
             translated_cells.append(cell.translate(cell_to_center))
         # Update the list of lattice cells based on the translated ones
@@ -1180,7 +1179,7 @@ class Lattice():
         if self.symmetry_type != SymmetryType.FULL:
             # Update the compound position relative to the shifted lattice
             # center and apply translation
-            face_to_center = update_shape_position_on_lattice(
+            face_to_center = update_relative_pos(
                 make_cdg(self.lattice_symm), pre_center, new_pos)
             self.lattice_symm = make_translation(
                 self.lattice_symm, make_vector_from_points(
@@ -1347,7 +1346,8 @@ class Lattice():
                 else:
                     # Extract the shape of the symmetry by extracting its
                     # borders and building a face object
-                    shape = make_face(self.__build_borders(self.lattice_symm))
+                    shape = make_face(
+                        build_compound_borders(self.lattice_symm))
                     # If any lattice box is present, cut it out from the
                     # lattice compound object (the one with only the cells
                     # and no box). Then, perform a common operation of the
@@ -1371,7 +1371,8 @@ class Lattice():
                 else:
                     # Extract the shape of the symmetry by extracting its
                     # borders and building a face object
-                    shape = make_face(self.__build_borders(self.lattice_symm))
+                    shape = make_face(
+                        build_compound_borders(self.lattice_symm))
                     # If any lattice box is present, cut it out from the
                     # lattice compound object (the one with only the cells
                     # and no box). Then, perform a common operation of the
@@ -1385,42 +1386,6 @@ class Lattice():
                     return make_common(self.lattice_cmpd, shape)
             case _:
                 raise ValueError(f"{geo_type}: unhandled type of geometry.")
-
-    def __build_borders(self, lattice_cmpd: Any) -> List[Any]:
-        # FIXME To transform into a function to put into a support module?
-        """
-        Method that extracts the borders of the lattice from the GEOM
-        compound object storing the faces and edges of the lattice.
-
-        Parameters
-        ----------
-        lattice_cmpd  : Any
-                        The lattice GEOM compound object
-
-        Returns
-        -------
-        The list of GEOM edge objects that represent the lattice borders.
-        """
-        # Extract a list of closed boundaries from the lattice compound
-        closed_boundaries = get_closed_free_boundary(lattice_cmpd)
-        # Handle the case where more than a closed wire is extracted from
-        # the lattice compound
-        if len(closed_boundaries) > 1:
-            # Build a face for each of the extracted closed wires after
-            # fusing adjacent edges
-            shapes =  []
-            for wire in closed_boundaries:
-                wire_mod = fuse_edges_in_wire(wire)
-                shapes.append(make_face(wire_mod))
-            # Fuse all the faces into a single shape
-            shape = make_fuse(shapes)
-            # Return the edges of the fused shape
-            return extract_sorted_sub_shapes(shape, ShapeType.EDGE)
-
-        # Suppress vertices internal to the edges of the wire
-        borders_wire = fuse_edges_in_wire(closed_boundaries[0])
-        # Extract the edge objects of the border wire
-        return extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE)
 
     def add_ring_of_cells(self, cell: GenericCell, ring_indx: int) -> None:
         """
@@ -1730,13 +1695,15 @@ class Lattice():
                 # Same area but different location: translate the lattice
                 self.translate(get_point_coordinates(cdg))
                 # Check if any rotation is present
-                delta = compare_compounds_rotation(self.lattice_cmpd, shape)
+                delta = compare_compounds_rotation(
+                    self.lattice_cmpd, shape, self.VALID_CELLS_ANGLES)
                 # Rotate the lattice, if required
                 self.rotate(delta)
 
             # The new compound is part of the previous compound
             # Check if any rotation is present
-            delta = compare_compounds_rotation(common, shape)
+            delta = compare_compounds_rotation(
+                common, shape, self.VALID_CELLS_ANGLES)
             # Rotate the lattice, if required
             self.rotate(delta)
             # --------------------------------------------------------------
@@ -1782,7 +1749,8 @@ class Lattice():
             # safely translated to the new position given by the new CDG
             self.translate(get_point_coordinates(cdg))
             # Check if any rotation is present
-            delta = compare_compounds_rotation(self.lattice_cmpd, shape)
+            delta = compare_compounds_rotation(
+                self.lattice_cmpd, shape, self.VALID_CELLS_ANGLES)
             # Rotate the lattice, if required
             self.rotate(delta)
 
@@ -1959,100 +1927,3 @@ class Lattice():
         if not found:
             raise RuntimeError(
                 "No cell region could be found for the selected shape.")
-
-
-def compare_compounds_rotation(cmpd1: Any, cmpd2: Any) -> float:
-    """
-    Function for comparing the rotation angle of two given compounds. If they
-    have a different angle, their difference is calculated and checked against
-    the allowed values for the lattice.
-
-    Parameters
-    ----------
-    cmpd1 : Any
-            One of the geometrical compounds to compare
-    cmpd2 : Any
-            One of the geometrical compounds to compare
-
-    Returns
-    -------
-    The difference (in degrees) of the rotation angles of the two compounds,
-    if they have different rotations; otherwise, the common rotation angle.
-    """
-    # Get the principal axis angle for both compounds
-    angle1 = get_principal_axis_angle(cmpd1)
-    angle2 = get_principal_axis_angle(cmpd2)
-    # Check if the rotation angle is the same
-    if angle1 != angle2:
-        print("The rotation angle has changed")
-        # Calculate the rotation angle difference
-        d_angle = angle2 - angle1
-        # Check if the rotation angle is one of the allowed ones
-        if not abs(d_angle) in Lattice.VALID_CELLS_ANGLES:
-            raise ValueError("The lattice compound has been rotated by "
-                             f"an invalid angle of {d_angle}. The allowed "
-                             f"ones are {Lattice.VALID_CELLS_ANGLES}°.")
-        # Return the difference of the compounds rotation angles
-        return d_angle
-    # Return the common rotation angle of the compounds
-    return angle1
-
-
-def get_principal_axis_angle(shape: Any) -> float:
-    """
-    Function for getting the principal axis angle of the given geometrical
-    shape.
-    The rotation angle of the shape in the XY plane is given from the atan
-    of the XY components of this axis.
-
-    Parameters
-    ----------
-    shape : Any
-            The geometrical shape in the XY plane whose rotation angle has
-            to be determined
-
-    Returns
-    -------
-    The rotation angle (in degrees) of the shape in the XY plane.
-    """
-    # Get the shape inertia matrix
-    inertia_matrix = get_inertia_matrix(shape)
-    # Extract the principal X-Y axes coordinates (2D shape)
-    px = inertia_matrix[-3]
-    py = inertia_matrix[-2]
-    # Return the rotation angle in degrees
-    return math.degrees(math.atan2(py, px))
-
-
-def update_shape_position_on_lattice(
-        center: Any,
-        pre_center: Any,
-        new_pos: Tuple[float, float, float]) -> Tuple[float, float, float]:
-    """
-    Function that updates a shape center which is relative to a given point.
-    The new position of the point is given, so that the returned XYZ
-    coordinates indicates the position of the shape relative to that.
-
-    Parameters
-    ----------
-    center      : Any
-                  The current shape center point
-    pre_center  : Any
-                  The previous point the shape is relative to
-    new_pos     : Tuple[float, float, float]
-                  The XYZ coordinates of the new point the shape must be
-                  relative to
-
-    Returns
-    -------
-    The XYZ coordinates of the new shape center so that is still relative to
-    the new center position.
-    """
-    # Get the shape position wrt the previous point position
-    shape_to_point = tuple(o - o_shape for o, o_shape in zip(
-        get_point_coordinates(pre_center),
-        get_point_coordinates(center)))
-    # Return the updated shape position relative to the new point position
-    return tuple(o - o_shape for o, o_shape in zip(
-        new_pos,
-        shape_to_point))
