@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Self, Tuple, Union
 
 from glow.geometry_layouts.geometries import Surface, Circle, \
-    Rectangle, Hexagon, update_relative_pos
+    Rectangle, Hexagon
+from glow.geometry_layouts.utility import update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \

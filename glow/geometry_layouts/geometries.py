@@ -6,6 +6,7 @@ import math
 
 from abc import ABC, abstractmethod
 from typing import Any, List, Tuple, Union
+from glow.geometry_layouts.utility import update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, extract_sorted_sub_shapes, extract_sub_shapes, \
     get_basic_properties, get_bounding_box, get_min_distance, \
@@ -744,42 +745,86 @@ class Hexagon(Surface):
                                      "to any border of the provided surface.")
 
 
-class SalomeSurface(Surface):
+class GenericSurface(Surface):
     """
+    Class representing a 2D generic surface defined starting from a given
+    face object.
+    Borders and vertices are directly extracted from the shape, whereas no
+    construction circle is declared: this is because the shape might not have
+    a regular geometric shape, hence there could be no circle within which
+    the shape is perfectly inscribed.
+    The characteristic dimensions of the surface are taken from the bounding
+    box enclosing the given surface.
+
+    Parameters
+    ----------
+    face : Any
+        The face object representing the generic surface
+
+    Attributes
+    ----------
+    o             : Any
+                    A vertex object representing the surface center
+    borders       : List[Any]
+                    A list of edge objects representing the border edges
+                    of the surface
+    face          : Any
+                    A face object representing the geometric surface
+    name          : str
+                    The name of the surface when displayed in the SALOME study
+    face_entry_id : Union[str, None]
+                    An ID associated to the surface in the SALOME study
+    vertices      : List[Any]
+                    A list of vertex objects representing the vertices of the
+                    generic surface
+    out_circle    : Any
+                    An edge object representing the construction circle which
+                    the generic surface is inscribed into
+    rotation      : float
+                    The rotation angle of the geometric surface in radians
+    lx            : float
+                    The characteristic dimension of the generic geometric
+                    surface along the X-axis
+    ly            : float
+                    The characteristic dimension of the generic geometric
+                    surface along the Y-axis
     """
-    def __init__(self,
-                 face: Any,
-                 center: Union[Tuple[float, float, float], None] = None):
-        super().__init__(center)
-        self.face: Any = face
+    def __init__(self, face: Any):
+        super().__init__(get_point_coordinates(make_cdg(face)))
+        self.face = face
+        self.name = get_shape_name(face)
         # Build the list of vertices representing the hexagon corners
-        self.vertices: List[Any] = extract_sub_shapes(self.face,
-                                                      ShapeType.VERTEX)
+        self.vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
         # Build the list of edges connecting successive vertices
-        self.borders: List[Any] = self._build_borders()
-        # Store the characteristic dimensions of the hexagon
+        self.borders = self._build_borders()
+        # Set the characteristic dimensions of the shape from the bounding box
+        # extension
         b_box = get_bounding_box(self.face)
-        self.lx = b_box[1] - b_box[0]
-        self.ly = b_box[3] - b_box[2]
+        self.lx = (b_box[1] - b_box[0]) / 2
+        self.ly = (b_box[3] - b_box[2]) / 2
+
+        self.rotation: float = 0.0
 
     def _build_borders(self) -> List[Any]:
         """
-        Method that builds the border edges of the generic surface this
-        class is representing.
-        Being abstract, a specific implementation must be provided by
-        subclasses.
+        Method that extracts all the edge objects of the generic surface
+        this class is representing.
+
+        Returns
+        -------
+        A list of the edge objects of the surface this class is built on.
         """
         return extract_sub_shapes(self.face, ShapeType.EDGE)
 
     def update_from_face(self, face: Any) -> None:
         """
-        Method for updating the geometrical characteristics of the surface
-        from the given GEOM face object.
+        Method for updating the geometric characteristics of the surface
+        from the given face object.
 
         Parameters
         ----------
         face  : Any
-                The new GEOM face object to substitute
+                The new face object to substitute the current face with
         """
         # Update the GEOM face object
         self.face = face
@@ -797,7 +842,7 @@ def build_hexagon(
         apothem: float,
         center: Tuple[float, float, float] | None = None) -> Hexagon:
     """
-    Method that allows to build an hexagon from its apothem. The resulting
+    Function that allows to build an hexagon from its apothem. The resulting
     face is placed at the indicated center, if any, otherwise it is centered
     in the XYZ space origin.
 
@@ -817,68 +862,6 @@ def build_hexagon(
     # Build and return the 'Hexagon' object
     return Hexagon(center, hex_side)
 
-
-def build_rectangle(
-        height: float,
-        width: float,
-        center: Tuple[float, float, float] | None = None) -> Rectangle:
-    """
-    Method that allows to build an rectangle from its height and width.
-    The resulting face is placed at the indicated center, if any, otherwise
-    it is centered in the XYZ space origin.
-
-    Parameters
-    ----------
-    height  : float
-        The value of the rectangle height
-    width  : float
-        The value of the rectangle width
-    center  : Tuple[float, float, float] | None = None
-        The XYZ coordinates of the rectangle center, if any
-
-    Returns
-    -------
-    A 'Rectangle' object with dimensions and center as indicated.
-    """
-    # Build and return the 'Rectangle' object
-    return Rectangle(center, height, width)
-
-
-# FIXME this function is used also in the 'cells' and 'lattices' modules. It
-# should be moved into the 'support' module. It is needed to restructure the
-# import chain as the 'support' module needs to import the 'salome' module,
-# whereas the 'main' one imports 'support' as well. Hence, a circular import
-# situation happens.
-def update_relative_pos(point: Any,
-                        rel_point_pre: Any,
-                        new_pos: Tuple[float, float, float]) -> Tuple:
-    """
-    Function that calculates the position of the given point which is
-    relative to another one, which has to be moved into the given XYZ
-    position.
-
-    Parameters
-    ----------
-    point         : Any
-                    The point whose new coordinates must be evaluated
-    rel_point_pre : Any
-                    The point the first parameter is relative to
-    new_pos       : Tuple[float, float, float]
-                    The XYZ coordinates of the moved point (2nd parameter)
-
-    Returns
-    -------
-    A tuple with the XYZ coordinates of the given point so that it still
-    keeps its relative position with the moved point.
-    """
-    # Get the point position wrt the previous point position
-    relative_pos = tuple(coord1 - coord2 for coord1, coord2 in zip(
-        get_point_coordinates(rel_point_pre),
-        get_point_coordinates(point)))
-    # Return the updated shape position relative to the new point position
-    return tuple(coord1 - coord2 for coord1, coord2 in zip(
-        new_pos,
-        relative_pos))
 
 if __name__ == "__main__":
     # ------------------------------------------------
