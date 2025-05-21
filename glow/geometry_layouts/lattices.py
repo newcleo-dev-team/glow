@@ -7,7 +7,7 @@ import math
 from copy import deepcopy
 from typing import Any, Dict, List, Tuple, Union
 
-from glow.geometry_layouts.cells import GenericCell, HexCell, RectCell, Region
+from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
 from glow.geometry_layouts.geometries import Surface, Hexagon, \
     Rectangle, build_hexagon
 from glow.geometry_layouts.utility import build_compound_borders, \
@@ -32,17 +32,17 @@ class Lattice():
 
     Parameters
     ----------
-    cells : List[GenericCell]
+    cells : List[Cell]
             The list of cells that constitute the lattice, as objects
-            of the 'GenericCell' subclasses
+            of the 'Cell' subclasses
     name  : str = "Lattice"
             The lattice name in the current SALOME study
 
     Attributes
     ----------
-    lattice_cells     : List[GenericCell]
+    lattice_cells     : List[Cell]
                         The list of cells that constitute the lattice, as
-                        objects of the 'GenericCell' subclasses
+                        objects of the 'Cell' subclasses
     lattice_cmpd      : Any
                         A GEOM compound object grouping all the faces of the
                         cells in the lattice
@@ -66,7 +66,7 @@ class Lattice():
     VALID_CELLS_ANGLES: List[float] = [0.0, 90.0]
 
     def __init__(self,
-                 cells: List[GenericCell],
+                 cells: List[Cell],
                  name: str = "Lattice",
                  center: Union[Tuple[float, float, float], None] = None,
                  boxes_thick: List[float] = []) -> None:
@@ -91,7 +91,7 @@ class Lattice():
         self.cells_rot: float = self.__evaluate_cells_rotation(cells)
 
         # Initialize the instance attributes
-        self.lattice_cells: List[GenericCell] = deepcopy(cells)
+        self.lattice_cells: List[Cell] = deepcopy(cells)
         self.name: str = name
         self.lattice_entry_id: Union[str, None] = None
         self.rings_no: int = 0
@@ -112,7 +112,7 @@ class Lattice():
         self.lx: float = cells[0].figure.lx
         self.ly: float = cells[0].figure.ly
         self.box_layers: List[float] = boxes_thick
-        self.lattice_box: Union[GenericCell, None] = None
+        self.lattice_box: Union[Cell, None] = None
         self.lattice_symm: Union[Any, None] = None
         self.lattice_tech: Union[Any, None] = None
         self.regions: List[Region] = []
@@ -133,7 +133,7 @@ class Lattice():
         # Show the lattice in the current SALOME study
         self.show(update_view=False)
 
-    def __evaluate_cells_rotation(self, cells: List[GenericCell]) -> float:
+    def __evaluate_cells_rotation(self, cells: List[Cell]) -> float:
         """
         Method that checks if the rotation angle of the given cells is the
         same for all the given ones; if not, an exception is raised.
@@ -144,8 +144,8 @@ class Lattice():
 
         Parameters
         ----------
-        cells : List[GenericCell]
-                The list of 'GenericCell' subclasses, representing the cells
+        cells : List[Cell]
+                The list of 'Cell' subclasses, representing the cells
                 whose rotation angle must be checked
 
         Returns
@@ -169,7 +169,7 @@ class Lattice():
 
     def __evaluate_lattice_center(
             self,
-            cells: List[GenericCell],
+            cells: List[Cell],
             center: Union[Tuple[float, float, float], None]) -> Any:
         """
         Method that evaluates the lattice center during the initialization:
@@ -180,7 +180,7 @@ class Lattice():
 
         Parameters
         ----------
-        cells   : List[GenericCell]
+        cells   : List[Cell]
                   A list of cell objects constituting the lattice
         center  : Tuple[float, float, float]
                   The X-Y-Z coordinates of the lattice center
@@ -278,7 +278,7 @@ class Lattice():
                 self.lattice_cmpd = self.__assemble_box_with_lattice(
                     inner_box, self.lattice_cmpd)
 
-    def __add_cell_regions(self, cell: GenericCell):
+    def __add_cell_regions(self, cell: Cell):
         """
         """
         # Get the current number of regions
@@ -420,7 +420,7 @@ class Lattice():
         self.__cut_box_with_cells(inner_box)
 
         # Update the lattice box face and its underlying figure
-        # FIXME to put all this part into a method for the 'GenericCell' class
+        # FIXME to put all this part into a method for the 'Cell' class
         subfaces = self.lattice_box.extract_subfaces()
         if not subfaces:
             subfaces = [self.lattice_box.face]
@@ -451,7 +451,7 @@ class Lattice():
 
     def __build_lattice_box_type(self) -> None:
         """
-        Method that builds the lattice box as an instance of the 'GenericCell'
+        Method that builds the lattice box as an instance of the 'Cell'
         class, which is stored as an instance attribute.
         The container geometry is built accordingly with the type of geometry
         of the cells in the lattice.
@@ -567,7 +567,7 @@ class Lattice():
         self.boundary_type: BoundaryType = TYPEGEO_VS_BC[self.type_geo][0]
 
     def add_cell(self,
-                 cell_to_add: GenericCell,
+                 cell_to_add: Cell,
                  position: Tuple[float, float, float],
                  update_study: bool = True) -> None:
         """
@@ -576,9 +576,9 @@ class Lattice():
 
         Parameters
         ----------
-        cell_to_add   : GenericCell
+        cell_to_add   : Cell
                         A cell to add to the current lattice, as object of
-                        the 'GenericCell' subclasses
+                        the 'Cell' subclasses
         position      : Tuple[float, float, float]
                         The X-Y-Z coordinates of the position where the cell
                         should be added, i.e. the cell center should be placed
@@ -1244,7 +1244,7 @@ class Lattice():
             self,
             indx: int,
             faces: List[Any],
-            lattice_cells: List[GenericCell]
+            lattice_cells: List[Cell]
             ) -> List[Region]:
         """
         Method that builds a list of 'Region' objects for each of the given
@@ -1261,8 +1261,8 @@ class Lattice():
             name
         faces : List[Any]
             A list of face objects for which 'Region' objects are built
-        lattice_cells : List[GenericCell]
-            A list of 'GenericCell' objects representing the lattice cells
+        lattice_cells : List[Cell]
+            A list of 'Cell' objects representing the lattice cells
 
         Returns
         -------
@@ -1387,10 +1387,10 @@ class Lattice():
             case _:
                 raise ValueError(f"{geo_type}: unhandled type of geometry.")
 
-    def add_ring_of_cells(self, cell: GenericCell, ring_indx: int) -> None:
+    def add_ring_of_cells(self, cell: Cell, ring_indx: int) -> None:
         """
         Method that adds a ring of cells of the same type. The cell is
-        provided as an object of one of the 'GenericCell' subclasses, which
+        provided as an object of one of the 'Cell' subclasses, which
         is iteratively added at specific construction points identified by
         the given index of the lattice ring where the cells have to be added.
 
@@ -1400,7 +1400,7 @@ class Lattice():
 
         Parameters
         ----------
-        cell      : GenericCell
+        cell      : Cell
                     The cell instance to be iteratively added in order to
                     build a ring of cells
         ring_indx : int
@@ -1446,10 +1446,10 @@ class Lattice():
                 # Add the cell at the position of the subdivision point
                 self.add_cell(cell, get_point_coordinates(p), False)
 
-    def add_rings_of_cells(self, cell: GenericCell, no_rings: int) -> None:
+    def add_rings_of_cells(self, cell: Cell, no_rings: int) -> None:
         """
         Method that adds to the lattice several rings of cells of the same
-        type. The cell is provided as an object of one of the 'GenericCell'
+        type. The cell is provided as an object of one of the 'Cell'
         subclasses, which is iteratively added, for each index of rings, at
         specific construction points.
         The rings of cells are added starting from the current maximum value
@@ -1457,7 +1457,7 @@ class Lattice():
 
         Parameters
         ----------
-        cell      : GenericCell
+        cell      : Cell
                     The cell instance to be iteratively added in order to
                     build the rings of cells
         no_rings  : int
@@ -1902,7 +1902,7 @@ class Lattice():
         found = False
         # Point for idendifying the shape in the geometry
         point = make_vertex_inside_face(shape)
-        cells: List[GenericCell] = self.lattice_cells + [self.lattice_box]
+        cells: List[Cell] = self.lattice_cells + [self.lattice_box]
         # Get the region that corresponds to the given shape
         for cell in cells:
             # Continue with another cell if the shape is not contained within

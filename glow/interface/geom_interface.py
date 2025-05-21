@@ -3,7 +3,7 @@ Module containing functions providing an interface towards the GEOM functions
 of SALOME.
 """
 from enum import Enum
-from typing import Any, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 # Import SALOME element
 from glow.interface import geompy, gst, salome, SALOMEDS
@@ -46,6 +46,24 @@ class ShapeType(Enum):
     VERTEX    : int = geompy.ShapeType['VERTEX']
     SHAPE     : int = geompy.ShapeType['SHAPE']
     FLAT      : int = geompy.ShapeType['FLAT']
+    PLANAR    : int = 10
+
+
+# Dictionary associating the name of the GEOM type of shape VS the
+# corresponding enumeration element of 'ShapeType'
+NAME_VS_SHAPE_TYPE: Dict[str, ShapeType] = {
+    'COMPOUND': ShapeType.COMPOUND,
+    'COMPSOLID': ShapeType.COMPSOLID,
+    'SOLID': ShapeType.SOLID,
+    'SHELL': ShapeType.SHELL,
+    'FACE': ShapeType.FACE,
+    'WIRE': ShapeType.WIRE,
+    'EDGE': ShapeType.EDGE,
+    'VERTEX': ShapeType.VERTEX,
+    'SHAPE': ShapeType.SHAPE,
+    'FLAT': ShapeType.FLAT,
+    'PLANAR': ShapeType.PLANAR,
+}
 
 
 def add_to_study(shape: Any, name: str) -> str:
@@ -382,6 +400,29 @@ def get_shape_name(shape: Any) -> str:
     The value of the 'name' attribute assigned to the given shape.
     """
     return shape.GetName()
+
+
+def get_shape_type(shape: Any) -> ShapeType:
+    """
+    Function that returns the type of the given shape as value of the
+    'ShapeType' enumeration.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape whose type to determine
+
+    Returns
+    -------
+    The shape type as value of the 'ShapeType' enumeration.
+    """
+    # Get the name of the shape type
+    type = str(get_kind_of_shape(shape)[0])
+    # Return the corresponding value of the 'ShapeType' enumeration
+    try:
+        return NAME_VS_SHAPE_TYPE[type]
+    except KeyError:
+        print(f"WARNING, type {type} not recognized")
 
 
 def get_subshape_id(shape: Any, subshape: Any) -> str:

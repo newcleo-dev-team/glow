@@ -9,13 +9,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Self, Tuple, Union
 
-from glow.geometry_layouts.geometries import Surface, Circle, \
+from glow.geometry_layouts.geometries import GenericSurface, Surface, Circle, \
     Rectangle, Hexagon
 from glow.geometry_layouts.utility import update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
-    get_point_coordinates, get_selected_object, get_shape_name, \
+    get_point_coordinates, get_selected_object, get_shape_name, get_shape_type, \
     is_point_inside_shape, make_cdg, make_line, make_partition, \
     make_rotation, make_translation, make_vector_from_points, make_vertex, \
     make_vertex_inside_face, make_vertex_on_curve, \
@@ -121,9 +121,10 @@ class Region():
         self.color = color
 
 
-class GenericCell(ABC):
+class Cell(ABC):
     """
-    Abstract class representative of a generic cell.
+    Abstract class for representing any cell characterized in terms of its
+    geometric layout and the properties associated to its regions.
 
     Parameters
     ----------
@@ -1493,7 +1494,7 @@ class GenericCell(ABC):
                 [self.face], edges_to_add, ShapeType.FACE)
 
 
-class RectCell(GenericCell):
+class RectCell(Cell):
     """
     Class providing the means for building a cartesian (i.e. rectangular)
     cell.
@@ -1644,7 +1645,7 @@ class RectCell(GenericCell):
         self.added_edges.clear()
 
 
-class HexCell(GenericCell):
+class HexCell(Cell):
     """
     Class providing the means for building an hexagonal cell.
     This cell can be characterised by a specified number of concentric
@@ -1773,7 +1774,7 @@ class HexCell(GenericCell):
                       from for each cell zone coming from the technological
                       geometry
         kwargs      : Any
-                      Additional parameters specific to the hexagona cell type
+                      Additional parameters specific to the hexagonal cell type
                       to be sectorized. Up to now, nothing is passed
         """
         # Since the hexagonal cell type does not come with a 'windmill'
@@ -1785,12 +1786,13 @@ class HexCell(GenericCell):
         self.added_edges.clear()
 
 
-class SalomeCell():
+class GenericCell(Cell):
     """
     Class providing the means for interacting with a generic cell built from
     within SALOME using its GEOM module.
-    Given the cell face ID in the current SALOME study, the face is retrieved
-    and all the needed informations are extracted.
+    Given the face or the compound object currently selected in the SALOME
+    study, the cell is initialized with the provided shape and all the needed
+    information is extracted.
     This cell can be characterised by a specified number of concentric
     circles, each one associated with a different property, to represent
     the different zones of a fuel pin cell.
@@ -1800,23 +1802,100 @@ class SalomeCell():
     Properties of the technological geometry zones are associated to each
     of the corresponding sectors.
 
-    Parameters
-    ----------
-    face_id   : str
-                The cell face ID in the current SALOME study
-    cell_type : CellType
-                Value of the 'CellType' enumeration identifying the type
-                of cell
     Attributes
     ----------
-    ...
+    cell_type       : Union[CellType, None]
+        The type of cell expressed as a value of the 'CellType' enumeration
+    face            : Any
+        The face object providing the cell technological geometry
+        representation
+    face_entry_id   : Union[str, None]
+        The ID of the cell face object used in the current study
+    figure          : Surface
+        The figure representing the cell shape
+    inner_circles   : List[Circle]
+        The list of 'Circle' objects representing the cell concentric circles
+    is_windmill_applied : bool
+        Boolean flag stating if the windmill sectorization is applied
+    name            : str
+        The name of the cell to be used in the current study
+    regions         : List[Region]
+        The list of 'Region' objects storing information about either the
+        regions of the cell technological geometry or the ones resulting from
+        its sectorization
+    rotation        : float
+        The rotation angle of the cell expressed in radians
+    sectorized_face : Any
+        The face object providing the cell sectorized geometry representation
+        (used for calculations)
+    tech_geom_props : Dict[Any, Dict[PropertyType, str]]
+        A dictionary between the regions of the cell technological geometry
+        VS the dictionary of property types VS value associated to each zone
+    tech_geom_sect_opts : Dict[Any, Tuple[int, float]]
+        A dictionary between the regions of the cell technological geometry
+        VS the tuple identifying the associated sectorization options
+
+    VALID_SECTOR_NO_VS_ANGLE  : Dict[int, List[float]]
+        Dictionary providing the number of valid sectors each cell zone
+        could be subdivided VS the accepted angles the sectorization can
+        start from.
     """
-    def __init__(self, face_id: str, cell_type: CellType) -> None:
-        # Extract the face the given ID corresponds to in the SALOME study
-        self.face : Any = get_object_from_id(face_id)
+    VALID_SECTOR_NO_VS_ANGLE: Dict[int, List[float]] = {1 : [0]}
+
+    def __init__(self) -> None:
+        # Get the shape currently selected in the SALOME study
+        shape = get_selected_object()
+        if not shape:
+            raise RuntimeError("Please, select a shape to build the cell "
+                               "geometry layout.")
+        if get_shape_type(shape) not in [ShapeType.COMPOUND, ShapeType.FACE]:
+            raise RuntimeError("The cell geometry layout must be based on "
+                "a compound of faces or a face object itself.")
+        # Store the shape
+        self.face = shape
         print(f"The face has name '{get_shape_name(self.face)}'")
-        # TODO continue implementation
-        # super().__init__(None, self.face.GetName())
+        # Call the superclass constructor
+        super().__init__(GenericSurface(self.face), get_shape_name(self.face))
+
+    def _check_radius_vs_cell_dim(self):
+        """
+        Method for assessing if the circle, whose radius is given as input,
+        can be added to the cell. No implementation is needed for this method
+        as the cell surface is generic.
+        """
+        return
+
+    def _initialize_specific_cell(self):
+        """
+        Method for initializing instance attributes that are specific for
+        the hexagonal cell. Up to now, nothing needs to be performed here.
+        """
+        return
+
+    def sectorize(self,
+                  sectors_no: List[int],
+                  angles: List[float],
+                  **kwargs) -> None:
+        """
+        Method that subdivides the cell into sectors. Given the number of
+        sectors for each cell zone and the values of the angles to start
+        the sectorization from, points are built on the geometric surfaces
+        of the cell.
+        Lines are drawn between those points to define the sectors and the
+        corresponding subfaces are extracted.
+
+        Parameters
+        ----------
+        sectors_no  : List[int]
+            List of integers representing the number of subdivision for each
+            cell zone coming from the technological geometry
+        angles      : List[float]
+            List of angles (in degree) the sectorization should start from
+            for each cell zone coming from the technological geometry
+        kwargs      : Any
+            Additional parameters for the sectorization.
+        """
+        return super().sectorize(sectors_no, angles, **kwargs)
 
 
 if __name__ == "__main__":
