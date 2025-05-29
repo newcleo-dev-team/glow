@@ -32,8 +32,8 @@ def analyse_and_generate_tdt(lattice: Lattice, filename: str):
     # Perform the lattice faces and edges analysis
     data_extractor = analyse_lattice(lattice)
 
-    print("--- Lattice analysis executed in " + \
-          f"{time.time() - start_time} seconds ---")
+    t1 = time.time()
+    print(f"--- Lattice analysis executed in {t1 - start_time} seconds ---")
 
     # Instantiate the dataclass storing the needed lattice data
     tdt = TdtData(filename=os.path.join(
@@ -46,7 +46,7 @@ def analyse_and_generate_tdt(lattice: Lattice, filename: str):
                   type_sym=data_extractor.lattice.symmetry_type)
 
     print("--- TdtData class instantiation executed in " + \
-          f"{time.time() - start_time} seconds ---")
+          f"{time.time() - t1} seconds ---")
 
     # Write the data to the output TDT-format file
     write_tdt_file(tdt)

@@ -71,9 +71,9 @@ lattice.add_cell(hex_cell, (2*dx, 0, 0))
 lattice.add_cell(hex_cell, (-2*dx, 0, 0))
 
 # Add the lattice box
-lattice.build_lattice_box([-0.05, 0.05])
+lattice.build_lattice_box([-0.05, 0.05, 0.05])
 # Show the partitioned box face
-lattice.lattice_box.show_face()
+lattice.lattice_box.show()
 # Assign the properties to the lattice box areas
 lattice.set_lattice_box_properties(
     {PropertyType.MATERIAL: ["COOLANT", "CLADDING", "COOLANT"]}

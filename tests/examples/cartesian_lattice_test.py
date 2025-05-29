@@ -7,11 +7,15 @@ A lattice is built by including 9 of the built cells; the result is shown in
 the SALOME 3D viewer and its surface geometry representation exported to an
 output TDT file.
 """
+import time
 from glow.geometry_layouts.cells import RectCell
 from glow.generator.support import GeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.main import analyse_and_generate_tdt
 from glow.interface.geom_interface import *
+
+# Get the initial time
+start_time = time.time()
 
 # -----------------------
 # TEST THE CARTESIAN CELL
@@ -61,7 +65,7 @@ lattice.add_rings_of_cells(rect_cell, 2)
 lattice.apply_symmetry(SymmetryType.EIGHTH)
 
 # Build a box for the lattice
-lattice.build_lattice_box([-0.075, 0.075])
+lattice.build_lattice_box([-0.075, 0.075, 0.075])
 
 # Add MATERIAL property for the box layers
 lattice.set_lattice_box_properties({
@@ -74,3 +78,5 @@ lattice.show(PropertyType.MATERIAL)
 # Perform the geometry analysis and export the TDT file of the surface
 # geometry
 analyse_and_generate_tdt(lattice, "cartesian_lattice")
+
+print(f"--- Code executed in {time.time() - start_time} seconds ---")
