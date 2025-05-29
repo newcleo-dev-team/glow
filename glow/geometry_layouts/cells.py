@@ -11,14 +11,15 @@ from typing import Any, Dict, List, Self, Tuple, Union
 
 from glow.geometry_layouts.geometries import GenericSurface, Surface, Circle, \
     Rectangle, Hexagon
-from glow.geometry_layouts.utility import update_relative_pos
+from glow.geometry_layouts.utility import build_compound_borders, \
+    update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
-    get_point_coordinates, get_selected_object, get_shape_name, get_shape_type, \
-    is_point_inside_shape, make_cdg, make_line, make_partition, \
-    make_rotation, make_translation, make_vector_from_points, make_vertex, \
-    make_vertex_inside_face, make_vertex_on_curve, \
+    get_point_coordinates, get_selected_object, get_shape_name, \
+    get_shape_type, is_point_inside_shape, make_cdg, make_face, make_line, \
+    make_partition, make_rotation, make_translation, make_vector_from_points, \
+    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
     make_vertex_on_lines_intersection, remove_from_study, set_color_face, \
     update_salome_study
 from glow.generator.support import CellType, GeometryType, PropertyType, \
@@ -1209,7 +1210,7 @@ class Cell(ABC):
         if self.name == "":
             self.name = get_shape_name(self.face)
         # Delete the face from the study if already present
-        if self.face_entry_id:
+        if self.face_entry_id and get_object_from_id(self.face_entry_id):
             remove_from_study(self.face_entry_id)
         # Add the cell to the current SALOME study
         self.face_entry_id = add_to_study(self.face, self.name)
@@ -1406,6 +1407,9 @@ class Cell(ABC):
                 sec_opts = deepcopy(self.tech_geom_sect_opts)
                 # Re-initialize the cell geometry and its dictionaries
                 self.__initialize_cell()
+                # Update the cell face with the face built on the given shape
+                # borders
+                self.face = make_face(build_compound_borders(shape))
                 # Update the cell face with the edges found in the given shape
                 self.__update_cell_with_edges(shape)
                 # Re-build the cell's dictionaries
@@ -1418,6 +1422,13 @@ class Cell(ABC):
                         sec_opts,
                         (1, 0))
                     self.tech_geom_sect_opts = sec_opts
+                    sectors_angles = list(self.tech_geom_sect_opts.values())
+                    # Re-apply the sectorization with the updated options
+                    # values
+                    self._sectorize_cell(
+                        [value[0] for value in sectors_angles],
+                        [value[1] for value in sectors_angles],
+                        self.is_windmill_applied)
             case _:
                 raise ValueError(
                     f"{geo_type}: unhandled type of geometry to update.")
@@ -1485,7 +1496,13 @@ class Cell(ABC):
                     arcs_data.append((center, radius))
                     # Add a circle with the geometric characteristics
                     # of the arc
-                    self.add_circle(radius, center)
+                    self.inner_circles.append(
+                        Circle(center=center, radius=radius))
+                    # Sort the list of circles by the size of the radius
+                    # (lower to greater)
+                    self.inner_circles = sorted(self.inner_circles,
+                                                key=lambda item: item.radius)
+                edges_to_add.append(edge)
             elif str(data[0]) == 'SEGMENT':
                 edges_to_add.append(edge)
         # Make a partition with the found segments to update the cell
@@ -1842,9 +1859,10 @@ class GenericCell(Cell):
     """
     VALID_SECTOR_NO_VS_ANGLE: Dict[int, List[float]] = {1 : [0]}
 
-    def __init__(self) -> None:
+    def __init__(self, shape: Union[Any, None] = None) -> None:
         # Get the shape currently selected in the SALOME study
-        shape = get_selected_object()
+        if not shape:
+            shape = get_selected_object()
         if not shape:
             raise RuntimeError("Please, select a shape to build the cell "
                                "geometry layout.")

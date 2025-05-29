@@ -35,6 +35,10 @@ class ShapeType(Enum):
         Indicating a generic shape type
     FLAT      : int
         Indicating a flat shape type
+    PLANAR    : int
+        Indicating a planar shape type
+    POLYGON   : int
+        Indicating a polygon shape type
     """
     COMPOUND  : int = geompy.ShapeType['COMPOUND']
     COMPSOLID : int = geompy.ShapeType['COMPSOLID']
@@ -47,6 +51,7 @@ class ShapeType(Enum):
     SHAPE     : int = geompy.ShapeType['SHAPE']
     FLAT      : int = geompy.ShapeType['FLAT']
     PLANAR    : int = 10
+    POLYGON   : int = 11
 
 
 # Dictionary associating the name of the GEOM type of shape VS the
@@ -63,6 +68,7 @@ NAME_VS_SHAPE_TYPE: Dict[str, ShapeType] = {
     'SHAPE': ShapeType.SHAPE,
     'FLAT': ShapeType.FLAT,
     'PLANAR': ShapeType.PLANAR,
+    'POLYGON': ShapeType.POLYGON
 }
 
 
@@ -243,7 +249,7 @@ def get_closed_free_boundary(compound: Any) -> List[Any]:
     given compound.
     """
     (isDone, closed, _) = geompy.GetFreeBoundary(compound)
-    if not isDone:
+    if not isDone or not closed:
         raise RuntimeError("No closed free boundaries could be extracted "
                            "from the given compound object")
     return closed
@@ -340,22 +346,26 @@ def get_min_distance(shape1: Any, shape2: Any) -> float:
     return geompy.MinDistance(shape1, shape2)
 
 
-def get_object_from_id(entry_id) -> Any:
+def get_object_from_id(entry_id: str) -> Any | None:
     """
     Function that returns the geometrical object associated to the entry ID
     declared in the study.
 
     Parameters
     ----------
-    entry_id  : str
+    entry_id : str
         The value of the entry ID associated to the geometrical object in the
-        current study
+        current SALOME study
 
     Returns
     -------
-    The geometrical object associated with the given entry ID in the study.
+    The geometrical object associated with the given entry ID in the study or
+    None, if no one is associated to the entry ID in the current SALOME study.
     """
-    return gst.getGeomObjectFromEntry(entry_id)
+    try:
+        return gst.getGeomObjectFromEntry(entry_id)
+    except:
+        return None
 
 
 def get_point_coordinates(point: Any) -> Tuple[float, float, float]:
