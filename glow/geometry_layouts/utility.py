@@ -10,7 +10,7 @@ from glow.interface.geom_interface import ShapeType, \
   get_inertia_matrix, get_point_coordinates, make_face, make_fuse
 
 
-def build_compound_borders(cmpd: Any) -> Any:
+def build_compound_borders(cmpd: Any) -> List[Any]:
     """
     Function that extracts the external boundary of the given compound object
     and returns them as a list of edge objects.

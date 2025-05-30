@@ -134,7 +134,7 @@ class Lattice():
             self.__evaluate_no_rings(get_point_coordinates(cell.figure.o))
 
         # Show the lattice in the current SALOME study
-        self.show(update_view=False)
+        self.show()
 
     def __evaluate_cells_rotation(self, cells: List[Cell]) -> float:
         """
@@ -1019,8 +1019,8 @@ class Lattice():
 
     def show(self,
              property_type_to_show: Union[PropertyType, None] = None,
-             geometry_type_to_show: GeometryType = GeometryType.TECHNOLOGICAL,
-             update_view: bool = True) -> None:
+             geometry_type_to_show: GeometryType = GeometryType.TECHNOLOGICAL
+             ) -> None:
         """
         Method that allows to show the lattice and its cell regions into
         the current SALOME study.

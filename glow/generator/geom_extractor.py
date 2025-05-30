@@ -14,10 +14,10 @@ from glow.generator.support import BoundaryType, LatticeGeometryType, \
 from glow.geometry_layouts.lattices import Lattice
 from glow.geometry_layouts.utility import build_compound_borders
 from glow.interface.geom_interface import ShapeType, \
-    extract_sorted_sub_shapes, get_in_place, get_kind_of_shape, \
-    get_min_distance, get_point_coordinates, get_shape_name, make_common, \
-    make_compound, make_face, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, set_shape_name
+    extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
+    get_kind_of_shape, get_min_distance, get_point_coordinates, \
+    get_shape_name, get_shape_type, make_common, make_compound, make_face, \
+    make_vertex, make_vertex_inside_face, make_vertex_on_curve, set_shape_name
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -28,9 +28,9 @@ EPSILON = 1e-05
 def analyse_lattice(lattice: Lattice):
     """
     Function that performs the lattice analysis in order to extract the
-    needed information about the edges, the association between edges and
-    subfaces connected to them, and the edges representing the lattice
-    boundaries.
+    needed information about the faces, the edges, the association between
+    edges and subfaces connected to them, and the edges representing the
+    lattice boundaries.
 
     Parameters
     ----------
@@ -44,6 +44,7 @@ def analyse_lattice(lattice: Lattice):
     # Call its method for performing the analysis
     data_extractor.build_faces()
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()
+    data_extractor.build_edges(edge_name_vs_faces)
     data_extractor.build_boundaries()
     data_extractor.print_log_analysis(edge_name_vs_faces)
 
@@ -659,23 +660,21 @@ class Boundary:
 
 
 class LatticeDataExtractor():
-    # FIXME - to transform into a dataclass since its methods have to be called
-    # soon after it is instantiated in order to get the needed info
     """
     Class that extracts the needed geometrical data from the given lattice
     to be used further on for generating the output TDT file.
-    It determines the association of edges with connected faces and those
-    edges that represents the lattice borders.
+    It determines the association of faces with properties, that of edges
+    with connected faces and the edges that represents the lattice borders.
 
     Parameters
     ----------
-    lattice   : Lattice
-                The class storing the lattice information
+    lattice : Lattice
+        An instance of the 'Lattice' class storing the lattice information
 
     Attributes
     ----------
     lattice             : Lattice
-                          The class storing the lattice information
+                          The 'Lattice' object storing the lattice information
     borders             : Any
                           The GEOM compound object grouping the edges
                           representing the lattice borders
@@ -684,9 +683,7 @@ class LatticeDataExtractor():
                           borders information
     subfaces            : List[Any]
                           The list of 'Face' objects storing information about
-                          each subface of the lattice given its cells
-                          subdivision according to either the technological
-                          geometry or its sectorization
+                          each region of the lattice
     edge_name_vs_faces  : Dict[str, List[Any]]
                           A dictionary storing all the faces connected to the
                           edges, given their name
@@ -696,23 +693,263 @@ class LatticeDataExtractor():
     id_vs_edge          : Dict[str, Any]
                           A dictionary of the lattice edge ID VS the GEOM edge
                           object reference
+    lattice_subfaces    : List[Any]
+                          A list of the GEOM face objects for the lattice
+                          regions
+    lattice_edges       : List[Any]
+                          A list of the GEOM edge objects for the lattice
     """
     def __init__(self, lattice: Lattice) -> None:
         # Initialize the instance attributes
         self.lattice: Lattice = lattice
         self.borders: List[Any] = []
-        self.lattice_subfaces: List[Any] = []
+        self.lattice_subfaces: List[Any] = [] # FIXME not necessary?
         self.lattice_edges: List[Any] = []
         self.boundaries: List[Boundary] = []
         self.subfaces: List[Face] = []
         self.edge_name_vs_faces: Dict[str, List[Any]] = {}
         self.edges: List[Edge] = []
-        # Extract the information about borders, faces and edges of the lattice
-        # to be stored according to its symmetry
+        # Extract the information about borders, faces and edges of the
+        # lattice to be stored according to its symmetry
         self.__preprocess()
         # Associate each edge with an index and build a dictionary
         self.id_vs_edge: Dict[str, Any] = classify_lattice_edges(
             self.lattice_edges)
+
+    def build_boundaries(self) -> None:
+        """
+        Method that constructs a list of 'Boundary' objects representing the
+        lattice boundary edges, i.e. those connected to a single face.
+        All the GEOM edges being part of each boundary are associated to the
+        same 'Boundary' object.
+        """
+        # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
+        # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
+        if self.lattice.type_geo == LatticeGeometryType.ISOTROPIC:
+            return
+        # Initialize the list of 'Boundary' objects
+        boundary_edges = []
+        # Initialize a dictionary of edge name VS its global index
+        edge_name_to_no = {}
+
+        # Loop through all the stored 'Edge' objects
+        print("LEN EDGES", len(self.edges))
+        for edge in self.edges:
+            # Check if the current edge has no faces on the left or on the
+            # right, i.e. it represents a boundary edge
+            if not edge.left or not edge.right:
+                # Append the corresponding GEOM edge object to the list
+                boundary_edges.append(edge.edge)
+                # Get the name attribute from the GEOM edge object
+                name = get_shape_name(edge.edge)
+                # Add the edge name-number entry to the dictionary
+                edge_name_to_no[name] = edge.no
+
+        # Loop through all the GEOM line objects representing the lattice edges
+        print("LEN BORDERS:", len(self.borders))
+        for border in self.borders:
+            # Build an object of the 'Boundary' class
+            boundary = Boundary(border=border,
+                                bc_type=self.lattice.boundary_type,
+                                type_geo=self.lattice.type_geo,
+                                lattice_o=self.lattice.lattice_center)
+            boundary.find_edges_on_border(
+                make_compound(boundary_edges),
+                edge_name_to_no,
+                self.id_vs_edge,
+                (self.lattice.lx, self.lattice.ly))
+            # Append the built 'Boundary' object to the corresponding list
+            # print("  --> ", boundary.tx, boundary.ty, boundary.angle)
+            self.boundaries.append(boundary)
+
+    def build_edges(
+            self, edge_names_vs_faces: Dict[str, List[Any | Face]]) -> None:
+        """
+        Method that builds a list of 'Edge' objects from the given dictionary.
+        It associates for each edge name a list containing the corresponding
+        GEOM edge and the 'Face' objects; the latter represent the faces
+        sharing the same edge.
+
+        Parameters
+        ----------
+        edge_names_vs_faces : Dict[str, List[Any | Face]]
+            Dictionary of edge names VS the list with the corresponding
+            GEOM edge and the connected 'Face' objects
+        """
+        # Loop through all the lists of objects associated to each edge
+        for shapes in edge_names_vs_faces.values():
+            # Instantiate an object of the 'Edge' class and append to the
+            # corresponding list
+            self.edges.append(Edge(*shapes))
+
+    def build_edges_and_faces_association(self) -> Dict[str, List[Face]]:
+        """
+        Method that associates the faces sharing the same edge with the edge
+        name. These names contain a global index to identify the edge in the
+        lattice.
+
+        Returns
+        -------
+        A dictionary whose entries associate a list of adjacent faces (as
+        'Face' objects) to the name of the corresponding shared edge.
+        """
+        # Initialize the dictionary storing the edges names VS the list of
+        # connected faces
+        edges_name_vs_faces : Dict[str, List[Any | Face]] = {}
+        # Loop through all the lattice subfaces ('Face' objects)
+        print("LEN SUBFACES", len(self.subfaces))
+        for subface in self.subfaces:
+            # Log the 'Face' characteristics
+            print(subface)
+            # Loop through all the edges of the current subface
+            for subface_edge, edge_id in subface.edge_vs_id.items():
+                # Extract the corresponding GEOM edge object(s)
+                unique_edges = self.__get_unique_edges(subface_edge, edge_id)
+                # Update the dictionary of edge names VS connected faces
+                self.__update_edge_face_association(
+                    edges_name_vs_faces, subface, unique_edges)
+        # Return the dictionary of edge names VS the list of connected faces
+        return edges_name_vs_faces
+
+    def build_faces(self) -> None:
+        """
+        Method that builds a list of 'Face' objects from the GEOM faces
+        extracted from the lattice compound. They represents the regions
+        in which each cell of the lattice is subdivided, either according
+        to the technological geometry or the sectorized one.
+        A loop through all the 'Region' objects of the 'Lattice' instance
+        is performed to instantiate 'Face' objects from the corresponding
+        GEOM face and value of property.
+        """
+        # FIXME Check if every region in the lattice has defined its properties
+        # FIXME Lattice 'Region' objects are built only if the 'show()' method
+        # is called. If not the case, the analysis could be performed with an
+        # incorrect number of regions. To check it the number of subfaces is
+        # equal to the number of regions.
+        # TODO Add a parameter that indicates the type of lattice geometry to
+        # analyse (TECHNOLOGICAL or SECTORIZED); according to its value, the
+        # regions are herein re-extracted.
+        subface_indx = 0
+        # Deal with the case the lattice has a symmetry
+        # if not self.lattice.symmetry_type == SymmetryType.FULL:
+
+        # Loop through all the lattice regions and build the corresponding
+        # data structure storing the face object and the values for each
+        # type of property
+        print("LEN REGIONS:", len(self.lattice.regions))
+        for region in self.lattice.regions:
+            # Update the subface index
+            subface_indx += 1
+            # Set the subface name by providing its index
+            set_shape_name(region.face, f"FACE_{subface_indx}")
+            # Get the properties associated to the region
+            # FIXME only the material property is considered for now -> to
+            # extend to any other possible type, by defining a parameter
+            # indicating the property type to extract
+            if not region.properties:
+                raise RuntimeError(
+                    "The lattice analysis failed: no properties have been "
+                    f"assigned for region '{region.name}'.")
+            try:
+                props = region.properties[PropertyType.MATERIAL]
+            except KeyError:
+                raise RuntimeError("No 'MATERIAL' property type has been "
+                                   f"defined for region '{region.name}'")
+            # Build a 'Face' object and append to the corresponding list
+            self.subfaces.append(Face(region.face, [props]))
+
+    def print_log_analysis(self, edge_name_vs_faces: Dict[str, List[Any]]):
+        """
+        Method that prints on the stdout the log of the data extraction from
+        the lattice.
+
+        Parameters
+        ----------
+        edge_name_vs_faces : Dict[str, List[Any]]
+            A dictionary of the name of the lattice edges VS the GEOM faces
+            connected to it
+        """
+        # Displays the number of faces, the number of edges and the edges
+        # associated with one face and two faces.
+        n0 = 0
+        n1 = 0
+        n2 = 0
+        for f in edge_name_vs_faces.values():
+            if len(f) == 2:
+                n1 += 1
+            elif len(f) == 3:
+                n2 += 1
+            else:
+                n0 += 1
+        print("\t# subparts (faces) : ", len(self.subfaces))
+        print("\t# edges found : ", len(self.edges))
+        print("\t# edges w/one face :", n1)
+        print("\t# edges w/two faces :", n2)
+        print("\t# edges w errors :", n0)
+
+    def __get_unique_edges(
+            self, subface_edge: Any, edge_id: str) -> List[Any]:
+        """
+        Method that retrieves the GEOM edge object associated to the given
+        ID (second argument) from the attribute dictionary of IDs VS GEOM
+        edges.
+        In case of an exception, due to a missing entry in the `id_vs_edge`
+        dictionary, a further analysis is performed. This could happen for
+        edges shared by two adjacent faces: the same edge could have a
+        different orientation in the two faces, i.e. starting and ending
+        points are inverted, or an edge having a single face from one side
+        can can be associated to different faces from the other.
+        In both cases, it is important to retrieve all the corresponding sub
+        edges by exploiting the GEOM function `GetInPlace`; this is used to
+        extract the sub-shape(s) of the lattice unique edges, which are
+        coincident with, or could be a part of, the GEOM edge provided as
+        first argument.
+        If any edge is retrieved, the corresponding ID is built and used to
+        get the corresponding GEOM edges stored in the `id_vs_edge` attribute.
+
+        Parameters
+        ----------
+        subface_edge : Any
+            The GEOM edge object to retrieve the corresponding sub-edges from
+        edge_id : str
+            The ID of the edge to look for in the dictionary of IDs VS edges
+
+        Raises
+        ------
+        RuntimeError
+            If no corresponding edge is found in the lattice
+
+        Returns
+        -------
+        A list of GEOM edge objects that is either directly associated to the
+        given ID, or representing the sub-edges the edge can be subdivided
+        into.
+        """
+        try:
+            return [self.id_vs_edge[edge_id]]
+        except KeyError as exc:
+            # Get the sub-edges the given edge can be subdivided into: these
+            # are associated to a different face of the lattice
+            edge = get_in_place(make_compound(self.lattice_edges),
+                                subface_edge)
+            # Only edge and compound of edges are treated
+            edge_type = get_shape_type(edge)
+            error_message = "No corresponding edge in the lattice could " +\
+                f"be retrieved for the subface edge whose data is {edge_id}"
+            if not edge or edge_type not in [ShapeType.COMPOUND,
+                                             ShapeType.EDGE]:
+                raise RuntimeError(error_message) from exc
+            # EDGE-type case
+            if not edge_type == ShapeType.COMPOUND:
+                return self.id_vs_edge[build_edge_id(edge)]
+            # COMPOUND-type case
+            edges_in_place = extract_sub_shapes(edge, ShapeType.EDGE)
+            if edges_in_place:
+                return [
+                    self.id_vs_edge[build_edge_id(e)] for e in edges_in_place]
+            else:
+                # Raise an exception if the compound does not have edges
+                raise RuntimeError(error_message) from exc
 
     def __preprocess(self):
         """
@@ -753,220 +990,35 @@ class LatticeDataExtractor():
             key=lambda item: get_min_distance(item,
                                               self.lattice.lattice_center))
 
-    def build_faces(self) -> None:
+    def __update_edge_face_association(
+            self,
+            edges_name_vs_faces: Dict[str, List[Any | Face]],
+            subface: Face,
+            edges: List[Any]) -> None:
         """
-        Method that builds a list of 'Face' objects from the GEOM faces
-        extracted  from the lattice cells, where each can be subdivided
-        according to either the technological geometry or its sectorization.
-
-        These faces retain their GEOM origin and are also named and associated
-        with a list of properties.
-        """
-        # FIXME Check if every region in the lattice has defined its properties
-        # FIXME Lattice 'Region' objects are built only if the 'show()' method
-        # is called. If not the case, the analysis could be performed with an
-        # incorrect number of regions. To check it the number of subfaces is
-        # equal to the number of regions.
-        # TODO Add a parameter that indicates the type of lattice geometry to
-        # analyse (TECHNOLOGICAL or SECTORIZED); according to its value, the
-        # regions are herein re-extracted.
-        subface_indx = 0
-        # Deal with the case the lattice has a symmetry
-        # if not self.lattice.symmetry_type == SymmetryType.FULL:
-
-        # Loop through all the lattice regions and build the corresponding
-        # data structure storing the face object and the values for each
-        # type of property
-        print("LEN REGIONS:", len(self.lattice.regions))
-        for region in self.lattice.regions:
-            # Update the subface index
-            subface_indx += 1
-            # Set the subface name by providing its index
-            set_shape_name(region.face, f"FACE_{subface_indx}")
-            # Get the properties associated to the region
-            # FIXME only the material property is considered for now -> to
-            # extend to any other possible type, by defining a parameter
-            # indicating the property type to extract
-            if not region.properties:
-                raise RuntimeError(
-                    "The lattice analysis failed: no properties have been "
-                    f"assigned for region '{region.name}'.")
-            try:
-                props = region.properties[PropertyType.MATERIAL]
-            except KeyError:
-                raise RuntimeError("No 'MATERIAL' property type has been "
-                                   f"defined for region '{region.name}'")
-            # Build a 'Face' object and append to the corresponding list
-            self.subfaces.append(Face(region.face, [props]))
-
-    def build_edges_and_faces_association(self) -> Dict[str, List[Face]]:
-        """
-        Method that constructs a list of 'Edge' objects from the GEOM edge
-        extracted from the GEOM faces of the lattice.
-
-        Given the constructed 'Edge' objects, a dictionary is built, its keys
-        being the name of the edge; this contains a global index to identify
-        the edge in the lattice.
-        For each edge name as the key, the corresponding faces connected to it
-        are stored as the dictionary values.
-
-        Returns
-        -------
-        A dictionary of edge name VS the list of faces, as 'Face' objects,
-        connected to the corresponding edge.
-        """
-        # Initialize the dictionary storing the edges names VS the list of
-        # connected faces
-        edges_name_vs_faces : Dict[str, List[Face]] = {}
-
-        # Loop through all the lattice subfaces (Face objects)
-        print("LEN SUBFACES", len(self.subfaces))
-        for subface in self.subfaces:
-            print(subface)
-            # Loop through all the edges of the current subface
-            for subface_edge, edge_id in subface.edge_vs_id.items():
-                # Extract the corresponding GEOM edge object in a try-except
-                # block. In case of an exception for keys not present, a
-                # further analysis is performed
-                try:
-                    unique_edge = self.id_vs_edge[edge_id]
-                except KeyError as exc:
-                    # print("KEYERROR ->", id)
-                    # If not found, it could be the case of a border edge
-                    # between two adiacent cells. The dictionary stores the
-                    # unique IDs only, which means only one of the two is
-                    # present.
-                    # Common edges belonging to different cells could not have
-                    # the same orientation, i.e. starting and ending points
-                    # are inverted.
-                    # When looking for the edge by extracting it from the
-                    # subfaces, the same border edge is retrieved two times
-                    # but since the orientations are different, one cannot
-                    # be found in the dictionary.
-
-                    # Find the lattice edge, from the compound made of the
-                    # unique edges, that corresponds to the one of the subface
-                    # being analysed.
-                    # This is needed because edges shared between adiacent
-                    # cells are considered only once in the lattice edges
-                    # compound with a specific orientation. When analysing the
-                    # edges of the subface, the orientation is different, so
-                    # it is needed to retrieve the corresponding one in the
-                    # lattice which was used to build the dictionary of edges
-                    # IDs VS GEOM edges.
-                    edge = get_in_place(self.lattice_edges, subface_edge)
-                    if not edge:
-                        raise AssertionError("No corresponding edge in the "
-                                            "lattice could be retrieved for "
-                                            "the subface edge whose data is "
-                                            f"{edge_id}") from exc
-                    # Build the ID
-                    edge_id = build_edge_id(edge)
-                    # Extract the stored edge in the ID VS edge dictionary
-                    unique_edge = self.id_vs_edge[edge_id]
-
-                # Get the edge name containing a global index of all the unique
-                # edges in the lattice
-                edge_name = get_shape_name(unique_edge)
-                # Check if the edge ID is already stored, if so, append the
-                # current face, otherwise add a new entry
-                if edge_name in edges_name_vs_faces:
-                    # The corresponding entry in the dictionary is updated
-                    # by appending the found 'Face' object
-                    edges_name_vs_faces[edge_name].append(subface)
-                else:
-                    # Declare a new entry for the dictionary of edge names
-                    # VS list of 'Face' objects. The entry value is
-                    # initialized as a list containing the GEOM edge object
-                    # and the found 'Face' object.
-                    edges_name_vs_faces[edge_name] = [unique_edge, subface]
-        # -----------------------------------------------------------
-        # Build the edges in the internal data model ('Edge' objects)
-        # -----------------------------------------------------------
-        # Loop through all the lists of faces associated to each edge in the
-        # lattice
-        print("LEN edges_name_vs_faces:", len(edges_name_vs_faces.values()))
-        for shapes in edges_name_vs_faces.values():
-            # Instantiate an object of the 'Edge' class, given the list of
-            # associated shapes. The '*' is for unpacking the list, since
-            # the first element is the GEOM edge object, while the others
-            # are the face ones.
-            e = Edge(*shapes)
-            # Append the just built 'Edge' object to the list of edges in
-            # the lattice
-            self.edges.append(e)
-
-        # Return the dictionary of edge names VS the list of connected faces
-        return edges_name_vs_faces
-
-    def build_boundaries(self) -> None:
-        """
-        Method that constructs a list of boundary edges (connected to a single
-        face). These edges are then sorted by boundary condition plane.
-        """
-        # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
-        # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
-        if self.lattice.type_geo == LatticeGeometryType.ISOTROPIC:
-            return
-        # Initialize the list of 'Boundary' objects
-        boundary_edges = []
-        # Initialize a dictionary of edge name VS its global index
-        edge_name_to_no = {}
-
-        # Loop through all the stored 'Edge' objects
-        print("LEN EDGES", len(self.edges))
-        for edge in self.edges:
-            # Check if the current edge has no faces on the left or on the
-            # right, i.e. it represents a boundary edge
-            if not edge.left or not edge.right:
-                # Append the corresponding GEOM edge object to the list
-                boundary_edges.append(edge.edge)
-                # Get the name attribute from the GEOM edge object
-                name = edge.edge.GetName()
-                # Add the edge name-number entry to the dictionary
-                edge_name_to_no[name] = edge.no
-
-        # Build a compound from the list of boundary edges
-        outline = make_compound(boundary_edges)
-
-        # Loop through all the GEOM line objects representing the lattice edges
-        print("LEN BORDERS:", len(self.borders))
-        for border in self.borders:
-            # Build an object of the 'Boundary' class
-            boundary = Boundary(border=border,
-                                bc_type=self.lattice.boundary_type,
-                                type_geo=self.lattice.type_geo,
-                                lattice_o=self.lattice.lattice_center)
-            boundary.find_edges_on_border(
-                outline, edge_name_to_no, self.id_vs_edge,
-                (self.lattice.lx, self.lattice.ly))
-            # Append the just built 'Boundary' object to the corresponding list
-            # print("  --> ", boundary.tx, boundary.ty, boundary.angle)
-            self.boundaries.append(boundary)
-
-    def print_log_analysis(self, edge_name_vs_faces: Dict[str, List[Any]]):
-        """
-        Method that prints on the stdout the log of the data extraction from
-        the lattice.
+        Method that updates the given dictionary of edge names VS connected
+        faces with the provided 'Face' object and the list of edges.
+        For each edge, its ID is checked for its presence among the keys of
+        the given dictionary: if so, the corresponding list is updated with
+        the 'Face' object, otherwise a new entry is created. The entry has
+        as key the edge name, as value a list with the GEOM edge object as
+        first element, followed by the given 'Face' object.
 
         Parameters
         ----------
-        edge_name_vs_faces  : Dict[str, List[Any]]
-                              A dictionary of the name of the lattice edges
-                              VS the GEOM faces connected to it
+        edges_name_vs_faces : Dict[str, List[Any | Face]]
+            A dictionary of edge names VS connected faces
+        subface : Face
+            A 'Face' object to associate the given edges to
+        edges : List[Any]
+            A list of GEOM edge objects each associated to the given face
         """
-        # Displays the number of faces, the number of edges and the edges associated
-        # with one face and two faces.
-        n1 = n2 = n0 = 0
-        for f in edge_name_vs_faces.values():
-            if len(f) == 2:
-                n1 += 1
-            elif len(f) == 3:
-                n2 += 1
+        for edge in edges:
+            # Get the edge name
+            edge_name = get_shape_name(edge)
+            # Check if the edge ID is already stored, if so, append
+            # the current face, otherwise add a new entry
+            if edge_name in edges_name_vs_faces:
+                edges_name_vs_faces[edge_name].append(subface)
             else:
-                n0 += 1
-        print("\t# subparts (faces) : ", len(self.subfaces))
-        print("\t# edges found : ", len(self.edges))
-        print("\t# edges w/two faces :", n2)
-        print("\t# edges w/one faces :", n1)
-        print("\t# edges w errors :", n0)
+                edges_name_vs_faces[edge_name] = [edge, subface]
