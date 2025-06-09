@@ -1637,11 +1637,21 @@ class Lattice():
         Method that extracts the lattice box subfaces, i.e. the box layers
         and the areas between the cells and the container layers, if any
         (as depending on the cells geometry).
+        If any symmetry type, other than `FULL`, is applied, the common part
+        between the box and the shape of the symmetry is extracted first.
+        By cutting the box with the compound made of lattice cells only, the
+        remaining parts are the ones only strictly belonging to the box.
 
         Parameters
         ----------
         lattice_cmpd : Any
             The lattice compound object made by the cells only
+
+        Raises
+        ------
+        RuntimeError
+            If no face objects are available after cutting the box face
+            with the compound made from the lattice cells only
 
         Returns
         -------
@@ -1651,28 +1661,22 @@ class Lattice():
         result is that the outmost layer of the box occupies the first
         position in the returned list and so on with the others.
         """
-        # Handle the eventual presence of a symmetry to extract the compound
-        # containing the box layers only
-        box = None
-        if self.symmetry_type == SymmetryType.FULL:
-            box = make_cut(self.lattice_box.face, lattice_cmpd)
-        else:
-            # Get the shape of the symmetry considering the lattice cells
-            # only, eventually cut by the box
-            symm_shape = make_face(build_compound_borders(lattice_cmpd))
-            # Cut the lattice area from the box
-            box = make_cut(self.lattice_symm, symm_shape)
-        if not box:
-            raise Exception(
-                "Error in extracting the box part of the lattice with "
-                f"applied {self.symmetry_type.name} symmetry type.")
-
-        # Sort the box regions according to their distance from the lattice
-        # center and their perimeter in reverse order: this so that the
-        # outmost layer of the box is the first element and so on with the
-        # others.
+        box = self.lattice_box.face
+        if self.symmetry_type != SymmetryType.FULL:
+            # Get the shape of the symmetry
+            shape = make_face(build_compound_borders(self.lattice_symm))
+            # Extract the common part between the box and the symmetry shape
+            box = make_common(self.lattice_box.face, shape)
+        # Cut the box with the lattice cells, so that only the box areas
+        # remain, and extract its face objects, if any
+        box_faces = extract_sorted_sub_shapes(
+            make_cut(box, lattice_cmpd), ShapeType.FACE)
+        if not box_faces:
+            raise RuntimeError(
+                "Error in extracting the box areas of the lattice.")
+        # Return the sorted box regions
         return sorted(
-            extract_sorted_sub_shapes(box, ShapeType.FACE),
+            box_faces,
             key=lambda subface: get_min_distance(self.lattice_center,
                                                  make_cdg(subface))
                                 and get_basic_properties(subface)[0],
