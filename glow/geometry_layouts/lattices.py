@@ -1190,15 +1190,20 @@ class Lattice():
         self.lattice_center = make_vertex(new_pos)
 
         # Translate each cell in the lattice
-        translated_cells = []
-        for cell in self.lattice_cells:
-            # Update the cell position relative to the shifted lattice center
-            # and apply translation
-            cell_to_center = update_relative_pos(
-                cell.figure.o, pre_center, new_pos)
-            translated_cells.append(cell.translate(cell_to_center))
+        translated_cells = self.__translate_cells(
+            self.lattice_cells, new_pos, pre_center)
         # Update the list of lattice cells based on the translated ones
         self.lattice_cells = [cell for cell in translated_cells]
+
+        # Translate each cell of each layer in the lattice
+        translated_layers: List[List[Cell]] = []
+        # Loop through all the layers to translate the cells
+        for i, layer in enumerate(self.layers):
+            translated_layers.append(
+                self.__translate_cells(layer, new_pos, pre_center))
+        # Update the data structure holding the translated cells for each layer
+        self.layers = [
+            [cell for cell in layer] for layer in translated_layers]
 
         # Translate the lattice compounds
         self.lattice_cmpd = make_translation(self.lattice_cmpd, transl_vect)
@@ -1226,6 +1231,42 @@ class Lattice():
         # Show the new lattice compound in the current SALOME study
         self.show()
 
+    def __translate_cells(self,
+                          cells: List[Cell],
+                          ref_coords: Tuple[float, float, float],
+                          original_ref_point: Any) -> List[Cell]:
+        """
+        Method that applies the translation operation to all the cells of the
+        given list of `Cell` objects.
+        The new position of each cell relative to the given coordinates is
+        calculated. The translation is then applied.
+
+        Parameters
+        ----------
+        cells : List[Cell]
+            List of `Cell` objects to translate so to keep the relative
+            position wrt to the given lattice center
+        ref_coords : Tuple[float, float, float]
+            XYZ coordinates of the point for which the relative distance of
+            each cell must be kept
+        original_ref_point : Any
+            The vertex object each cell was relative to
+
+        Returns
+        -------
+        List[Cell]
+            The list of translated cells so that the relative distance from
+            the new reference point is kept.
+        """
+        translated_cells = []
+        for cell in cells:
+            # Update the cell position relative to the shifted lattice center
+            # and apply translation
+            cell_to_center = update_relative_pos(
+                cell.figure.o, original_ref_point, ref_coords)
+            translated_cells.append(cell.translate(cell_to_center))
+        return translated_cells
+
     def build_regions(
             self, geo_type: GeometryType = GeometryType.TECHNOLOGICAL) -> None:
         """
@@ -1246,7 +1287,7 @@ class Lattice():
             use for building the lattice regions.
         """
         # Get the cells by assembling all the lattice layers
-        self.lattice_cells = self.__assemble_layers()
+        self.lattice_cells = deepcopy(self.__assemble_layers())
         # Get the lattice compound object, given the geometry type and the
         # current applied symmetry
         cmpd = self.__get_compound_from_type(geo_type, self.lattice_cells)
@@ -1741,7 +1782,9 @@ class Lattice():
         rotation = math.radians(angle)
 
         # Build the Z-axis of rotation
-        z_axis = make_vector((0, 0, 1))
+        x, y, _ = get_point_coordinates(self.lattice_center)
+        z_axis = make_vector_from_points(
+            self.lattice_center, make_vertex((x, y, 1)))
         # Rotate the lattice compounds
         self.lattice_cmpd = make_rotation(self.lattice_cmpd, z_axis, rotation)
         self.lattice_tech = make_rotation(self.lattice_tech, z_axis, rotation)
@@ -1752,6 +1795,10 @@ class Lattice():
         # Rotate each cell of the lattice
         for cell in self.lattice_cells:
             cell.rotate_from_axis(angle, z_axis)
+        # Rotate each cell of each layer
+        for layer in self.layers:
+            for cell in layer:
+                cell.rotate_from_axis(angle, z_axis)
         # Rotate the lattice box, if any
         if self.lattice_box:
             self.lattice_box.rotate_from_axis(angle, z_axis)
@@ -1760,8 +1807,6 @@ class Lattice():
         if self.symmetry_type != SymmetryType.FULL:
             self.lattice_symm = make_rotation(
                 self.lattice_symm, z_axis, rotation)
-
-        # FIXME re-evaluate lattice characteristic dimensions??
 
         # Show the new lattice compound in the current SALOME study
         self.show()
