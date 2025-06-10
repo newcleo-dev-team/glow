@@ -591,8 +591,8 @@ class Lattice():
             self.show()
             return
 
-        # Assemble all the lattice layers
-        _ = self.__assemble_layers()
+        # Assemble all the lattice layers to build the lattice compounds
+        self.__update_lattice_compounds(self.__assemble_layers())
         # Handle the symmetry operation according to the type of cells of
         # the lattice
         match self.cells_type:
@@ -905,10 +905,20 @@ class Lattice():
             # of the two lists lists.
             for j, sub_layer in enumerate(sub_layers):
                 self.__overlap_layer_to(layer, sub_layer)
-        # Flatten the list of list of cells
-        cells = [cell for layer in layers for cell in layer]
+        # Return the flattened list of list of cells
+        return [cell for layer in layers for cell in layer]
 
-        # Update the lattice compounds
+    def __update_lattice_compounds(self, cells: List[Cell]) -> None:
+        """
+        Method that rebuilds the compound objects of the lattice grouping the
+        given cells.
+        If any box is declared, the cells are assembled with it.
+
+        Parameters
+        ----------
+        cells : List[Cell]
+            List of 'Cell' objects to build a compound object from
+        """
         self.lattice_cmpd = make_partition(
             [c.face for c in cells], [], ShapeType.FACE)
         self.lattice_tech = self.lattice_cmpd
@@ -921,8 +931,6 @@ class Lattice():
 
         # Handle the construction of the lattice container, if any
         self.__assemble_box()
-        # Return the collection of the cells of each layer after modifications
-        return cells
 
     def __assemble_box(self) -> None:
         """
@@ -1288,6 +1296,7 @@ class Lattice():
         """
         # Get the cells by assembling all the lattice layers
         self.lattice_cells = deepcopy(self.__assemble_layers())
+        self.__update_lattice_compounds(self.lattice_cells)
         # Get the lattice compound object, given the geometry type and the
         # current applied symmetry
         cmpd = self.__get_compound_from_type(geo_type, self.lattice_cells)
