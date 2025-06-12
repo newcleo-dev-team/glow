@@ -38,8 +38,8 @@ class Face():
                   Global index of the face
     face        : Any
                   A GEOM object representing a subface of the lattice
-    properties  : Union[List[str], None]
-                  A list of the properties associated to the subface
+    property    : str
+                  The value of the property associated to the subface
     inner_point : Tuple[float, float, float]
                   Coordinates of a point within the subface
     edge_vs_id  : Dict[Any, str]
@@ -48,7 +48,7 @@ class Face():
                   geometrical characteristics
     """
     face        : Any
-    properties  : Union[List[str], None] = None
+    property    : str
 
     sort_index  : int = field(init=False, repr=False)
     no          : int = field(init=False)
@@ -80,7 +80,7 @@ class Face():
 
     def __str__(self):
         return f"Region {self.no}, name={get_shape_name(self.face)}, " + \
-               f"properties={self.properties}"
+               f"property={self.property}"
 
 
 class Edge():
@@ -725,14 +725,19 @@ class LatticeDataExtractor():
                     "The lattice analysis failed: no properties have been "
                     f"assigned for region '{region.name}'.")
             try:
-                props = region.properties[PropertyType.MATERIAL]
+                value = region.properties[property_type]
             except KeyError:
                 raise RuntimeError(
                     f"The lattice analysis failed: no {property_type.name} "
                     "property type has been defined for region "
                     f"'{region.name}'")
+            if not value:
+                raise RuntimeError(
+                    "The lattice analysis failed: no value for the property "
+                    f"type {property_type.name} has been defined for region "
+                    f"'{region.name}'")
             # Build a 'Face' object and append to the corresponding list
-            self.subfaces.append(Face(region.face, [props]))
+            self.subfaces.append(Face(region.face, value))
 
     def build_edges_and_faces_association(self) -> Dict[str, List[Face]]:
         """
