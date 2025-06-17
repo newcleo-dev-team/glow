@@ -7,8 +7,7 @@ import math
 from copy import deepcopy
 from typing import Any, Dict, List, Set, Tuple, Union
 
-from glow.geometry_layouts.cells import Cell, GenericCell, HexCell, RectCell, \
-    Region
+from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
 from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
     Rectangle, build_hexagon
 from glow.geometry_layouts.utility import build_compound_borders, \
@@ -19,10 +18,9 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     get_bounding_box, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, is_point_inside_shape, \
     make_cdg, make_common, make_compound, make_cut, make_edge, make_face, \
-    make_partition, make_rotation, make_translation, make_vector, \
-    make_vector_from_points, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, remove_from_study, set_color_face, \
-    update_salome_study
+    make_partition, make_rotation, make_translation, make_vector_from_points, \
+    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
+    remove_from_study, set_color_face, update_salome_study
 from glow.generator.support import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType, BoundaryType, CellType, TYPEGEO_VS_BC, \
     generate_unique_random_colors
@@ -956,10 +954,13 @@ class Lattice():
         """
         Method that overlaps a layer to an inferior one, both defined as
         lists of 'Cell' objects.
-        If the two layers do not share a common part, i.e. their distance is
-        greater than zero, the method returns without cutting any cell being
-        overlapped. On the contrary, the common part is removed from the
+        If the two layers do not share a common part or their distance is
+        greater than zero, the method returns without cutting any cell of the
+        inferior layer. On the contrary, the common part is removed from the
         inferior layer by cutting its cells appropriately.
+        In particular, cells that are completely overlapped are removed from
+        their layer, whereas, for those partially overlapped, their geometry
+        layout is updated with the corresponding cut version.
 
         Parameters
         ----------
@@ -975,39 +976,29 @@ class Lattice():
         layer_cmpd = make_compound([cell.face for cell in layer])
         sub_layer_cmpd = make_compound([cell.face for cell in sub_layer])
         # Return immediately if the two layers do not overlap
-        if not get_min_distance(layer_cmpd, sub_layer_cmpd) < 1e-5:
+        if get_min_distance(layer_cmpd, sub_layer_cmpd) > 0.0 or \
+            not extract_sub_shapes(make_common(layer_cmpd, sub_layer_cmpd),
+                                  ShapeType.FACE):
             return
         print(f"The current layer overlaps the inferior one.")
 
-        # Find any cell of the inferior layer that is overlapped by the
-        # superior one. If the center for these cells is overlapped by the
-        # superior layer, the cell is removed by the inferior layer. If not,
-        # these cells are cut by the superior layer.
-        # FIXME the criteria for deciding the cell removal is based on
-        # whether the layer overlaps any of the centers of the cells
-        # in the lattice. It could not be valid if overlapping parts that
-        # are not coolant without overlapping the cell center.
-        # This condition is not phisycal. Maybe, it would be better if no
-        # criteria is adopted, i.e. cells are cut without being removed
-        # and then it is up to the user to remove each cell individually
-        # with a specific method.
-        indexes: List[int] = []
-
+        # List storing the indices of the cells to remove, as completely
+        # overlapped
+        indices: List[int] = []
         for i, cell in enumerate(sub_layer):
-            if is_point_inside_shape(cell.figure.o, layer_cmpd):
-                indexes.append(i)
-                continue
-            # Deal with cells partially overlapped by the superior layer.
-            # First, check if the cell face is overlapped by the superior
-            # layer: if the common part does not have any face, continue
-            # with the next cell.
+            # Continue with the next cell if the common operation between
+            # the cell's face and the superior layer does not return any
+            # face, meaning there is no overlapping
             if not extract_sub_shapes(make_common(cell.face, layer_cmpd),
                                       ShapeType.FACE):
                 continue
             # Cut the cell face with the layer and check if the result has
-            # any face; if not, continue with the next cell
+            # any face; if not, it means the cell is completely overlapped,
+            # hence its index is stored to remove the corresponding cell
             cut_cell = make_cut(cell.face, layer_cmpd)
-            if not extract_sub_shapes(cut_cell, ShapeType.FACE):
+            if not extract_sub_shapes(make_compound([cut_cell]),
+                                      ShapeType.FACE):
+                indices.append(i)
                 continue
             # Update the lattice cell face with the result of the cut
             # operation between the inferior layer cell face and the
@@ -1020,9 +1011,8 @@ class Lattice():
                 sub_layer[i].update_geometry_from_face(
                     GeometryType.SECTORIZED,
                     make_cut(cell.sectorized_face, layer_cmpd))
-
-        # Remove the cells whose center is overlapped by the superior layer
-        for index in sorted(indexes, reverse=True):
+        # Remove the cells completely overlapped by the superior layer
+        for index in sorted(indices, reverse=True):
             sub_layer.pop(index)
 
     def show(self,
@@ -1322,6 +1312,7 @@ class Lattice():
             subfaces += box_subfaces
 
         print("Total no. regions in lattice:", len(self.regions))
+        print("Total no. subfaces in lattice:", len(subfaces))
         # Check if the number of subfaces coincides with the one of the built
         # regions
         if len(subfaces) != len(self.regions):
@@ -1389,6 +1380,10 @@ class Lattice():
                 # lattice subface is evaluated
                 if found:
                     break
+            if not found:
+                raise RuntimeError(
+                    "No cell found for face whose inner point has "
+                    f"coordinates: {get_point_coordinates(subface_point)}")
         # Return the list
         return regions
 
