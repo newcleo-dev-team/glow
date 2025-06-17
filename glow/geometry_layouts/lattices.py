@@ -2007,3 +2007,42 @@ def get_compound_from_geometry(
         case _:
             raise ValueError(f"{geo_type}: unhandled type.")
     return make_compound(cell_faces)
+
+def get_changed_cells(lattice: Lattice) -> List[Cell]:
+    """
+    Function that returns a list of `Cell` objects belonging to the given
+    `Lattice` instance. These cells have their geometry layout changed
+    compared to their original one.
+    For each cell in each layer, the current shape of the cell is built and
+    its area compared with the area of its specific characteristic figure (as
+    a `Surface` instance).
+    Those showing a different value for the area indicates a change in their
+    geometry layout has occurred and are collected into the returned list.
+
+    This function can be used to retrieve those cells that have been modified
+    (e.g., by overlap with a superior layer of cells) within the lattice.
+
+    Parameters
+    ----------
+    lattice : Lattice
+        The lattice instance to check for cells whose geometry layout has
+        changed.
+
+    Returns
+    -------
+    List[Cell]
+        A list of `Cell` objects whose geometry layout differs from their
+        original one.
+    """
+    cells = []
+    for layer in lattice.layers:
+        for cell in layer:
+            # Build a face object over the borders of the cell
+            cell_shape = make_face(build_compound_borders(cell.face))
+            # Compare the area of the current cell's face with the one of its
+            # original shape
+            if get_basic_properties(cell_shape)[1] != \
+                get_basic_properties(cell.figure.face)[1]:
+                cells.append(cell)
+    # Return the list of changed cells
+    return cells
