@@ -50,8 +50,6 @@ class ShapeType(Enum):
     VERTEX    : int = geompy.ShapeType['VERTEX']
     SHAPE     : int = geompy.ShapeType['SHAPE']
     FLAT      : int = geompy.ShapeType['FLAT']
-    PLANAR    : int = 10
-    POLYGON   : int = 11
 
 
 # Dictionary associating the name of the GEOM type of shape VS the
@@ -67,8 +65,12 @@ NAME_VS_SHAPE_TYPE: Dict[str, ShapeType] = {
     'VERTEX': ShapeType.VERTEX,
     'SHAPE': ShapeType.SHAPE,
     'FLAT': ShapeType.FLAT,
-    'PLANAR': ShapeType.PLANAR,
-    'POLYGON': ShapeType.POLYGON
+    'DISK': ShapeType.FACE,
+    'PLANAR': ShapeType.FACE,
+    'POLYGON': ShapeType.FACE,
+    'ARC_CIRCLE': ShapeType.EDGE,
+    'CIRCLE': ShapeType.EDGE,
+    'SEGMENT': ShapeType.EDGE
 }
 
 
