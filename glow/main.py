@@ -1,36 +1,51 @@
 import os
 from pathlib import Path
 
+from glow.generator.support import GeometryType, LatticeGeometryType, PropertyType
 from glow.geometry_layouts.lattices import Lattice
 
 
-def analyse_and_generate_tdt(lattice: Lattice, filename: str):
+def analyse_and_generate_tdt(
+        lattice: Lattice,
+        filename: str,
+        geom_type: GeometryType = GeometryType.TECHNOLOGICAL,
+        property_type: PropertyType = PropertyType.MATERIAL) -> None:
     """
-    Function that performs the analysis onto the given instance of the
-    'Lattice' class, representing the geometry and the properties of the
-    lattice for which the TDT file must be generated.
+    Function that analyses the given lattice, as instance of the `Lattice`
+    class, to extract information about the characteristics of its geometry
+    and the properties associated to its regions.
+    A TDT file, whose name is provided as second parameter, is generated,
+    collecting all this information.
+    Users can also specify to analyse the lattice according to:
+
+    - the geometry type of its cells;
+    - the type of property associated to the lattice regions.
 
     Parameters
     ----------
-    lattice   : Lattice
-                The object storing the geometry and the properties of the
-                lattice
-    filename  : str
-                The name of the output TDT file
+    lattice : Lattice
+        The object storing the information about the geometry and the
+        properties of the lattice
+    filename : str
+        The name of the output TDT file
+    geom_type : GeometryType = GeometryType.TECHNOLOGICAL
+        The type of geometry of the lattice cells to use in the analysis
+    property_type : PropertyType = PropertyType.MATERIAL
+        The type of property associated to the lattice regions to use in
+        the analysis
     """
-    # TODO Add a parameter that indicates the type of lattice geometry to
-    # analyse (TECHNOLOGICAL or SECTORIZED); according to its value, the
-    # regions are extracted
+    # Import the 'time' module for evaluating the analysis performance
     import time
     # Get the start time
     start_time = time.time()
 
     # Import the classes and functions for performing the geometry conversion
-    from generator.geom_extractor import analyse_lattice
-    from generator.generator import TdtData, write_tdt_file
+    from glow.generator.geom_extractor import analyse_lattice
+    from glow.generator.generator import TdtData, write_tdt_file
 
-    # Perform the lattice faces and edges analysis
-    data_extractor = analyse_lattice(lattice)
+    # Perform the lattice faces and edges analysis for the given geometry and
+    # property types
+    data_extractor = analyse_lattice(lattice, geom_type, property_type)
 
     t1 = time.time()
     print(f"--- Lattice analysis executed in {t1 - start_time} seconds ---")

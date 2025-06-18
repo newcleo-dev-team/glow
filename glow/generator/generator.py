@@ -71,7 +71,7 @@ class TdtData():
     type_sym      : SymmetryType = SymmetryType.FULL
     impressions   : Tuple[int, int] = (0, 0)
     precisions    : Tuple[float, float] = (1e-5, 1e-5)
-    properties    : List[List[str]] = field(init=False)
+    properties    : List[str] = field(init=False)
     properties_id : List[int] = field(init=False)
     nb_folds      : int = field(init=False)
 
@@ -105,21 +105,20 @@ class TdtData():
         # Loop through the 'Face' objects
         for face in self.faces:
             # Add the property name to the list, if not already present
-            for property in face.properties:
-                if not property in self.properties:
-                    self.properties.append(property)
-                    # Update the index for the number of properties
-                    prop_no = prop_no + 1
-                    prop = prop_no
-                else:
-                    # Get the index corresponding to the property name in
-                    # the list and increment it by 1
-                    prop = self.properties.index(property) + 1
+            if not face.property in self.properties:
+                self.properties.append(face.property)
+                # Update the index for the number of properties
+                prop_no = prop_no + 1
+                prop = prop_no
+            else:
+                # Get the index corresponding to the property name in
+                # the list and increment it by 1
+                prop = self.properties.index(face.property) + 1
 
-                ### Association face number - property
-                # Add the property ID in the list of properties associated
-                # to a face at position given by the 'Face' object number
-                self.properties_id[face.no - 1] = prop
+            ### Association face number - property value index
+            # Add the property ID in the list of properties associated
+            # to a face at position given by the 'Face' object number
+            self.properties_id[face.no - 1] = prop
 
 
 def write_tdt_file(tdt_data: TdtData) -> None:
