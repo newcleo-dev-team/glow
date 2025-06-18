@@ -413,8 +413,7 @@ class Cell(ABC):
         centered_regions = []
         # List containing the cell 'Circle' objects, filtered so that
         # only the cell-centered ones are considered
-        centered_circles = [c for c in self.inner_circles if
-                              get_min_distance(c.o, self.figure.o) < 1e-5]
+        centered_circles = self.get_centered_circles()
         # Loop through all the regions of the cell technological geometry
         for region in self.tech_geom_props:
             # Continue with the next region if it is not cell-centered
@@ -1537,6 +1536,14 @@ class Cell(ABC):
         if edges_to_add:
             self.face = make_partition(
                 [self.face], edges_to_add, ShapeType.FACE)
+
+    def get_centered_circles(self) -> List[Circle]:
+        """
+        Method that returns a list of the cell-centered `Circle` objects of
+        the cell.
+        """
+        return [circle for circle in self.inner_circles \
+                if get_min_distance(circle.o, self.figure.o) < 1e-5]
 
 
 class RectCell(Cell):
