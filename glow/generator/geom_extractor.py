@@ -941,7 +941,7 @@ class LatticeDataExtractor():
                 raise RuntimeError(error_message) from exc
             # EDGE-type case
             if not edge_type == ShapeType.COMPOUND:
-                return self.id_vs_edge[build_edge_id(edge)]
+                return [self.id_vs_edge[build_edge_id(edge)]]
             # COMPOUND-type case
             edges_in_place = extract_sub_shapes(edge, ShapeType.EDGE)
             if edges_in_place:
