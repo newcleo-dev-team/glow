@@ -3,7 +3,7 @@ Module containing functions providing an interface towards the GEOM functions
 of SALOME.
 """
 from enum import Enum
-from typing import Any, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 # Import SALOME element
 from glow.interface import geompy, gst, salome, SALOMEDS
@@ -35,6 +35,10 @@ class ShapeType(Enum):
         Indicating a generic shape type
     FLAT      : int
         Indicating a flat shape type
+    PLANAR    : int
+        Indicating a planar shape type
+    POLYGON   : int
+        Indicating a polygon shape type
     """
     COMPOUND  : int = geompy.ShapeType['COMPOUND']
     COMPSOLID : int = geompy.ShapeType['COMPSOLID']
@@ -46,6 +50,26 @@ class ShapeType(Enum):
     VERTEX    : int = geompy.ShapeType['VERTEX']
     SHAPE     : int = geompy.ShapeType['SHAPE']
     FLAT      : int = geompy.ShapeType['FLAT']
+    PLANAR    : int = 10
+    POLYGON   : int = 11
+
+
+# Dictionary associating the name of the GEOM type of shape VS the
+# corresponding enumeration element of 'ShapeType'
+NAME_VS_SHAPE_TYPE: Dict[str, ShapeType] = {
+    'COMPOUND': ShapeType.COMPOUND,
+    'COMPSOLID': ShapeType.COMPSOLID,
+    'SOLID': ShapeType.SOLID,
+    'SHELL': ShapeType.SHELL,
+    'FACE': ShapeType.FACE,
+    'WIRE': ShapeType.WIRE,
+    'EDGE': ShapeType.EDGE,
+    'VERTEX': ShapeType.VERTEX,
+    'SHAPE': ShapeType.SHAPE,
+    'FLAT': ShapeType.FLAT,
+    'PLANAR': ShapeType.PLANAR,
+    'POLYGON': ShapeType.POLYGON
+}
 
 
 def add_to_study(shape: Any, name: str) -> str:
@@ -225,7 +249,7 @@ def get_closed_free_boundary(compound: Any) -> List[Any]:
     given compound.
     """
     (isDone, closed, _) = geompy.GetFreeBoundary(compound)
-    if not isDone:
+    if not isDone or not closed:
         raise RuntimeError("No closed free boundaries could be extracted "
                            "from the given compound object")
     return closed
@@ -322,22 +346,26 @@ def get_min_distance(shape1: Any, shape2: Any) -> float:
     return geompy.MinDistance(shape1, shape2)
 
 
-def get_object_from_id(entry_id) -> Any:
+def get_object_from_id(entry_id: str) -> Any | None:
     """
     Function that returns the geometrical object associated to the entry ID
     declared in the study.
 
     Parameters
     ----------
-    entry_id  : str
+    entry_id : str
         The value of the entry ID associated to the geometrical object in the
-        current study
+        current SALOME study
 
     Returns
     -------
-    The geometrical object associated with the given entry ID in the study.
+    The geometrical object associated with the given entry ID in the study or
+    None, if no one is associated to the entry ID in the current SALOME study.
     """
-    return gst.getGeomObjectFromEntry(entry_id)
+    try:
+        return gst.getGeomObjectFromEntry(entry_id)
+    except:
+        return None
 
 
 def get_point_coordinates(point: Any) -> Tuple[float, float, float]:
@@ -382,6 +410,29 @@ def get_shape_name(shape: Any) -> str:
     The value of the 'name' attribute assigned to the given shape.
     """
     return shape.GetName()
+
+
+def get_shape_type(shape: Any) -> ShapeType:
+    """
+    Function that returns the type of the given shape as value of the
+    'ShapeType' enumeration.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape whose type to determine
+
+    Returns
+    -------
+    The shape type as value of the 'ShapeType' enumeration.
+    """
+    # Get the name of the shape type
+    type = str(get_kind_of_shape(shape)[0])
+    # Return the corresponding value of the 'ShapeType' enumeration
+    try:
+        return NAME_VS_SHAPE_TYPE[type]
+    except KeyError:
+        print(f"WARNING, type {type} not recognized")
 
 
 def get_subshape_id(shape: Any, subshape: Any) -> str:

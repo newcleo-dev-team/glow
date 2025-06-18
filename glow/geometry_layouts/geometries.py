@@ -6,6 +6,7 @@ import math
 
 from abc import ABC, abstractmethod
 from typing import Any, List, Tuple, Union
+from glow.geometry_layouts.utility import update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, extract_sorted_sub_shapes, extract_sub_shapes, \
     get_basic_properties, get_bounding_box, get_min_distance, \
@@ -15,45 +16,41 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     remove_from_study, update_salome_study
 
 
-class GenericSurface(ABC):
+class Surface(ABC):
     """
-    Abstract class representing a generic geometry surface in SALOME.
+    Abstract class for representing any geometric surface.
 
     Parameters
     ----------
     center        : Union[Tuple[float, float, float], None] = None
-                    The X-Y-Z coordinates of the generic geometry surface.
+                    The X-Y-Z coordinates of the generic geometric surface.
 
     Attributes
     ----------
     o             : Any
-                    A GEOM vertex object representing the generic surface
-                    center
+                    A vertex object representing the surface center
     borders       : List[Any]
-                    A list of GEOM objects representing the border edges
-                    of the geometry surface
+                    A list of edge objects representing the border edges
+                    of the surface
     face          : Any
-                    A GEOM object representing the face of the geometry
+                    A face object representing the geometric surface
     name          : str
-                    The name of the geometry surface when displayed in
-                    the SALOME study
+                    The name of the surface when displayed in the SALOME study
     face_entry_id : Union[str, None]
-                    An ID associated to the geometry surface in the SALOME
-                    study
+                    An ID associated to the surface in the SALOME study
     vertices      : List[Any]
-                    A list of GEOM objects representing the vertices of the
+                    A list of vertex objects representing the vertices of the
                     generic surface
     out_circle    : Any
-                    A GEOM object representing the construction circle the
-                    generic surface is inscribed into
+                    An edge object representing the construction circle which
+                    the generic surface is inscribed into
     rotation      : float
-                    The rotation angle of the geometry surface (face,
-                    borders, vertices) in radians
+                    The rotation angle of the geometric surface in radians
     lx            : float
-                    The characteristic dimension of the generic geometry
+                    The characteristic dimension of the generic geometric
                     surface along the X-axis
     ly            : float
-                    The characteristic dimension of the generic geometry
+                    The characteristic dimension of the generic geometric
                     surface along the Y-axis
     """
     def __init__(
@@ -65,7 +62,7 @@ class GenericSurface(ABC):
             center = (0.0, 0.0, 0.0)
         self.o: Any = make_vertex(center)
         self.borders: List[Any] = []
-        self.face: Any = None
+        self.face: Any
         self.face_entry_id: Union[str, None] = None
         self.name: str = ""
         self.vertices: List[Any] = []
@@ -81,25 +78,11 @@ class GenericSurface(ABC):
         class is representing.
         Being abstract, a specific implementation must be provided by
         subclasses.
-        """
 
-    def build_face(self) -> None:
+        Returns
+        -------
+        A list of edge objects representing the generic surface borders.
         """
-        Method that builds a face from the border edges of the current geometry
-        surface this class is representing.
-        The resulting face can be planar (2D), if the 'isPlanar' parameter is
-        'True'.
-
-        Parameters
-        ----------
-        isPlanar  : bool
-                    Flag indicating whether the suface to build should be
-                    planar
-        """
-        if not self.borders:
-            raise RuntimeError("No border edges have still be created. The "
-                               "face cannot be built.")
-        self.face = make_face(self.borders)
 
     def rotate(self, angle: float) -> None:
         """
@@ -135,17 +118,15 @@ class GenericSurface(ABC):
         """
         # Convert the rotation angle in radians
         self.rotation = math.radians(angle)
-        # Rotate the GEOM face of the surface, if any has been built
-        if self.face:
-            self.face = make_rotation(self.face, axis, self.rotation)
-        for i in range(len(self.vertices)):
+        # Rotate the geometric elements of the surface
+        self.face = make_rotation(self.face, axis, self.rotation)
+        for i, _ in enumerate(self.vertices):
             self.vertices[i] = make_rotation(
                 self.vertices[i], axis, self.rotation)
         # Re-build the borders
         self.borders = self._build_borders()
         # Rotate the construction circle
-        self.out_circle = make_rotation(
-            self.out_circle, axis, self.rotation)
+        self.out_circle = make_rotation(self.out_circle, axis, self.rotation)
 
     def translate(self, new_pos: Tuple[float, float, float]) -> None:
         """
@@ -170,7 +151,7 @@ class GenericSurface(ABC):
         self.out_circle = make_translation(self.out_circle, transl_vect)
         # Re-build the vertices in the updated position relative to the
         # moved center
-        for i in range(len(self.vertices)):
+        for i, _ in enumerate(self.vertices):
             self.vertices[i] = make_vertex(
                 update_relative_pos(self.vertices[i], pre_center, new_pos))
         # Re-build the borders
@@ -179,14 +160,16 @@ class GenericSurface(ABC):
     def show_borders(self) -> None:
         """
         Method that adds the surface border edges to the current SALOME study.
-        These edges are extracted directly from the face this geometry class
-        is representing, if none has been defined yet.
+        These edges are added to the Object Browser under the face they refer
+        to only if any face has already been shown.
+
+        Raises
+        ------
+        RuntimeError: if no face has been displayed yet in the SALOME study.
         """
-        if not self.face:
-            raise RuntimeError("Face has not built yet.")
-        if not self.borders:
-            # Get the edges that constitutes the face
-            self.borders = extract_sub_shapes(self.face, ShapeType.EDGE)
+        if not self.face_entry_id:
+            raise RuntimeError("Bordes cannot be shown as no corresponding " \
+            "face has been displayed yet.")
         # Show the face border edges as sub-elements of the face in the
         # current SALOME study
         for i, border in enumerate(self.borders):
@@ -196,8 +179,8 @@ class GenericSurface(ABC):
 
     def show_edges_and_vertices(self) -> None:
         """
-        Method that adds the edges and the vertices of the surface to the
-        current SALOME study.
+        Method that adds the edges and the vertices of the geometric surface
+        to the current SALOME study.
         """
         self.show_borders()
         for i, v in enumerate(self.vertices):
@@ -207,17 +190,16 @@ class GenericSurface(ABC):
 
     def show_face(self) -> None:
         """
-        Method that adds the face this geometry class is representing
-        to the current SALOME study.
+        Method that adds the face object corresponding to the geometric
+        surface this class is representing to the current SALOME study.
         """
-        if not self.face:
-            raise RuntimeError("Face cannot be shown as it has not built yet.")
+        # If no custom name has been provided, use the default one of the
+        # object.
         if self.name == "":
             self.name = get_shape_name(self.face)
         # Delete the face from the study if already present
         if self.face_entry_id:
             remove_from_study(self.face_entry_id)
-
         # Add the surface to the current SALOME study
         self.face_entry_id = add_to_study(self.face, self.name)
         # Update the SALOME view
@@ -226,17 +208,17 @@ class GenericSurface(ABC):
     @abstractmethod
     def update_from_face(self, face: Any) -> None:
         """
-        Method for updating the geometrical characteristics of the surface
-        from the given GEOM face object.
+        Method for updating the geometric characteristics of the surface
+        from the given face object.
 
         Parameters
         ----------
         face  : Any
-                The new GEOM face object to substitute
+                The new face object to substitute the current face with
         """
 
 
-class Circle(GenericSurface):
+class Circle(Surface):
     """
     Class representing a circle surface in SALOME. It is built by
     providing its center, normal vector and radius: if no center
@@ -258,11 +240,11 @@ class Circle(GenericSurface):
 
     Attributes
     ----------
-    O             : Any
-                    A GEOM vertex object representing the surface center
+    o             : Any
+                    A vertex object representing the surface center
     borders       : List[Any]
-                    A list of GEOM objects representing the border edges
-                    of the geometry surface
+                    A list of edge objects representing the border edges
+                    of the geometric surface
     face          : Any
                     A GEOM object representing the face of the geometry
     name          : str
@@ -295,7 +277,7 @@ class Circle(GenericSurface):
                  radius: float = 1.0,
                  name: str = "Circle"):
         super().__init__(center)
-        self.radius = radius
+        self.radius: float = radius
         # ----------------------------------------------
         # Build the GEOM objects representing the circle
         # ----------------------------------------------
@@ -304,6 +286,7 @@ class Circle(GenericSurface):
             normal_vect = (0.0, 0.0, 1.0)
         self.on: Any = make_vector(normal_vect)
         self.borders = self._build_borders()
+        self.face = make_face(self.borders)
         self.vertices.append(self.o)
         self.out_circle = self.borders[0]
         # Store the characteristic dimensions of the circle
@@ -346,7 +329,7 @@ class Circle(GenericSurface):
         self.ly = self.radius
 
 
-class Rectangle(GenericSurface):
+class Rectangle(Surface):
     """
     Class representing a 2D rectangle surface in SALOME. It is built by
     providing its center, height and width: if no center (X-Y-Z coordinates)
@@ -435,6 +418,8 @@ class Rectangle(GenericSurface):
         # rounded corners
         self.borders: List[Any] = self.__build_rect_borders(
             rounded_corners, o_xyz, height, width)
+        # Build the rectangle face
+        self.face = make_face(self.borders)
         # Build the construction circle the rectangle is inscribed into
         diag = 0.5 * math.sqrt(height*height + width*width)
         self.out_circle: Any = make_circle(self.o, None, diag)
@@ -608,7 +593,7 @@ class Rectangle(GenericSurface):
             vert += extract_sub_shapes(border, ShapeType.VERTEX)
 
 
-class Hexagon(GenericSurface):
+class Hexagon(Surface):
     r"""
     Class representing a 2D hexagon surface in SALOME. It is built by
     providing its center and the length of edge: if no center (X-Y-Z
@@ -690,6 +675,8 @@ class Hexagon(GenericSurface):
             make_vertex_on_curve(self.out_circle, i/6) for i in range(6)]
         # Build the list of edges connecting successive vertices
         self.borders: List[Any] = self._build_borders()
+        # Build the hexagon face
+        self.face = make_face(self.borders)
         # Store the characteristic dimensions of the hexagon
         self.lx = edge_length
         self.ly = self.apothem
@@ -758,11 +745,104 @@ class Hexagon(GenericSurface):
                                      "to any border of the provided surface.")
 
 
+class GenericSurface(Surface):
+    """
+    Class representing a 2D generic surface defined starting from a given
+    face object.
+    Borders and vertices are directly extracted from the shape, whereas no
+    construction circle is declared: this is because the shape might not have
+    a regular geometric shape, hence there could be no circle within which
+    the shape is perfectly inscribed.
+    The characteristic dimensions of the surface are taken from the bounding
+    box enclosing the given surface.
+
+    Parameters
+    ----------
+    face : Any
+        The face object representing the generic surface
+
+    Attributes
+    ----------
+    o             : Any
+                    A vertex object representing the surface center
+    borders       : List[Any]
+                    A list of edge objects representing the border edges
+                    of the surface
+    face          : Any
+                    A face object representing the geometric surface
+    name          : str
+                    The name of the surface when displayed in the SALOME study
+    face_entry_id : Union[str, None]
+                    An ID associated to the surface in the SALOME study
+    vertices      : List[Any]
+                    A list of vertex objects representing the vertices of the
+                    generic surface
+    out_circle    : Any
+                    An edge object representing the construction circle which
+                    the generic surface is inscribed into
+    rotation      : float
+                    The rotation angle of the geometric surface in radians
+    lx            : float
+                    The characteristic dimension of the generic geometric
+                    surface along the X-axis
+    ly            : float
+                    The characteristic dimension of the generic geometric
+                    surface along the Y-axis
+    """
+    def __init__(self, face: Any):
+        super().__init__(get_point_coordinates(make_cdg(face)))
+        self.face = face
+        self.name = get_shape_name(face)
+        # Build the list of vertices representing the hexagon corners
+        self.vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
+        # Build the list of edges connecting successive vertices
+        self.borders = self._build_borders()
+        # Set the characteristic dimensions of the shape from the bounding box
+        # extension
+        b_box = get_bounding_box(self.face)
+        self.lx = (b_box[1] - b_box[0]) / 2
+        self.ly = (b_box[3] - b_box[2]) / 2
+
+        self.rotation: float = 0.0
+
+    def _build_borders(self) -> List[Any]:
+        """
+        Method that extracts all the edge objects of the generic surface
+        this class is representing.
+
+        Returns
+        -------
+        A list of the edge objects of the surface this class is built on.
+        """
+        return extract_sub_shapes(self.face, ShapeType.EDGE)
+
+    def update_from_face(self, face: Any) -> None:
+        """
+        Method for updating the geometric characteristics of the surface
+        from the given face object.
+
+        Parameters
+        ----------
+        face  : Any
+                The new face object to substitute the current face with
+        """
+        # Update the GEOM face object
+        self.face = face
+        # Re-evaluate all the geometrical characteristics from the face
+        self.o = make_cdg(face)
+        self.vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
+        self.borders = self._build_borders()
+        # Store the characteristic dimensions of the hexagon
+        b_box = get_bounding_box(self.face)
+        self.lx = b_box[1] - b_box[0]
+        self.ly = b_box[3] - b_box[2]
+
+
 def build_hexagon(
         apothem: float,
         center: Tuple[float, float, float] | None = None) -> Hexagon:
     """
-    Method that allows to build an hexagon from its apothem. The resulting
+    Function that allows to build an hexagon from its apothem. The resulting
     face is placed at the indicated center, if any, otherwise it is centered
     in the XYZ space origin.
 
@@ -779,77 +859,9 @@ def build_hexagon(
     """
     # Calculate the value of the hexagon side
     hex_side = 2 * apothem / math.tan(math.pi/3)
-    # Build the hexagon
-    shape = Hexagon(center, hex_side)
-    shape.build_face()
-    # Return the 'Hexagon' object
-    return shape
+    # Build and return the 'Hexagon' object
+    return Hexagon(center, hex_side)
 
-
-def build_rectangle(
-        height: float,
-        width: float,
-        center: Tuple[float, float, float] | None = None) -> Rectangle:
-    """
-    Method that allows to build an rectangle from its height and width.
-    The resulting face is placed at the indicated center, if any, otherwise
-    it is centered in the XYZ space origin.
-
-    Parameters
-    ----------
-    height  : float
-        The value of the rectangle height
-    width  : float
-        The value of the rectangle width
-    center  : Tuple[float, float, float] | None = None
-        The XYZ coordinates of the rectangle center, if any
-
-    Returns
-    -------
-    A 'Rectangle' object with dimensions and center as indicated.
-    """
-    # Build the rectangle
-    shape = Rectangle(center, height, width)
-    shape.build_face()
-    # Return the 'Rectangle' object
-    return shape
-
-
-# FIXME this function is used also in the 'cells' and 'lattices' modules. It
-# should be moved into the 'support' module. It is needed to restructure the
-# import chain as the 'support' module needs to import the 'salome' module,
-# whereas the 'main' one imports 'support' as well. Hence, a circular import
-# situation happens.
-def update_relative_pos(point: Any,
-                        rel_point_pre: Any,
-                        new_pos: Tuple[float, float, float]) -> Tuple:
-    """
-    Function that calculates the position of the given point which is
-    relative to another one, which has to be moved into the given XYZ
-    position.
-
-    Parameters
-    ----------
-    point         : Any
-                    The point whose new coordinates must be evaluated
-    rel_point_pre : Any
-                    The point the first parameter is relative to
-    new_pos       : Tuple[float, float, float]
-                    The XYZ coordinates of the moved point (2nd parameter)
-
-    Returns
-    -------
-    A tuple with the XYZ coordinates of the given point so that it still
-    keeps its relative position with the moved point.
-    """
-    # Get the point position wrt the previous point position
-    relative_pos = tuple(coord1 - coord2 for coord1, coord2 in zip(
-        get_point_coordinates(rel_point_pre),
-        get_point_coordinates(point)))
-    # Return the updated shape position relative to the new point position
-    return tuple(coord1 - coord2 for coord1, coord2 in zip(
-        new_pos,
-        relative_pos))
 
 if __name__ == "__main__":
     # ------------------------------------------------
@@ -857,7 +869,6 @@ if __name__ == "__main__":
     # ------------------------------------------------
     # Build an hexagon and show it in the SALOME study
     shape = Hexagon(edge_length=1.5)
-    shape.build_face()
     shape.rotate(-90)
     shape.show_face()
     shape.show_edges_and_vertices()

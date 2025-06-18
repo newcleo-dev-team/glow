@@ -49,12 +49,8 @@ v4 = make_vertex((-0.15, 0, 0))
 # Build the corresponding 'Circle' objects
 circles = [Circle(center=get_point_coordinates(v),
                   radius=0.075) for v in [v1, v2, v3, v4]]
-for circle in circles:
-    circle.build_face()
 # Build circles positioned in the cell center
 center_circles = [Circle(radius=r) for r in [0.1, 0.35, 0.45]]
-for circle in center_circles:
-    circle.build_face()
 # Update the list of 'Circle' objects
 circles += center_circles
 

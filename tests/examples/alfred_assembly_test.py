@@ -70,7 +70,7 @@ print(f"--- Generation executed in {time.time() - start_time} seconds ---")
 # Perform the lattice faces and edges analysis and generate the output
 # TDT file
 analyse_and_generate_tdt(lattice, os.path.join(os.path.dirname(sys.argv[0]),
-                                               'alfred_stress_test'))
+                                               'alfred_assembly_test'))
 
 # Print the execution time
 print(f"--- Code executed in {time.time() - start_time} seconds ---")
