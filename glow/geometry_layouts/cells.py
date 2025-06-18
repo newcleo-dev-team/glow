@@ -242,7 +242,10 @@ class Cell(ABC):
         A list of all the subfaces that comprise the cell face, sorted in
         ascending order by means of their distance from the cell center.
         """
-        return self.__extract_subfaces_from_face(self.face)
+        subfaces = self.__extract_subfaces_from_face(self.face)
+        if not subfaces:
+            return [self.face]
+        return subfaces
 
     def __extract_subfaces_from_face(self, face: Any) -> List[Any]:
         """
