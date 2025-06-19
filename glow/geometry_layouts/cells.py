@@ -17,7 +17,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_point_inside_shape, make_cdg, make_face, make_line, \
+    get_shape_type, is_point_inside_shape, make_cdg, make_common, make_face, make_line, \
     make_partition, make_rotation, make_translation, make_vector_from_points, \
     make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
     make_vertex_on_lines_intersection, remove_from_study, set_color_face, \
@@ -242,7 +242,10 @@ class Cell(ABC):
         A list of all the subfaces that comprise the cell face, sorted in
         ascending order by means of their distance from the cell center.
         """
-        return self.__extract_subfaces_from_face(self.face)
+        subfaces = self.__extract_subfaces_from_face(self.face)
+        if not subfaces:
+            return [self.face]
+        return subfaces
 
     def __extract_subfaces_from_face(self, face: Any) -> List[Any]:
         """
@@ -410,8 +413,7 @@ class Cell(ABC):
         centered_regions = []
         # List containing the cell 'Circle' objects, filtered so that
         # only the cell-centered ones are considered
-        centered_circles = [c for c in self.inner_circles if
-                              get_min_distance(c.o, self.figure.o) < 1e-5]
+        centered_circles = self.get_centered_circles()
         # Loop through all the regions of the cell technological geometry
         for region in self.tech_geom_props:
             # Continue with the next region if it is not cell-centered
@@ -1439,27 +1441,52 @@ class Cell(ABC):
         storing the cell's regions VS the corresponding properties and
         sectorization options respectively.
         The following operations are performed:
-        - the face is set to the one of the 'Surface' used at
-          instantiation;
+        - the face is set to the one of the 'Surface' used at instantiation;
         - the list storing the cell's 'Circle' objects is initialized with
           an empty list;
         - the property dictionaries are initialized with default values.
         """
         # Initialize the face object with the main shape
-        self.face = self.figure.face
+        self.__initialize_geometry(self.figure.face)
+        self.__initialize_region_dicts()
+
+    def __initialize_geometry(self, face: Any) -> None:
+        """
+        Method that initializes the cell geometry layout with the given face
+        object. The list storing the cell's `Circle` objects is initialized
+        to an empty list.
+
+        Parameters
+        ----------
+        face : Any
+            The face object to initialize the cell's one with
+        """
+        # Initialize the face object with the given shape
+        self.face = face
         # Clear the previously stored 'Circle' objects
         self.inner_circles = []
-        # Extract the cell subfaces, if any; otherwise use the cell face for
-        # initialization purposes
+
+    def __initialize_region_dicts(self) -> None:
+        """
+        Method that initializes the dictionaries associating cell regions
+        to their properties and sectorization options with default values
+        for each region of the cell's face.
+        """
         subfaces = self.extract_subfaces()
-        if not subfaces:
-            subfaces = [self.face]
-        self.tech_geom_props: Dict[Any, Dict[PropertyType, str]] = {
-            region: {} for region in subfaces
-        }
-        self.tech_geom_sect_opts: Dict[Any, Tuple[int, float]] = {
-            region: (1, 0) for region in subfaces
-        }
+        self.tech_geom_props = {region: {} for region in subfaces}
+        self.tech_geom_sect_opts = {region: (1, 0) for region in subfaces}
+
+    def restore(self) -> None:
+        """
+        Method that restores the cell's geometry layout to a state without
+        any circular region. It removes any inner circle, leaving only the
+        face object obtained from the cell's external borders.
+        Properties and sectorization options are re-initialized with default
+        values.
+        """
+        self.__initialize_geometry(
+            make_face(build_compound_borders(self.face)))
+        self.__initialize_region_dicts()
 
     def __update_cell_with_edges(self, shape: Any) -> None:
         """
@@ -1509,6 +1536,14 @@ class Cell(ABC):
         if edges_to_add:
             self.face = make_partition(
                 [self.face], edges_to_add, ShapeType.FACE)
+
+    def get_centered_circles(self) -> List[Circle]:
+        """
+        Method that returns a list of the cell-centered `Circle` objects of
+        the cell.
+        """
+        return [circle for circle in self.inner_circles \
+                if get_min_distance(circle.o, self.figure.o) < 1e-5]
 
 
 class RectCell(Cell):

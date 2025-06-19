@@ -1973,6 +1973,54 @@ class Lattice():
         # Update the lattice in the SALOME viewer
         self.show(property_type)
 
+    def restore_cells(self,
+                      cells: List[Cell],
+                      properties: Dict[PropertyType, str]) -> None:
+        """
+        Method that restores the geometry layout of the given cells by
+        removing any circular region, while setting properties accordingly
+        with the provided dictionary.
+        If any cell has no centered circular regions, the restore operation
+        is not performed.
+        For the others, this operation is performed only if the compound made
+        of the circular regions is cut by the cell's face.
+
+        **N.B.** This method should be called after building the lattice
+        regions by overlapping all the layers of cells, i.e. after calling
+        either the `show` or the `build_regions` methods.
+        This method has an effect only if the given list of cells contains
+        shallow copies of the `Cell` objects included in the present `Lattice`
+        instance.
+
+        Parameters
+        ----------
+        properties : Dict[PropertyType, str]
+            Providing the values for each type of property to assign to the
+            cells being restored
+        """
+        # Loop through all the given cells
+        for cell in cells:
+            # Go to the next cell if no inner circles are present
+            if not cell.inner_circles:
+                continue
+            # Extract the compound made by the union of the cell-centered
+            # circular regions
+            circ_regions = make_partition(
+                [circle.face for circle in cell.get_centered_circles()],
+                [],
+                ShapeType.FACE)
+            # Cut the compound made from the circular regions with the cell
+            # face. If this operation does not produce any face object, it
+            # means that the circular regions of the cell are not cut, hence
+            # the cell geometry must not be restored.
+            if not extract_sub_shapes(
+                make_compound([make_cut(circ_regions, cell.face)]),
+                ShapeType.FACE):
+                continue
+            # Restore the cell geometry and properties
+            cell.restore()
+            cell.set_properties({k: [v] for k, v in properties.items()})
+
 
 def get_compound_from_geometry(
         geo_type: GeometryType, lattice_cells: List[Cell]) -> Any:
