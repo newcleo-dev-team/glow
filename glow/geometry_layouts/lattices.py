@@ -120,6 +120,7 @@ class Lattice():
         self.type_vs_property_vs_color: Dict[ # FIXME not necessary?
             PropertyType, Dict[str, Tuple[int, int, int]]] = {}
         self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
+        self.is_update_needed: bool = False
 
         # Build the GEOM compound objects for the lattice storing the cells
         # faces and the unique edges respectively, as well as the lattice
@@ -233,10 +234,13 @@ class Lattice():
         self.lattice_org = deepcopy(self.lattice_cmpd) # FIXME not necessary?
 
         # Handle the construction of the lattice container, if any is required
-        self.__assemble_box()
+        self.__assemble_box(geo_type)
 
     def __assemble_box_with_lattice(
-            self, inner_box: Any, lattice_cmpd: Any) -> Any:
+            self,
+            inner_box: Any,
+            lattice_cmpd: Any,
+            geo_type: GeometryType) -> Any:
         """
         Method that assembles the lattice, in terms of its compound, with the
         container.
@@ -255,6 +259,8 @@ class Lattice():
         lattice_cmpd  : Any
             The compound object representing the lattice the box should be
             assembled with
+        geo_type : GeometryType
+            The type of geometry indicating the layout to use for the box cell
 
         Returns
         -------
@@ -265,7 +271,11 @@ class Lattice():
         lattice_cmpd = make_common(inner_box, lattice_cmpd)
         # Update the lattice compound by partitioning it with the box face
         lattice_cmpd = make_partition(
-            [lattice_cmpd, self.lattice_box.face], [], ShapeType.FACE)
+            [lattice_cmpd] + extract_sub_shapes(
+                get_compound_from_geometry(geo_type, [self.lattice_box]),
+                ShapeType.FACE),
+            [],
+            ShapeType.FACE)
         # Update the lattice edges by partitioning the lattice compound
         self.lattice_edges = make_partition(
             [lattice_cmpd], [], ShapeType.EDGE)
@@ -317,14 +327,16 @@ class Lattice():
         # Update both the current lattice compound and the one coming from
         # the cells technological geometry
         self.lattice_cmpd = self.__assemble_box_with_lattice(
-            inner_box, self.lattice_org)
+            inner_box, self.lattice_org, GeometryType.TECHNOLOGICAL)
         self.lattice_tech = self.__assemble_box_with_lattice(
-            inner_box, self.lattice_org)
+            inner_box, self.lattice_org, GeometryType.TECHNOLOGICAL)
         # Re-apply the symmetry operation if any has already been performed
         if self.symmetry_type != SymmetryType.FULL:
             self.apply_symmetry(self.symmetry_type)
         # Update the 'lx' characteristic dimension of the lattice
         self.lx = self.lattice_box.figure.lx
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def __extract_inner_box(self) -> Any:
         """
@@ -340,6 +352,8 @@ class Lattice():
         """
         # Extract the lattice box faces
         box_faces = extract_sub_shapes(self.lattice_box.face, ShapeType.FACE)
+        if not box_faces:
+            box_faces = [self.lattice_box.face]
         # Get the inner box face by sorting the faces according to the
         # distance from the lattice center
         return sorted(
@@ -491,6 +505,8 @@ class Lattice():
         self.layers.append([])
         # Add the cell to the newly created layer
         self.__add_cell_to_layer(cell_to_add, position, len(self.layers)-1)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def __add_cell_to_layer(
             self, cell: Cell, position: Tuple[float], layer_indx: int) -> None:
@@ -610,6 +626,8 @@ class Lattice():
         # Update the lattice symmetry type
         self.symmetry_type = symmetry
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the current SALOME study
         self.show()
 
@@ -906,19 +924,25 @@ class Lattice():
         # Return the flattened list of list of cells
         return [cell for layer in layers for cell in layer]
 
-    def __update_lattice_compounds(self, cells: List[Cell]) -> None:
+    def __update_lattice_compounds(
+            self,
+            cells: List[Cell],
+            geo_type: GeometryType = GeometryType.TECHNOLOGICAL) -> None:
         """
-        Method that rebuilds the compound objects of the lattice grouping the
-        given cells.
+        Method that rebuilds the compound objects of the lattice grouping
+        the given cells. According to the indicated geometry type, either
+        the technological or the sectorized geometry layout of the cells
+        is used.
         If any box is declared, the cells are assembled with it.
 
         Parameters
         ----------
         cells : List[Cell]
             List of 'Cell' objects to build a compound object from
+        geo_type : GeometryType = GeometryType.TECHNOLOGICAL
+            The type of geometry indicating the cells' layout to use
         """
-        self.lattice_cmpd = make_partition(
-            [c.face for c in cells], [], ShapeType.FACE)
+        self.lattice_cmpd = get_compound_from_geometry(geo_type, cells)
         self.lattice_tech = self.lattice_cmpd
         # Build a GEOM compound storing the lattice unique edges of its cells
         self.lattice_edges: Any = make_partition(
@@ -928,15 +952,25 @@ class Lattice():
         self.lattice_org = deepcopy(self.lattice_cmpd)
 
         # Handle the construction of the lattice container, if any
-        self.__assemble_box()
+        self.__assemble_box(geo_type)
 
-    def __assemble_box(self) -> None:
+        # Update the compound object storing the applied symmetry
+        if self.symmetry_type != SymmetryType.FULL:
+            self.lattice_symm = make_common(self.lattice_cmpd,
+                                            self.lattice_symm)
+
+    def __assemble_box(self, geo_type: GeometryType) -> None:
         """
         Method that builds the lattice box, if it was not built yet, from the
         stored layers thicknesses. The container geometry depends on the
         type of geometry of the cells (i.e. rectangular or hexagonal).
         The box is then assembled with the lattice, eventually cutting the
         cells that are overlapped by it.
+
+        Parameters
+        ----------
+        geo_type : GeometryType
+            The type of geometry indicating the layout to use for the box cell
         """
         if not self.box_layers:
             return
@@ -947,7 +981,7 @@ class Lattice():
             # Assemble the lattice with the box subface closest to the lattice
             # center
             self.lattice_cmpd = self.__assemble_box_with_lattice(
-                self.__extract_inner_box(), self.lattice_cmpd)
+                self.__extract_inner_box(), self.lattice_cmpd, geo_type)
 
     def __overlap_layer_to(
             self, layer: List[Cell], sub_layer: List[Cell]) -> None:
@@ -1226,6 +1260,8 @@ class Lattice():
                 self.lattice_symm, make_vector_from_points(
                     make_cdg(self.lattice_symm), make_vertex(face_to_center)))
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study
         self.show()
 
@@ -1285,8 +1321,8 @@ class Lattice():
             use for building the lattice regions.
         """
         # Get the cells by assembling all the lattice layers
-        self.lattice_cells = deepcopy(self.__assemble_layers())
-        self.__update_lattice_compounds(self.lattice_cells)
+        self.lattice_cells = self.__assemble_layers()
+        self.__update_lattice_compounds(self.lattice_cells, geo_type)
         # Get the lattice compound object, given the geometry type and the
         # current applied symmetry
         cmpd = self.__get_compound_from_type(geo_type, self.lattice_cells)
@@ -1302,7 +1338,7 @@ class Lattice():
         # Handle the construction of 'Region' objects for the lattice box
         # subfaces, if any
         if self.lattice_box:
-            box_subfaces = self.__extract_box_subfaces(cmpd)
+            box_subfaces = self.__extract_box_subfaces(cmpd, geo_type)
             print("No. lattice box subfaces", len(box_subfaces))
             # Add the 'Region' objects for the lattice box subfaces
             self.regions.extend(
@@ -1319,6 +1355,8 @@ class Lattice():
             raise AssertionError("Mismatch between the number of lattice "
                                  f"subfaces ({len(subfaces)}) and that of "
                                  f"found regions ({len(self.regions)})")
+        # Set that there is no longer a need to update the lattice geometry
+        self.is_update_needed = False
 
     def __build_regions_for_subfaces(
             self,
@@ -1535,6 +1573,8 @@ class Lattice():
                 # Add the cell at the position of the subdivision point
                 self.__add_cell_to_layer(
                     cell, get_point_coordinates(p), layer_indx)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def add_rings_of_cells(self, cell: Cell, no_rings: int) -> None:
         """
@@ -1565,6 +1605,8 @@ class Lattice():
         for i_ring in range(self.rings_no+1, no_rings+1):
             # Add a ring of cells at the current index
             self.add_ring_of_cells(cell, i_ring, len(self.layers) - 1)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def set_lattice_box_properties(
             self, properties: Dict[PropertyType, List[str]]) -> None:
@@ -1636,7 +1678,8 @@ class Lattice():
             # Update the index
             indx += 1
 
-    def __extract_box_subfaces(self, lattice_cmpd: Any) -> List[Any]:
+    def __extract_box_subfaces(
+            self, lattice_cmpd: Any, geom_type: GeometryType) -> List[Any]:
         """
         Method that extracts the lattice box subfaces, i.e. the box layers
         and the areas between the cells and the container layers, if any
@@ -1650,12 +1693,17 @@ class Lattice():
         ----------
         lattice_cmpd : Any
             The lattice compound object made by the cells only
+        geom_type : GeometryType
+            Indicating the geometry layout of the box cell from which face
+            objects are extracted
 
         Raises
         ------
         RuntimeError
-            If no face objects are available after cutting the box face
-            with the compound made from the lattice cells only
+            - If no face objects are available after cutting the box face
+              with the compound made from the lattice cells only.
+            - In case the geometry type is different from `TECHNOLOGICAL`
+              or `SECTORIZED` cases.
 
         Returns
         -------
@@ -1665,12 +1713,14 @@ class Lattice():
         result is that the outmost layer of the box occupies the first
         position in the returned list and so on with the others.
         """
-        box = self.lattice_box.face
+        # Get the box geometry layout according to the given geometry type
+        box = get_compound_from_geometry(geom_type, [self.lattice_box])
+        # Handle symmetry types other than FULL
         if self.symmetry_type != SymmetryType.FULL:
             # Get the shape of the symmetry
             shape = make_face(build_compound_borders(self.lattice_symm))
             # Extract the common part between the box and the symmetry shape
-            box = make_common(self.lattice_box.face, shape)
+            box = make_common(box, shape)
         # Cut the box with the lattice cells, so that only the box areas
         # remain, and extract its face objects, if any
         box_faces = extract_sorted_sub_shapes(
@@ -1769,6 +1819,8 @@ class Lattice():
         self.lattice_edges: Any = make_partition(
             [self.lattice_cmpd], [], ShapeType.EDGE)
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the current SALOME study
         self.show()
 
@@ -1816,6 +1868,8 @@ class Lattice():
             self.lattice_symm = make_rotation(
                 self.lattice_symm, z_axis, rotation)
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study
         self.show()
 
@@ -1888,6 +1942,8 @@ class Lattice():
                                 "valid for a sectorization operation.")
         # Re-build the lattice compound and regions
         self.__build_lattice(GeometryType.SECTORIZED)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the current SALOME study
         self.show(geometry_type_to_show=GeometryType.SECTORIZED)
 
@@ -1937,7 +1993,7 @@ class Lattice():
             # cell as the box is not empty
             lattice_box = deepcopy(self.lattice_box)
             lattice_box.face = make_compound(
-                self.__extract_box_subfaces(cmpd))
+                self.__extract_box_subfaces(cmpd, GeometryType.TECHNOLOGICAL))
             cells.append(lattice_box)
         # Add all the lattice cells
         cells.extend(self.lattice_cells)
@@ -1970,6 +2026,9 @@ class Lattice():
         else:
             raise RuntimeError(
                 "No cell region could be found for the selected shape.")
+
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the SALOME viewer
         self.show(property_type)
 
@@ -2020,6 +2079,9 @@ class Lattice():
             # Restore the cell geometry and properties
             cell.restore()
             cell.set_properties({k: [v] for k, v in properties.items()})
+
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
 
 def get_compound_from_geometry(
