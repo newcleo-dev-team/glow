@@ -13,11 +13,12 @@ from glow.generator.support import BoundaryType, GeometryType, \
     LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.geometry_layouts.utility import build_compound_borders
-from glow.interface.geom_interface import ShapeType, \
+from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, make_common, make_compound, make_face, \
-    make_vertex, make_vertex_inside_face, make_vertex_on_curve, set_shape_name
+    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
+    set_shape_name, update_salome_study
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -558,6 +559,8 @@ class LatticeDataExtractor():
     ----------
     lattice : Lattice
         An instance of the 'Lattice' class storing the lattice information
+    geom_type : GeometryType
+        The type of geometry of the lattice cells used to extract the regions
 
     Attributes
     ----------
@@ -572,34 +575,26 @@ class LatticeDataExtractor():
     subfaces            : List[Any]
                           The list of 'Face' objects storing information about
                           each region of the lattice
-    edge_name_vs_faces  : Dict[str, List[Any]]
-                          A dictionary storing all the faces connected to the
-                          edges, given their name
     edges               : List[Edge]
                           The list of 'Edge' objects storing information about
                           each edge of the lattice
     id_vs_edge          : Dict[str, Any]
                           A dictionary of the lattice edge ID VS the GEOM edge
                           object reference
-    lattice_subfaces    : List[Any]
-                          A list of the GEOM face objects for the lattice
-                          regions
     lattice_edges       : List[Any]
                           A list of the GEOM edge objects for the lattice
     """
-    def __init__(self, lattice: Lattice) -> None:
+    def __init__(self, lattice: Lattice, geom_type: GeometryType) -> None:
         # Initialize the instance attributes
         self.lattice: Lattice = lattice
         self.borders: List[Any] = []
-        self.lattice_subfaces: List[Any] = [] # FIXME not necessary?
         self.lattice_edges: List[Any] = []
         self.boundaries: List[Boundary] = []
         self.subfaces: List[Face] = []
-        self.edge_name_vs_faces: Dict[str, List[Any]] = {}
         self.edges: List[Edge] = []
-        # Extract the information about borders, faces and edges of the
-        # lattice to be stored according to its symmetry
-        self.__preprocess()
+        # Extract the information to be stored about borders and edges of the
+        # lattice according to the applied symmetry and geometry
+        self.__preprocess(geom_type)
         # Associate each edge with an index and build a dictionary
         self.id_vs_edge: Dict[str, Any] = classify_lattice_edges(
             self.lattice_edges)
@@ -699,22 +694,18 @@ class LatticeDataExtractor():
         # Return the dictionary of edge names VS the list of connected faces
         return edges_name_vs_faces
 
-    def build_faces(self,
-                    geom_type : GeometryType,
-                    property_type : PropertyType) -> None:
+    def build_faces(self, property_type: PropertyType) -> None:
         """
-        Method that builds a list of 'Face' objects from the GEOM face objects,
-        extracted from the lattice regions, and the property values.
-        Each region in the lattice corresponds to a region in a cell,
-        according to the given type of geometry (either technological or
+        Method that builds a list of 'Face' objects from the GEOM face
+        objects, extracted from the lattice regions, and the property
+        values. Each region in the lattice corresponds to a region in a
+        cell, according to the type of geometry (either technological or
         sectorized).
         Each region must be associated with a value for the given property
         type. If not the case, an exception is raised.
 
         Parameters
         ----------
-        geom_type : GeometryType
-            The type of geometry of the lattice cells identifying the regions
         property_type : PropertyType = PropertyType.MATERIAL
             The type of property associated to the lattice regions
 
@@ -725,10 +716,6 @@ class LatticeDataExtractor():
             - If no value for the given property type is associated to a
               lattice region.
         """
-        # FIXME Lattice 'Region' objects are built only if the 'show()' method
-        # is called. If not the case, the analysis could be performed with an
-        # incorrect number of regions. Use the given 'geom_type' parameter
-        # to rebuild the regions. See issue #16.
         # Index identifying the 'Face' object
         subface_indx = 0
         # Loop through all the lattice regions and build the corresponding
@@ -848,22 +835,28 @@ class LatticeDataExtractor():
             # COMPOUND-type case
             edges_in_place = extract_sub_shapes(edge, ShapeType.EDGE)
             if edges_in_place:
+                print("!!!! EDGES COMPOUND !!!")
                 return [
                     self.id_vs_edge[build_edge_id(e)] for e in edges_in_place]
             else:
                 # Raise an exception if the compound does not have edges
                 raise RuntimeError(error_message) from exc
 
-    def __preprocess(self):
+    def __preprocess(self, geom_type: GeometryType) -> None:
         """
-        Method that pre-initializes the information to be stored from the
-        lattice according to its symmetry.
+        Method that initializes the information to be stored from the lattice
+        according to the applied symmetry and the given geometry.
 
         Parameters
         ----------
-        lattice : Lattice
-                  The object storing the information to pre-process.
+        geom_type : GeometryType
+            The type of geometry of the lattice cells used to extract the
+            regions
         """
+        # Check if the lattice geometry layout needs to be rebuilt
+        if (self.lattice.is_update_needed or
+            geom_type != self.lattice.displayed_geom):
+            self.lattice.build_regions(geom_type)
         # Get the GEOM compound identifying either the full lattice of a part
         # of it, if a symmetry is applied
         lattice_cmpd = self.lattice.lattice_cmpd
@@ -878,17 +871,12 @@ class LatticeDataExtractor():
         lattice_face = make_face(self.borders)
         lattice_cmpd = make_common(lattice_cmpd, lattice_face)
 
-        # Extract both the lattice subfaces and the unique edges from the
-        # result of the common operation
-        self.lattice_subfaces = extract_sorted_sub_shapes(
-            lattice_cmpd, ShapeType.FACE)
+        # Extract the lattice unique edges from the result of the common
+        # operation
         self.lattice_edges = extract_sorted_sub_shapes(
             lattice_cmpd, ShapeType.EDGE)
-        # Sort both lists in terms of the distance of each element from the
+        # Sort the list in terms of the distance of each element from the
         # lattice center
-        self.lattice_subfaces.sort(
-            key=lambda item: get_min_distance(item,
-                                              self.lattice.lattice_center))
         self.lattice_edges.sort(
             key=lambda item: get_min_distance(item,
                                               self.lattice.lattice_center))
@@ -928,8 +916,8 @@ class LatticeDataExtractor():
 
 
 def analyse_lattice(lattice: Lattice,
-                    geom_type : GeometryType,
-                    property_type : PropertyType) -> LatticeDataExtractor:
+                    geom_type: GeometryType,
+                    property_type: PropertyType) -> LatticeDataExtractor:
     """
     Function that performs the lattice analysis in order to extract the
     needed information about the regions, and the associated properties,
@@ -953,11 +941,11 @@ def analyse_lattice(lattice: Lattice,
         Object collecting all the information about the geometry and the
         properties extracted from the lattice.
     """
-    # Instantiate the class for extracting the data from the lattice and
-    # analyse them
-    data_extractor = LatticeDataExtractor(lattice)
+    # Instantiate the class for extracting the geometric data from the lattice
+    # according to the given type of geometry
+    data_extractor = LatticeDataExtractor(lattice, geom_type)
     # Call its method for performing the analysis
-    data_extractor.build_faces(geom_type, property_type)
+    data_extractor.build_faces(property_type)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()
     data_extractor.build_edges(edge_name_vs_faces)
     data_extractor.build_boundaries()
