@@ -835,7 +835,6 @@ class LatticeDataExtractor():
             # COMPOUND-type case
             edges_in_place = extract_sub_shapes(edge, ShapeType.EDGE)
             if edges_in_place:
-                print("!!!! EDGES COMPOUND !!!")
                 return [
                     self.id_vs_edge[build_edge_id(e)] for e in edges_in_place]
             else:
