@@ -120,6 +120,7 @@ class Lattice():
         self.type_vs_property_vs_color: Dict[ # FIXME not necessary?
             PropertyType, Dict[str, Tuple[int, int, int]]] = {}
         self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
+        self.is_update_needed: bool = False
 
         # Build the GEOM compound objects for the lattice storing the cells
         # faces and the unique edges respectively, as well as the lattice
@@ -325,6 +326,8 @@ class Lattice():
             self.apply_symmetry(self.symmetry_type)
         # Update the 'lx' characteristic dimension of the lattice
         self.lx = self.lattice_box.figure.lx
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def __extract_inner_box(self) -> Any:
         """
@@ -340,6 +343,8 @@ class Lattice():
         """
         # Extract the lattice box faces
         box_faces = extract_sub_shapes(self.lattice_box.face, ShapeType.FACE)
+        if not box_faces:
+            box_faces = [self.lattice_box.face]
         # Get the inner box face by sorting the faces according to the
         # distance from the lattice center
         return sorted(
@@ -491,6 +496,8 @@ class Lattice():
         self.layers.append([])
         # Add the cell to the newly created layer
         self.__add_cell_to_layer(cell_to_add, position, len(self.layers)-1)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def __add_cell_to_layer(
             self, cell: Cell, position: Tuple[float], layer_indx: int) -> None:
@@ -610,6 +617,8 @@ class Lattice():
         # Update the lattice symmetry type
         self.symmetry_type = symmetry
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the current SALOME study
         self.show()
 
@@ -1226,6 +1235,8 @@ class Lattice():
                 self.lattice_symm, make_vector_from_points(
                     make_cdg(self.lattice_symm), make_vertex(face_to_center)))
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study
         self.show()
 
@@ -1319,6 +1330,8 @@ class Lattice():
             raise AssertionError("Mismatch between the number of lattice "
                                  f"subfaces ({len(subfaces)}) and that of "
                                  f"found regions ({len(self.regions)})")
+        # Set that there is no longer a need to update the lattice geometry
+        self.is_update_needed = False
 
     def __build_regions_for_subfaces(
             self,
@@ -1535,6 +1548,8 @@ class Lattice():
                 # Add the cell at the position of the subdivision point
                 self.__add_cell_to_layer(
                     cell, get_point_coordinates(p), layer_indx)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def add_rings_of_cells(self, cell: Cell, no_rings: int) -> None:
         """
@@ -1565,6 +1580,8 @@ class Lattice():
         for i_ring in range(self.rings_no+1, no_rings+1):
             # Add a ring of cells at the current index
             self.add_ring_of_cells(cell, i_ring, len(self.layers) - 1)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
     def set_lattice_box_properties(
             self, properties: Dict[PropertyType, List[str]]) -> None:
@@ -1769,6 +1786,8 @@ class Lattice():
         self.lattice_edges: Any = make_partition(
             [self.lattice_cmpd], [], ShapeType.EDGE)
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the current SALOME study
         self.show()
 
@@ -1816,6 +1835,8 @@ class Lattice():
             self.lattice_symm = make_rotation(
                 self.lattice_symm, z_axis, rotation)
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study
         self.show()
 
@@ -1888,6 +1909,8 @@ class Lattice():
                                 "valid for a sectorization operation.")
         # Re-build the lattice compound and regions
         self.__build_lattice(GeometryType.SECTORIZED)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the current SALOME study
         self.show(geometry_type_to_show=GeometryType.SECTORIZED)
 
@@ -1970,6 +1993,9 @@ class Lattice():
         else:
             raise RuntimeError(
                 "No cell region could be found for the selected shape.")
+
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
         # Update the lattice in the SALOME viewer
         self.show(property_type)
 
@@ -2020,6 +2046,9 @@ class Lattice():
             # Restore the cell geometry and properties
             cell.restore()
             cell.set_properties({k: [v] for k, v in properties.items()})
+
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
 
 
 def get_compound_from_geometry(
