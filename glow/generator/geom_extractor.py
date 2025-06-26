@@ -13,12 +13,12 @@ from glow.generator.support import BoundaryType, GeometryType, \
     LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.geometry_layouts.utility import build_compound_borders
-from glow.interface.geom_interface import ShapeType, add_to_study, \
+from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
-    get_shape_name, get_shape_type, make_common, make_compound, make_face, \
-    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
-    set_shape_name, update_salome_study
+    get_shape_name, get_shape_type, is_point_inside_shape, make_common, \
+    make_compound, make_face, make_vertex, make_vertex_inside_face, \
+    make_vertex_on_curve, set_shape_name
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -175,16 +175,19 @@ class Edge():
         """
         Method that allows to define whether the given GEOM face object,
         connected to the edge, is placed to the right or to left of the
-        same oriented edge.
+        edge object the instance refers to.
 
         This analysis is based on the creation of a point at a very small
-        distance from the edge and in a known direction (left or right).
-        GEOM's 'minDistance' function is then used to find out whether
-        this point is inside or outside (positive result) one of the
-        connected face.
-        In case the point is inside the face, then this face is on the
-        right of the edge, whereas, if outside, the face is considered on
-        the left.
+        distance from the edge middle point so that it belongs to the
+        left-oriented normal vector for the edge.
+        The identification of the face position (left or right) relative
+        to the edge depends on the edge nature:
+        - for SEGMENT-type edges, the given face is considered on the left
+          of the edge if the point belongs to the face; on the contrary,
+          we have a right face;
+        - for ARC_CIRCLE and CIRCLE-type edges, the criteria is the opposite,
+          i.e. the face is considered on the right of the edge if the point
+          belongs to the face; on the contrary, we have a left face.
 
         Parameters
         ----------
@@ -194,13 +197,10 @@ class Edge():
         epsilon : float
                   Margin small enough to place a point wrt the edge
         """
-        # Handle the edge types differently
-        point = self.__build_point_on_edge_normal()
-
-        # The face identification is based on the distance between the point
-        # and face to analyse. It differs between a 'SEGMENT'-type edge and
-        # the 'CIRCLE' and 'ARC_CIRCLE' ones.
-        if get_min_distance(point, face.face) > 0:
+        # Build the point on the left of the edge and use it to identify the
+        # face position relative to the edge
+        if not is_point_inside_shape(self.__build_point_on_edge_normal(),
+                                     face.face):
             if self.kind == "SEGMENT":
                 self.right = face
             else:
@@ -213,7 +213,33 @@ class Edge():
 
     def __build_point_on_edge_normal(self, epsilon: float = EPSILON) -> Any:
         """
-        Method
+        Method that builds a vertex object positioned at an infinitesimal
+        distance from the edge object this instance refers to.
+        Depending on the edge type, this point is built according to the
+        following rules:
+        - CIRCLE: the point is positioned slightly on the left wrt the
+          X-coordinate of the point laying on the right-most position of
+          the circle (identified by the center X-coordinate + the radius).
+        - ARC_CIRCLE: given a point positioned at the middle of the arc,
+          another point is built on the vector connecting the arc center and
+          the first point. This second point has both its X-Y coordinates
+          slightly scaled down by a reduction factor so that its distance
+          from the arc center is less than the radius.
+        - SEGMENT: the normalized left-oriented vector normal to the edge is
+          calculated. Its X-Y components are used to determine a point
+          slightly to the left of a point positioned at the middle of the
+          segment.
+
+        Parameters
+        ----------
+        epsilon : float
+            Indicating a value small enough to determine a point to the left
+            of the edge
+
+        Returns
+        -------
+        A vertex object representing a point slightly to the left of the
+        middle point of the edge.
         """
         if self.kind == "CIRCLE":
             # Extract the X-Y-Z coordinates of the circle center
@@ -224,9 +250,9 @@ class Edge():
             # distance from the starting point of the circle
             return make_vertex((xc+radius-epsilon, yc, zc))
         if self.kind == "ARC_CIRCLE":
-            # Extract the X-Y-Z coordinates of the circle center the arc b
-            # elongs to
-            (xc, yc, zc) = self.data[1:4] # xc yc zc dx dy dz R x1 y1 z1 x2 y2 z2
+            # Extract the X-Y-Z coordinates of the circle center the arc
+            # belongs to
+            (xc, yc, zc) = self.data[1:4]
             # Extract the radius of the arc
             radius = self.data[7]
             # Build a GEOM point on the arc, positioned at its middle
@@ -242,18 +268,18 @@ class Edge():
             return make_vertex((xc + vm[0], yc + vm[1], zc))
         if self.kind == "SEGMENT":
             # Extract the X-Y-Z coordinates of the extremes of the segment
-            (x1, y1, z1, x2, y2, _) = self.data[1:7] # x1 y1 z1 x2 y2 z2
+            (x1, y1, z1, x2, y2, _) = self.data[1:7]
             # Build a GEOM point on the segment, positioned at its middle
             pm = make_vertex_on_curve(self.edge, 0.5)
             # Get the X-Y-Z coordinates of the point
             coord = get_point_coordinates(pm)
-            # Define the normal of the segment oriented to the left of the
-            # segment
+            # Define the left-oriented normal vector of the segment
             n = ((y1 - y2), (x2 - x1))
             # Get the length of the normal vector
             l = math.sqrt(n[0]*n[0] + n[1]*n[1])
             # Get the coordinates of a point positioned at a distance epsilon
-            # from the segment along its normal
+            # from the segment along its left-oriented normalized normal
+            # vector
             (xm, ym) = ((coord[0] + epsilon*n[0]/l),
                         (coord[1] + epsilon*n[1]/l))
             # Build a GEOM point positioned at the calculated coordinates
