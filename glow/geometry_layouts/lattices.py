@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Set, Tuple, Union
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
 from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
     Rectangle, build_hexagon
-from glow.geometry_layouts.utility import build_compound_borders, \
+from glow.geometry_layouts.utility import build_compound_borders, translate_wrt_reference, \
     update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, \
@@ -1254,11 +1254,8 @@ class Lattice():
         if self.symmetry_type != SymmetryType.FULL:
             # Update the compound position relative to the shifted lattice
             # center and apply translation
-            face_to_center = update_relative_pos(
-                make_cdg(self.lattice_symm), pre_center, new_pos)
-            self.lattice_symm = make_translation(
-                self.lattice_symm, make_vector_from_points(
-                    make_cdg(self.lattice_symm), make_vertex(face_to_center)))
+            self.lattice_symm = translate_wrt_reference(
+                self.lattice_symm, pre_center, new_pos)
 
         # Set the need to update the lattice geometry
         self.is_update_needed = True
