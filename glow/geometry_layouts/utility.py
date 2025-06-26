@@ -7,7 +7,7 @@ from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
   extract_sorted_sub_shapes, fuse_edges_in_wire, get_closed_free_boundary, \
-  get_inertia_matrix, get_point_coordinates, make_face, make_fuse
+  get_inertia_matrix, get_point_coordinates, make_cdg, make_face, make_fuse, make_translation, make_vector_from_points, make_vertex
 
 
 def build_compound_borders(cmpd: Any) -> List[Any]:
@@ -142,3 +142,36 @@ def get_principal_axis_angle(shape: Any) -> float:
     py = inertia_matrix[-2]
     # Return the rotation angle in degrees
     return math.degrees(math.atan2(py, px))
+
+
+def translate_wrt_reference(
+        shape: Any,
+        old_ref_point: Any,
+        new_ref_coords: Tuple[float, float, float]) -> Any:
+    """
+    Function that translates a geometric shape so that it keeps its relative
+    distance from a reference point, whose previous position is provided as
+    a vertex object, while its new position by means of its XYZ coordinates.
+
+    Parameters
+    ----------
+    shape : Any
+        The geometric shape to be translated
+    old_ref_point : Any
+        A vertex object identifying the previous reference point of the shape
+    new_ref_coords : Tuple[float, float, float]
+        The coordinates of the reference point for the shape after its
+        translation
+
+    Returns
+    -------
+    The given shape translated so that it keeps its relative distance from
+    the new reference point.
+    """
+    # Build a vertex identifying the shape CDG
+    cdg = make_cdg(shape)
+    # Get the shape's CDG coordinates so that the relative distance from
+    # the new reference point is kept the same
+    shape_to_center = update_relative_pos(cdg, old_ref_point, new_ref_coords)
+    return make_translation(
+        shape, make_vector_from_points(cdg, make_vertex(shape_to_center)))

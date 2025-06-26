@@ -9,16 +9,16 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Union, Self
 
-from glow.generator.support import BoundaryType, GeometryType, \
+from glow.generator.support import BoundaryType, CellType, GeometryType, \
     LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
-from glow.geometry_layouts.utility import build_compound_borders
-from glow.interface.geom_interface import ShapeType, \
+from glow.geometry_layouts.utility import build_compound_borders, translate_wrt_reference
+from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_common, \
-    make_compound, make_face, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, set_shape_name
+    make_compound, make_face, make_translation, make_vector_from_points, make_vertex, make_vertex_inside_face, \
+    make_vertex_on_curve, set_shape_name, update_salome_study
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -610,6 +610,13 @@ class LatticeDataExtractor():
     lattice_edges       : List[Any]
                           A list of the GEOM edge objects for the lattice
     """
+    # Identifying the symmetry types for each type of lattice cells for which
+    # the lattice translation should be evaluated
+    CASES_FOR_TRANSLATION = {
+        CellType.RECT: [SymmetryType.FULL, SymmetryType.HALF],
+        CellType.HEX: [SymmetryType.THIRD, SymmetryType.SIXTH]
+    }
+
     def __init__(self, lattice: Lattice, geom_type: GeometryType) -> None:
         # Initialize the instance attributes
         self.lattice: Lattice = lattice
@@ -803,6 +810,99 @@ class LatticeDataExtractor():
         print("\t# edges w/two faces :", n2)
         print("\t# edges w errors :", n0)
 
+    def __apply_lattice_elements_translation(
+            self,
+            lattice_cmpd: Any,
+            new_center: Tuple[float, float, float]) -> Any:
+        """
+        Method that translates the lattice regions and the given lattice
+        compound so that they are positioned according to the provided new
+        center.
+
+        If the current lattice center differs from the provided one, all
+        the regions of the lattice are translated so to keep their relative
+        distance from the translated lattice center. The same goes for the
+        provided lattice compound and the vertex object representing the
+        center of the stored `Lattice` instance.
+
+        Parameters
+        ----------
+        lattice_cmpd : Any
+            The lattice compound object to be translated
+        new_center : Tuple[float, float, float]
+            The coordinates for the new lattice center
+
+        Returns
+        -------
+        The translated lattice compound, or the same compound if the center
+        has not changed.
+        """
+        # Procede only if the lattice center has changed
+        if all(math.isclose(c, nc) for c, nc in zip(
+            get_point_coordinates(self.lattice.lattice_center), new_center)):
+            return lattice_cmpd
+        pre_center = self.lattice.lattice_center
+        # Rebuild the lattice center in the new position
+        self.lattice.lattice_center = make_vertex(new_center)
+        # Translate the regions of the lattice
+        for region in self.lattice.regions:
+            region.face = translate_wrt_reference(
+                region.face, pre_center, new_center)
+        # Translate the given lattice compound and return it
+        return translate_wrt_reference(
+            lattice_cmpd, pre_center, new_center)
+
+    def __evaluate_lattice_center(self) -> Tuple[float, float, float]:
+        """
+        Method that evaluates and returns the coordinates of the lattice
+        center so that the lower-left corner of the lattice is positioned
+        in the XYZ space origin.
+
+        The method constructs a face from the lattice's borders, extracts
+        its vertices, and determines the lower-left corner vertex based on
+        the minimum X, Y, and Z coordinates.
+        If the lower-left corner does not coincide with the XYZ space origin,
+        it computes and returns the coordinates the center should have so
+        that the lower-left corner is placed in the origin.
+        Otherwise, it returns the current lattice center coordinates.
+
+        Returns
+        -------
+        A tuple providing the coordinates of the lattice center so that the
+        lower-left corner coincides with the XYZ space origin.
+        """
+        # Get the lattice face vertices
+        lattice_vertices = extract_sub_shapes(make_face(self.borders),
+                                              ShapeType.VERTEX)
+        # Get the lower-left corner vertex as the one having the minimum value
+        # for the X-Y-Z coordinates
+        coords = [get_point_coordinates(p) for p in lattice_vertices]
+        lower_left = min(coords, key=lambda x: (x[0], x[1], x[2]))
+        # Check if the lower-left corner coincides with the XYZ origin; if
+        # not, evaluate the new lattice center to fulfill the condition
+        if any(not math.isclose(c, 0.0) for c in lower_left):
+            print("!!! Lower-left corner not in O")
+            # Return the coordinates of the new center
+            return (0.0 - lower_left[0]), (0.0 - lower_left[1]), 0.0
+        # Return the current lattice center
+        return get_point_coordinates(self.lattice.lattice_center)
+
+    def __get_lattice_compound(self) -> Any:
+        """
+        Method that returns the lattice compound that corresponds to the
+        currently applied symmetry type. It identifies either the full
+        lattice of a part of it, if any symmetry is applied.
+
+        Returns
+        -------
+          The lattice compound that corresponds to the currently applied
+          symmetry type.
+        """
+        lattice_cmpd = self.lattice.lattice_cmpd
+        if not self.lattice.symmetry_type == SymmetryType.FULL:
+            lattice_cmpd = self.lattice.lattice_symm
+        return lattice_cmpd
+
     def __get_unique_edges(
             self, subface_edge: Any, edge_id: str) -> List[Any]:
         """
@@ -871,6 +971,15 @@ class LatticeDataExtractor():
         """
         Method that initializes the information to be stored from the lattice
         according to the applied symmetry and the given geometry.
+        It re-builds the regions of the lattice according to the given
+        `GeometryType`, if it is needed or the indicated geometry type is
+        different from the one used to display them in the SALOME viewer.
+        This allows that analysis on the lattice is always performed on the
+        up to date regions.
+        In case the lattice falls in one of the cases identified by the
+        `CASES_FOR_TRANSLATION` attribute, its compound is translated together
+        with its regions and the center, so that the lower-left corner
+        coincides with the origin of the XYZ space.
 
         Parameters
         ----------
@@ -884,27 +993,23 @@ class LatticeDataExtractor():
             self.lattice.build_regions(geom_type)
         # Get the GEOM compound identifying either the full lattice of a part
         # of it, if a symmetry is applied
-        lattice_cmpd = self.lattice.lattice_cmpd
-        if not self.lattice.symmetry_type == SymmetryType.FULL:
-            lattice_cmpd = self.lattice.lattice_symm
-            # FIXME in case of cartesian-type lattice, it must be translated
-            # so that the left-most corner coincides with the XYZ origin
+        lattice_cmpd = self.__get_lattice_compound()
         # Extract the lattice borders
         self.borders = build_compound_borders(lattice_cmpd)
-        # Rebuild the lattice compound by performing a 'common' operation
-        # with the lattice face identified by its borders
-        lattice_face = make_face(self.borders)
-        lattice_cmpd = make_common(lattice_cmpd, lattice_face)
-
-        # Extract the lattice unique edges from the result of the common
-        # operation
-        self.lattice_edges = extract_sorted_sub_shapes(
-            lattice_cmpd, ShapeType.EDGE)
-        # Sort the list in terms of the distance of each element from the
-        # lattice center
-        self.lattice_edges.sort(
-            key=lambda item: get_min_distance(item,
-                                              self.lattice.lattice_center))
+        # Handle the lattice translation so that the lower-left corner is in
+        # the XYZ space origin; this is valid for specific symmetries and
+        # cells geometries
+        if self.lattice.symmetry_type in self.CASES_FOR_TRANSLATION[
+            self.lattice.cells_type]:
+            # Evaluate the new center of the lattice, if it has not been
+            # translated yet, and apply the translation to the regions
+            # and the lattice compound
+            lattice_cmpd = self.__apply_lattice_elements_translation(
+                lattice_cmpd, self.__evaluate_lattice_center())
+            # Re-evaluate the lattice borders
+            self.borders = build_compound_borders(lattice_cmpd)
+        # Extract the lattice edges from the lattice compound to analyse
+        self.lattice_edges = extract_sub_shapes(lattice_cmpd, ShapeType.EDGE)
 
     def __update_edge_face_association(
             self,
