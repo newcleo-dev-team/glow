@@ -4,6 +4,7 @@ information from the lattice built in SALOME. The functionalities in this
 module serve for preparing all the data for the output TDT file generation.
 """
 
+from copy import deepcopy
 import math
 
 from dataclasses import dataclass, field
@@ -12,13 +13,14 @@ from typing import Any, Dict, List, Tuple, Union, Self
 from glow.generator.support import BoundaryType, CellType, GeometryType, \
     LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
-from glow.geometry_layouts.utility import build_compound_borders, translate_wrt_reference
-from glow.interface.geom_interface import ShapeType, add_to_study, \
+from glow.geometry_layouts.utility import build_compound_borders, \
+    get_id_from_name, translate_wrt_reference
+from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
-    get_shape_name, get_shape_type, is_point_inside_shape, make_common, \
-    make_compound, make_face, make_translation, make_vector_from_points, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, set_shape_name, update_salome_study
+    get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
+    make_face, make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
+    set_shape_name
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -116,11 +118,11 @@ class Edge():
     def __init__(self, edge: Any, *faces: List[Face]):
         # Get the number of the edge directly from the name attribute of the
         # corresponding GEOM edge object
+        name = get_shape_name(edge)
         try:
-            self.no = int(get_shape_name(edge).split('_')[1])
+            self.no = get_id_from_name(name)
         except:
-            print(f"Error on edge: {get_shape_name(edge)}")
-            raise
+            raise RuntimeError(f"Error for edge: {name}")
 
         self.edge  = edge
         # Store all the information of the given GEOM edge object
@@ -324,45 +326,47 @@ class Boundary:
     Class that provides the data structure for a GEOM edge object being a
     border of the lattice.
 
+    Parameters
+    ----------
+    border : Any
+        A GEOM edge object representing a border of the lattice
+    type_geo : LatticeGeometryType
+        Providing the lattice type of geometry
+    lattice_o : Any
+        A vertex object representing the lattice center point
+    dimensions : Tuple[float, float]
+        The X-Y characteristic dimensions of the lattice the border refers to
+
     Attributes
     ----------
     border      : Any
                   A GEOM edge object representing a border of the lattice
     type        : BoundaryType
                   Providing the type of BCs
-    type_geo    : LatticeGeometryType
-                  Providing the lattice type of geometry
-    ox          : float
-                  X-coordinate of the border start point (origin)
-    oy          : float
-                  Y-coordinate of the border start point (origin)
     angle       : float
                   Angle (in degrees) of the border defined from its origin to
                   its second point, so that it is always positive
     edge_indxs  : List[int]
                   List of the indices of the edges the border is made of
-    lattice_o   : Any
-                  A vertex object representing the lattice origin
     tx          : float
                   The X-component of the border axis
     ty          : float
                   The Y-component of the border axis
     """
-    def __init__(self, border: Any, bc_type: BoundaryType,
-                 type_geo: LatticeGeometryType, lattice_o: Any) -> None:
+    def __init__(self,
+                 border: Any,
+                 type_geo: LatticeGeometryType,
+                 lattice_o: Any,
+                 dimensions: Tuple[float, float]) -> None:
         # Initialize instance attributes
+        self.type       : BoundaryType
         self.border     : Any = border
-        # FIXME the BC type should not be set when instantiating the class,
-        # but it depends on the 'LatticeGeometryType' value
-        self.type       : BoundaryType = bc_type
-        self.type_geo   : LatticeGeometryType = type_geo
-        self.ox         : Union[float, None] = None
-        self.oy         : Union[float, None] = None
         self.angle      : float = 0.0
         self.edge_indxs : List[int] = []
-        self.lattice_o  : Any = lattice_o
         self.tx         : float = 0.0
         self.ty         : float = 0.0
+        # Set the border characteristics in terms of type and border axis
+        self.__build_border_characteristics(*dimensions, lattice_o, type_geo)
 
     def get_bc_type_number(self) -> str:
         """
@@ -376,7 +380,12 @@ class Boundary:
         """
         return self.type.value
 
-    def __build_border_characteristics(self, lx: float, ly: float) -> None:
+    def __build_border_characteristics(
+            self,
+            lx: float,
+            ly: float,
+            lattice_o: Any,
+            type_geo: LatticeGeometryType) -> None:
         """
         Method that defines the characteristics of a lattice border that
         represents a boundary for the lattice itself.
@@ -391,42 +400,33 @@ class Boundary:
               The X-characteristic dimension of the lattice
         ly  : float
               The Y-characteristic dimension of the lattice
+        lattice_o : Any
+            Vertex object representing the lattice center point
         """
-        # Only the 'AXIAL_SYMMETRY', 'TRANSLATION' and 'VOID type of BC are
-        # handled
-        # print("BC TYPE =", self.type)
-        if self.type not in {BoundaryType.AXIAL_SYMMETRY,
-                             BoundaryType.TRANSLATION}:
-            # Raise an exception if a different BC type is provided
-            raise ValueError(f"The specified {self.type} BC type has not "
-                             "an implemented treatment.")
-        # Retrieve all the information from the GEOM edge object representing
-        # one of the lattice borders
-        data = get_kind_of_shape(self.border)
-        # Get the X-Y coordinates of the two points of the edge
-        self.ox, self.oy, _, x2, y2 = data[1:6]
+        # Get the X-Y coordinates of the two end points of the edge
+        x1, y1, _, x2, y2 = get_kind_of_shape(self.border)[1:6]
         # Calculate the X-Y distances between the start-end points
-        dx = x2 - self.ox
-        dy = y2 - self.oy
+        dx = x2 - x1
+        dy = y2 - y1
         # Calculate the angle of the border in degrees
-        self.angle = math.degrees(math.atan2(y2-self.oy, x2-self.ox))
+        self.angle = math.degrees(math.atan2(dy, dx))
 
         # The border origin must be defined so that the angle between
         # the start-end points is positive. If not, the edge start point
         # is inverted.
         if self.angle < -EPSILON or math.isclose(self.angle, 180.0):
-            self.angle = math.degrees(math.atan2(self.oy-y2, self.ox-x2))
-            self.ox = x2
-            self.oy = y2
+            self.angle = math.degrees(math.atan2(-dy, -dx))
+            x1 = x2
+            y1 = y2
 
         # Initialize the border axes to the edge start point
-        self.tx = self.ox
-        self.ty = self.oy
+        self.tx = x1
+        self.ty = y1
 
         # Assign the BC type depending on the lattice type of geometry. The
         # geometries identified by 'RECTANGLE_TRAN' and 'HEXAGON_TRAN' need
         # to re-evaluate the border axes.
-        match self.type_geo:
+        match type_geo:
             case (LatticeGeometryType.SYMMETRIES_TWO |
                   LatticeGeometryType.RECTANGLE_SYM |
                   LatticeGeometryType.RECTANGLE_EIGHT |
@@ -440,7 +440,7 @@ class Boundary:
                 # or 'TRANSLATION' types of BC, which correspond to the 'ROTA'
                 # or 'TRAN' cases respectively in DRAGON5. The position of the
                 # border wrt the lattice center guides the choice.
-                if get_min_distance(self.lattice_o, self.border) > 1e-7:
+                if get_min_distance(lattice_o, self.border) > 1e-7:
                     self.type = BoundaryType.TRANSLATION
                 else:
                     self.type = BoundaryType.ROTATION
@@ -502,14 +502,12 @@ class Boundary:
                 self.type = BoundaryType.TRANSLATION
             case _:
                 raise RuntimeError(
-                    f"The {self.type_geo} lattice geometry type is not "
+                    f"The {type_geo} lattice geometry type is not "
                     "currently handled.")
 
     def find_edges_on_border(self,
                              boundaries: Any,
-                             edge_name_vs_no: Dict[str, int],
-                             id_vs_edge: Dict[Any, str],
-                             dimensions: Tuple[float, float]) -> None:
+                             id_vs_edge: Dict[Any, str]) -> None:
         """
         Method that finds and associates all the GEOM edges related to the
         lattice border this instance refers to.
@@ -518,54 +516,28 @@ class Boundary:
 
         Parameters
         ----------
-        boundaries      : Any
-                          A GEOM compound object made from the list of GEOM
-                          edge objects representing the lattice boundaries
-        edge_name_vs_no : Dict[str, int]
-                          A dictionary of edge name VS its index
-        id_vs_edge      : Dict[Any, str]
-                          A dictionary of all the lattice edge IDs VS the
-                          corresponding GEOM edge objects
-        dimensions      : Tuple[float, float]
-                          The X-Y characteristic dimensions of the cell/lattice
+        boundaries : Any
+            A GEOM compound object made from the list of GEOM edge objects
+            belonging to the lattice boundaries
+        id_vs_edge : Dict[Any, str]
+            A dictionary of all the lattice edge IDs VS the corresponding
+            GEOM edge objects
         """
-        # Call the method for defining the border characteristics
-        # (origin and angle | axes)
-        self.__build_border_characteristics(*dimensions)
-        # Check if the boundary edge origin and its orientation angle have
-        # been defined correctly.
-        if (self.ox is None or self.oy is None):
-            raise AssertionError("No border line defined!")
-
-        # Build a GEOM compound object by extracting from the given lattice
-        # borders the shapes that coincide with the lattice border this class
-        # instance refers to or those that could be a part of it
-        subshapes = get_in_place(boundaries, self.border)
-
-        # print("\nboundaries = ", geompy.KindOfShape(boundaries))
-        # print("self.border = ", geompy.KindOfShape(self.border))
-        # print("len(subshapes) = ", len(geompy.SubShapeAllSortedCentres(subshapes, EDGE_TYPE)))
-
-        # Loop through all the border sub-shapes (as GEOM objects) of type edge
-        for shape in extract_sorted_sub_shapes(subshapes, ShapeType.EDGE):
+        # Loop through all the sub-edges that are part of the lattice border
+        # this class instance refers
+        for shape in extract_sorted_sub_shapes(
+            get_in_place(boundaries, self.border), ShapeType.EDGE):
             # Extract the shape type from all the information about the current
             # one
             shape_type = get_kind_of_shape(shape)[0]
             # Check the retrieved shape is of type 'SEGMENT'
             # TODO add support also for ARC_CIRCLE
             if str(shape_type) == 'SEGMENT':
-                # Build the edge ID
-                edge_id = build_edge_id(shape)
-                # Retrieve the GEOM edge object corresponding to the built ID
-                edge_ref = id_vs_edge[edge_id]
-                # Get the name attribute of the GEOM edge object
-                name = get_shape_name(edge_ref)
-
-                # print("@@@\nBorder", name, "ID", id, "no", edge_name_vs_no[name], "\n")
-                # name = geompy.SubShapeName(shape, partition)
-                # Append the edge number to the list
-                # FIXME the name contains the number -> extract from that??
-                self.edge_indxs.append(edge_name_vs_no[name])
+                # Retrieve the GEOM edge object corresponding to its ID
+                edge_ref = id_vs_edge[build_edge_id(shape)]
+                # Append the edge's global index number to the list
+                self.edge_indxs.append(
+                    get_id_from_name(get_shape_name(edge_ref)))
             else:
                 # Raise an exception if the found sub-shape type is not
                 # 'SEGMENT'
@@ -619,7 +591,7 @@ class LatticeDataExtractor():
 
     def __init__(self, lattice: Lattice, geom_type: GeometryType) -> None:
         # Initialize the instance attributes
-        self.lattice: Lattice = lattice
+        self.lattice: Lattice = deepcopy(lattice)
         self.borders: List[Any] = []
         self.lattice_edges: List[Any] = []
         self.boundaries: List[Boundary] = []
@@ -645,8 +617,6 @@ class LatticeDataExtractor():
             return
         # Initialize the list of 'Boundary' objects
         boundary_edges = []
-        # Initialize a dictionary of edge name VS its global index
-        edge_name_to_no = {}
 
         # Loop through all the stored 'Edge' objects
         print("LEN EDGES", len(self.edges))
@@ -656,26 +626,20 @@ class LatticeDataExtractor():
             if not edge.left or not edge.right:
                 # Append the corresponding GEOM edge object to the list
                 boundary_edges.append(edge.edge)
-                # Get the name attribute from the GEOM edge object
-                name = get_shape_name(edge.edge)
-                # Add the edge name-number entry to the dictionary
-                edge_name_to_no[name] = edge.no
 
-        # Loop through all the GEOM line objects representing the lattice edges
+        # Build a compound from all the edges placed on the lattice borders
+        boundary_edgs_cmpd = make_compound(boundary_edges)
+        # Loop through all the edge objects representing the lattice borders
         print("LEN BORDERS:", len(self.borders))
         for border in self.borders:
             # Build an object of the 'Boundary' class
             boundary = Boundary(border=border,
-                                bc_type=self.lattice.boundary_type,
                                 type_geo=self.lattice.type_geo,
-                                lattice_o=self.lattice.lattice_center)
-            boundary.find_edges_on_border(
-                make_compound(boundary_edges),
-                edge_name_to_no,
-                self.id_vs_edge,
-                (self.lattice.lx, self.lattice.ly))
+                                lattice_o=self.lattice.lattice_center,
+                                dimensions=(self.lattice.lx, self.lattice.ly))
+            # Store all the indices of the edges belonging to the border
+            boundary.find_edges_on_border(boundary_edgs_cmpd, self.id_vs_edge)
             # Append the built 'Boundary' object to the corresponding list
-            # print("  --> ", boundary.tx, boundary.ty, boundary.angle)
             self.boundaries.append(boundary)
 
     def build_edges(

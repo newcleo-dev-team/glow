@@ -7,7 +7,8 @@ from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
   extract_sorted_sub_shapes, fuse_edges_in_wire, get_closed_free_boundary, \
-  get_inertia_matrix, get_point_coordinates, make_cdg, make_face, make_fuse, make_translation, make_vector_from_points, make_vertex
+  get_inertia_matrix, get_point_coordinates, make_cdg, make_face, make_fuse, \
+  make_translation, make_vector_from_points, make_vertex
 
 
 def build_compound_borders(cmpd: Any) -> List[Any]:
@@ -175,3 +176,29 @@ def translate_wrt_reference(
     shape_to_center = update_relative_pos(cdg, old_ref_point, new_ref_coords)
     return make_translation(
         shape, make_vector_from_points(cdg, make_vertex(shape_to_center)))
+
+def get_id_from_name(name: str) -> int:
+    """
+    Function that extract the index of the shape whose name is provided.
+    The shape's name must be defined as `<name>_<id>`.
+
+    Parameters
+    ----------
+    name : str
+        The name of the shape in the SALOME viewer
+
+    Raises
+    ------
+    RuntimeError
+        If no integer index can be extracted from the given name
+
+    Returns
+    -------
+    An integer being the global index associated to the shape whose name
+    is given as input.
+    """
+    try:
+        return int(name.split('_')[1])
+    except:
+        raise RuntimeError("No index could be retrieved for the given "
+                           f"shape's name '{name}'.")
