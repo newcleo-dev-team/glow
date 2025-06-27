@@ -97,12 +97,10 @@ class Lattice():
         self.lattice_entry_id: Union[str, None] = None
         self.rings_no: int = 0
         self.distance: float = 0.0
-        # Set the variables related to the geometry and BC types according to
-        # the cells type
+        # Set the type of lattice geometry according to the cells' type
         self.type_geo: LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
-        self.boundary_type: BoundaryType = TYPEGEO_VS_BC[self.type_geo]
-        self.__configure_lattice_types(self.cells_type,
-                                       len(self.lattice_cells))
+        self.__configure_lattice_type(self.cells_type,
+                                      len(self.lattice_cells))
 
         self.symmetry_type: SymmetryType = SymmetryType.FULL # TODO Add method for setting
         # self.boundary_type: int = TYPEGEO_VS_BC[self.type_geo][0]  # TODO Add method for setting
@@ -418,7 +416,7 @@ class Lattice():
         if self.cells_rot == 0.0 and self.cells_type == CellType.HEX:
             self.lattice_box.rotate(90)
 
-    def __configure_lattice_types(self,
+    def __configure_lattice_type(self,
                                   cells_type: CellType,
                                   no_cells: int = 1) -> None:
         """
@@ -473,9 +471,6 @@ class Lattice():
                     # characterised by an hexagonal geometry type with
                     # translation on all sides
                     self.type_geo = LatticeGeometryType.HEXAGON_TRAN
-
-        # Set the BC type according to the geometry type
-        self.boundary_type: BoundaryType = TYPEGEO_VS_BC[self.type_geo][0]
 
     def add_cell(self,
                  cell_to_add: Cell,
@@ -538,8 +533,8 @@ class Lattice():
         # Add the cell to the list of lattice cells
         self.lattice_cells.append(cell)
         # Re-evaluate the types of the geometry and BCs
-        self.__configure_lattice_types(self.cells_type,
-                                       len(self.lattice_cells))
+        self.__configure_lattice_type(self.cells_type,
+                                      len(self.lattice_cells))
         # Log
         print("Number of lattice cells is", len(self.lattice_cells))
         print("Number of lattice rings is", self.rings_no)
@@ -599,8 +594,8 @@ class Lattice():
         if symmetry == SymmetryType.FULL:
             self.symmetry_type = SymmetryType.FULL
             # Re-evaluate the BC type according to the lattice
-            self.__configure_lattice_types(self.cells_type,
-                                           len(self.lattice_cells))
+            self.__configure_lattice_type(self.cells_type,
+                                          len(self.lattice_cells))
             # Update the lattice in the current SALOME study
             self.show()
             return
@@ -618,11 +613,6 @@ class Lattice():
                 raise AssertionError(
                     f"Unrecognized type '{self.cells_type}' for the lattice "
                     "cells.")
-
-        # Update the type of BCs
-        # FIXME how to handle the case where multiple BC types are associated
-        # to the same geometry type?? A method for setting it should be added
-        self.boundary_type = TYPEGEO_VS_BC[self.type_geo][0]
         # Update the lattice symmetry type
         self.symmetry_type = symmetry
 

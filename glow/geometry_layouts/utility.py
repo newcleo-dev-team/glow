@@ -7,7 +7,8 @@ from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
   extract_sorted_sub_shapes, fuse_edges_in_wire, get_closed_free_boundary, \
-  get_inertia_matrix, get_point_coordinates, make_cdg, make_face, make_fuse, make_translation, make_vector_from_points, make_vertex
+  get_inertia_matrix, get_point_coordinates, make_cdg, make_face, make_fuse, \
+  make_translation, make_vector_from_points, make_vertex
 
 
 def build_compound_borders(cmpd: Any) -> List[Any]:
