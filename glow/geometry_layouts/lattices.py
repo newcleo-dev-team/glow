@@ -98,7 +98,7 @@ class Lattice():
         self.rings_no: int = 0
         self.distance: float = 0.0
         # Set the type of lattice geometry according to the cells' type
-        self.type_geo: LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
+        self.__type_geo: LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
         self.__configure_lattice_type(self.cells_type,
                                       len(self.lattice_cells))
 
@@ -132,6 +132,35 @@ class Lattice():
 
         # Show the lattice in the current SALOME study
         self.show()
+
+    @property
+    def type_geo(self) -> LatticeGeometryType | None:
+        """
+        Get or set the lattice type of geometry as item of the enumeration
+        `LatticeGeometryType`.
+
+        Parameters
+        ----------
+        type_geo : LatticeGeometryType
+            Item of the enumeration `LatticeGeometryType` to set the lattice
+            type of geometry to
+
+        Returns
+        -------
+        LatticeGeometryType | None
+            Item of the enumeration `LatticeGeometryType` if get,
+            `None` if set.
+
+        Raises
+        ------
+        RuntimeError
+            Invalid type of geometry for the current lattice geometry layout.
+        """
+        return self.__type_geo
+
+    @type_geo.setter
+    def type_geo(self, type_geo: LatticeGeometryType) -> None:
+        self.set_type_geo(type_geo)
 
     def __evaluate_cells_rotation(self, cells: List[Cell]) -> float:
         """
@@ -454,23 +483,23 @@ class Lattice():
                 if no_cells > 1:
                     # Case of a lattice made of cartesian cells: this case is
                     # characterised by specular reflection on each side
-                    self.type_geo = LatticeGeometryType.RECTANGLE_SYM
+                    self.__type_geo = LatticeGeometryType.RECTANGLE_SYM
                 else:
                     # Only one cartesian cell is present: this case is
                     # characterised by an cartesian geometry type with
                     # translation on all sides
-                    self.type_geo = LatticeGeometryType.RECTANGLE_TRAN
+                    self.__type_geo = LatticeGeometryType.RECTANGLE_TRAN
             case CellType.HEX:
                 if no_cells > 1:
                     # Case of a lattice made of hexagonal cells: this case is
                     # characterised by an isotropic geometry type with VOID
                     # BCs.
-                    self.type_geo = LatticeGeometryType.ISOTROPIC
+                    self.__type_geo = LatticeGeometryType.ISOTROPIC
                 else:
                     # Only one hexagonal cell is present: this case is
                     # characterised by an hexagonal geometry type with
                     # translation on all sides
-                    self.type_geo = LatticeGeometryType.HEXAGON_TRAN
+                    self.__type_geo = LatticeGeometryType.HEXAGON_TRAN
 
     def add_cell(self,
                  cell_to_add: Cell,
@@ -644,7 +673,7 @@ class Lattice():
                 # Build the face object for extracting the lattice symmetry
                 face = self.__handle_rect_symmetry(b_box, 0)
                  # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.RECTANGLE_SYM
+                self.__type_geo = LatticeGeometryType.RECTANGLE_SYM
             case SymmetryType.QUARTER:
                 # ---------------------
                 # QUARTER symmetry case
@@ -652,7 +681,7 @@ class Lattice():
                 # Build the face object for extracting the lattice symmetry
                 face = self.__handle_rect_symmetry(b_box, 1)
                 # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.RECTANGLE_SYM
+                self.__type_geo = LatticeGeometryType.RECTANGLE_SYM
             case SymmetryType.EIGHTH:
                 # --------------------
                 # EIGHTH symmetry case
@@ -667,7 +696,7 @@ class Lattice():
                         0.0)),
                     make_vertex((b_box[1], b_box[3], 0.0))])
                 # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.RECTANGLE_EIGHT
+                self.__type_geo = LatticeGeometryType.RECTANGLE_EIGHT
             case _:
                 raise AssertionError(
                     f"The provided '{symmetry}' symmetry type is not "
@@ -703,7 +732,7 @@ class Lattice():
                 # Build the shape identifying the symmetry
                 face = self.__handle_third_symmetry()
                 # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.R120
+                self.__type_geo = LatticeGeometryType.R120
             case SymmetryType.SIXTH:
                 # ------------------
                 # SA60 symmetry case
@@ -711,7 +740,7 @@ class Lattice():
                 # Build the shape identifying the symmetry
                 face = self.__handle_sixth_symmetry()
                 # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.SA60
+                self.__type_geo = LatticeGeometryType.SA60
             case SymmetryType.TWELFTH:
                 # -----------------
                 # S30 symmetry case
@@ -719,7 +748,7 @@ class Lattice():
                 # Build the shape identifying the symmetry
                 face = self.__build_triangle_on_lattice(0.0, 1/12)
                 # Update the lattice type of geometry
-                self.type_geo = LatticeGeometryType.S30
+                self.__type_geo = LatticeGeometryType.S30
             case _:
                 raise AssertionError(
                     f"The provided '{symmetry}' symmetry type is not "
@@ -2120,7 +2149,7 @@ class Lattice():
                     "box."
                 )
         # Assign the lattice type of geometry
-        self.type_geo = type_geo
+        self.__type_geo = type_geo
 
 
 def get_compound_from_geometry(
