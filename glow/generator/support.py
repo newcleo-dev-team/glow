@@ -185,11 +185,11 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
         SymmetryType.THIRD : [
             LatticeGeometryType.SYMMETRIES_TWO, LatticeGeometryType.R120],
         SymmetryType.SIXTH : [
-            LatticeGeometryType.ISOTROPIC,
+            LatticeGeometryType.SYMMETRIES_TWO,
             LatticeGeometryType.SA60,
             LatticeGeometryType.RA60],
         SymmetryType.TWELFTH : [
-            LatticeGeometryType.ISOTROPIC, LatticeGeometryType.S30],
+            LatticeGeometryType.SYMMETRIES_TWO, LatticeGeometryType.S30],
     },
     CellType.RECT : {
         SymmetryType.FULL : [
