@@ -10,8 +10,8 @@ from typing import Any, Dict, List, Set, Tuple, Union
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
 from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
     Rectangle, build_hexagon
-from glow.geometry_layouts.utility import build_compound_borders, translate_wrt_reference, \
-    update_relative_pos
+from glow.geometry_layouts.utility import build_compound_borders, \
+    translate_wrt_reference, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_basic_properties, \
@@ -21,8 +21,8 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     make_partition, make_rotation, make_translation, make_vector_from_points, \
     make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
     remove_from_study, set_color_face, update_salome_study
-from glow.generator.support import GeometryType, LatticeGeometryType, \
-    PropertyType, SymmetryType, BoundaryType, CellType, TYPEGEO_VS_BC, \
+from glow.generator.support import CELL_VS_SYMM_VS_TYP_GEO, GeometryType, \
+    LatticeGeometryType, PropertyType, SymmetryType, CellType, TYPEGEO_VS_BC, \
     generate_unique_random_colors
 
 
@@ -2069,6 +2069,58 @@ class Lattice():
 
         # Set the need to update the lattice geometry
         self.is_update_needed = True
+
+    def set_type_geo(self, type_geo: LatticeGeometryType) -> None:
+        """
+        Method that sets the geometry type for the lattice, as item of the
+        `LatticeGeometryType` enumeration.
+        It checks if the provided geometry type is valid for the type of
+        cells of the lattice and the currently applied type of symmetry.
+        In case of types involving TRAN-type of BCs, the assignement is done
+        only if the lattice is either made by a single cell or if enclosed in
+        a box.
+        An exception is raised if the geometry type is not compatible.
+
+        Parameters
+        ----------
+        type_geo : LatticeGeometryType
+            The geometry type to set for the lattice.
+
+        Raises
+        ------
+        RuntimeError
+            If the given geometry type is not compatible with the type of
+            cells and applied symmetry type.
+        """
+        # Check if the given type of geometry is valid for the type of cells
+        # in the lattice and the currently applied type of symmetry.
+        try:
+            # Get the list of types of geometry available for the lattice
+            types_geo = CELL_VS_SYMM_VS_TYP_GEO[self.cells_type][
+                self.symmetry_type]
+            if type_geo not in types_geo:
+                raise KeyError
+        except KeyError:
+            raise RuntimeError(
+                f"The given type of geometry '{type_geo}' is not compatible "
+                "with the type of cells of the lattice (i.e. "
+                f"'{self.cells_type}') and the applied symmetry type '"
+                f"{self.symmetry_type}'. Expected values are {types_geo}.")
+
+        # Check if the given type of geometry is compatible with the lattice
+        # layout; types involving TRAN-type of BCs can be applied only if the
+        # lattice has either a single cell or is enclosed in a box
+        if type_geo in [LatticeGeometryType.HEXAGON_TRAN,
+                        LatticeGeometryType.RECTANGLE_TRAN]:
+            if len(self.lattice_cells) > 1 and self.lattice_box is None:
+                raise RuntimeError(
+                    f"The given type of geometry '{type_geo}' is not "
+                    "compatible with the current lattice geometry layout as "
+                    "made by more than one cell without being enclosed in a "
+                    "box."
+                )
+        # Assign the lattice type of geometry
+        self.type_geo = type_geo
 
 
 def get_compound_from_geometry(
