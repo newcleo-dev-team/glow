@@ -288,22 +288,23 @@ class Cell(ABC):
 
         Parameters
         ----------
-        radius    : float
-                    The radius of the circle to add
-        position  : Union[Tuple[float, float, float], None]
-                    The X-Y-Z coordinates of the circle center to be added
-                    within the cell
+        radius : float
+            The radius of the circle to add
+        position : Union[Tuple[float, float, float], None]
+            The X-Y-Z coordinates of the center of the circle to add
         """
         # Check if the given radius is acceptable, i.e. the resulting
         # circle is within the cell
         self._check_radius_vs_cell_dim(radius)
+        # Set the position to the cell's center if none has been provided
+        if position is None:
+            position = get_point_coordinates(self.figure.o)
         # Check if there is already one circle in the cell with the same
-        # radius (with a 1e-10 tolerance) and same center position
-        if self.__check_circle_presence(radius):
+        # radius and same center position
+        if self.__check_circle_presence(radius, position) is not None:
             raise RuntimeError(
                 f"Another circle with the same radius '{radius}' and in the "
-                f"same posizion '{position if position else (0, 0, 0)}' is "
-                "already present.")
+                f"same posizion '{position}' is already present.")
         # Build a 'Circle' object and add it to the cell
         self.__add_circle_to_pos(Circle(center=position, radius=radius))
 
@@ -352,7 +353,10 @@ class Cell(ABC):
         # operation is not performed.
         self.__reapply_sectorization(True)
 
-    def remove_circle(self, radius: float = 1.0) -> None:
+    def remove_circle(
+            self,
+            radius: float,
+            position: Union[Tuple[float, float, float], None] = None) -> None:
         """
         Method that allows to remove a cell-centered circle from the cell
         technological geometry, given the radius.
@@ -366,32 +370,34 @@ class Cell(ABC):
 
         Parameters
         ----------
-        radius  : float
-                  The radius of the circle to remove
+        radius : float
+            The radius of the circle to remove
+        position : Union[Tuple[float, float, float], None]
+            The X-Y-Z coordinates of the center of the circle to remove
         """
-        # TODO instead of passing the radius of the circle, which could result
-        # in problems as two circles can have the same radius but different
-        # positions, it should be better to retrieve the currently selected
-        # object in the SALOME viewer. A check on the actual presence of the
-        # circle among the stored ones in necessary, also because the selected
-        # object could not be a full circle but an annulus, whose external
-        # radius has to be retrieved.
+        # Raise an exception if no circles are present
         if not self.inner_circles:
             raise RuntimeError("No circles are present in the cell.")
-        # Retrieve the original cell face from the figure it is based on
-        self.face = self.figure.face
+        # Set the position to the cell's center if none has been provided
+        if position is None:
+            position = get_point_coordinates(self.figure.o)
         # Retrieve the index of the circle in the list of cell circles, if
         # any, but only among the cell centered ones
-        indx = self.__check_circle_presence(radius)
+        indx = self.__check_circle_presence(radius, position)
         if indx is None:
-            raise RuntimeError("No circle could be found within the cell for "
-                               f"the given radius '{radius}'")
+            raise RuntimeError(
+                "No circle could be found within the cell for the given "
+                f"radius '{radius}' and position '{position}'")
         # Remove the 'Circle' object from the list
         self.inner_circles.pop(indx)
-        # Re-build the partition between the face and the remaining circles
+        # Restore the cell's face to the surface it is based on
+        self.face = self.figure.face
+        # Re-build the partition between the face and the remaining circles,
+        # if any
         circle_faces = [circle.face for circle in self.inner_circles]
-        self.face = make_partition(
-            [self.face] + circle_faces, [], ShapeType.FACE)
+        if circle_faces:
+            self.face = make_partition(
+                [self.face] + circle_faces, [], ShapeType.FACE)
 
         # Associate each region of the cell technological geometry to its
         # properties
@@ -408,26 +414,21 @@ class Cell(ABC):
         not centered in the cell are excluded.
         This list is sorted according to the distance of each face from
         the cell center.
+
+        Returns
+        -------
+        A list of face objects belonging to the regions of the cell's
+        technological geometry that are centered in the cell's center.
         """
-        # List of face objects for cell-centered regions
-        centered_regions = []
-        # List containing the cell 'Circle' objects, filtered so that
-        # only the cell-centered ones are considered
-        centered_circles = self.get_centered_circles()
-        # Loop through all the regions of the cell technological geometry
-        for region in self.tech_geom_props:
-            # Continue with the next region if it is not cell-centered
-            if get_min_distance(make_cdg(region), self.figure.o) > 1e-5:
-                continue
-            # Check which 'Circle' object the current region refers to
-            for circle in centered_circles:
-                if is_point_inside_shape(make_vertex_inside_face(region),
-                                         circle.face):
-                    centered_regions.append(region)
-                    break
-            else:
-                # Store the region not having a corresponding 'Circle' object
-                centered_regions.append(region)
+        # Assemble the cell's figure with the cell's centered circles only
+        centered_regions = extract_sub_shapes(
+            make_partition(
+                [self.figure.face] + [
+                    c.face for c in self.get_centered_circles()],
+                [],
+                ShapeType.FACE),
+            ShapeType.FACE
+        )
         # Sort the regions according to the distance from the cell center
         return sorted(centered_regions,
             key=lambda item: get_min_distance(
@@ -518,17 +519,20 @@ class Cell(ABC):
         regions_dict.clear()
         regions_dict.update(support_dict)
 
-    def __check_circle_presence(self, radius: float) -> Union[int, None]:
+    def __check_circle_presence(
+            self, radius: float, position: Tuple[float, float, float]
+        ) -> Union[int, None]:
         """
         Method that loops through all the circles in the cell and checks
-        if there is one whose radius value is the same of the given input
-        positioned in the cell center.
+        whether there is another circle with the same radius at the same
+        indicated position.
 
         Parameters
         ----------
-        radius  : float
-                  The radius of the circle to look for in the list of
-                  circles of the cell
+        radius : float
+            The radius of the circle to look for
+        position : Tuple[float, float, float]
+            The XYZ coordinates of the center of the circle to look for
 
         Returns
         -------
@@ -537,9 +541,7 @@ class Cell(ABC):
         """
         for indx, circle in enumerate(self.inner_circles):
             if (math.isclose(circle.radius, radius) and
-                (get_point_coordinates(circle.o) ==
-                 get_point_coordinates(self.figure.o))
-                ):
+                get_point_coordinates(circle.o) == position):
                 return indx
         return None
 
@@ -789,8 +791,7 @@ class Cell(ABC):
         # Check the correctness of the lists storing the information for
         # performing the sectorization
         self.__check_sectorization_elements_len(
-            len([c.borders[0] for c in self.inner_circles
-                   if get_min_distance(c.o, self.figure.o) < 1e-5]) + 1,
+            len(self.__extract_cell_centered_faces()),
             len(sectors_no),
             len(angles))
         # Check the correctness of the number of sectors, as specific values
@@ -860,8 +861,7 @@ class Cell(ABC):
         # Extract a list of circles (as GEOM edge objects) from the stored
         # 'Circle' objects representing the circles centered in the cell
         # geometry
-        circles = [c.borders[0] for c in self.inner_circles
-                   if get_min_distance(c.o, self.figure.o) < 1e-5]
+        circles = [c.borders[0] for c in self.get_centered_circles()]
         # Declare the list storing all the cell sectorization edges
         edges = self.figure.borders + circles
 
@@ -1541,6 +1541,12 @@ class Cell(ABC):
         """
         Method that returns a list of the cell-centered `Circle` objects of
         the cell.
+
+        Returns
+        -------
+        List[Circle]:
+            A list of `Circle` objects whose centers coincide with the cell's
+            one.
         """
         return [circle for circle in self.inner_circles \
                 if get_min_distance(circle.o, self.figure.o) < 1e-5]
