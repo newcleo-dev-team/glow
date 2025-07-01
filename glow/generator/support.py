@@ -174,6 +174,40 @@ TYPEGEO_VS_BC : Dict[LatticeGeometryType, List[BoundaryType]] = {
     LatticeGeometryType.S30              : [BoundaryType.AXIAL_SYMMETRY]
 }
 
+
+# Dictionary associating for each type of cells, the valid combinations of
+# types of symmetry and lattice types of geometry
+CELL_VS_SYMM_VS_TYP_GEO : Dict[
+    CellType, Dict[SymmetryType, List[LatticeGeometryType]]] = {
+    CellType.HEX : {
+        SymmetryType.FULL : [
+            LatticeGeometryType.ISOTROPIC, LatticeGeometryType.HEXAGON_TRAN],
+        SymmetryType.THIRD : [
+            LatticeGeometryType.SYMMETRIES_TWO, LatticeGeometryType.R120],
+        SymmetryType.SIXTH : [
+            LatticeGeometryType.SYMMETRIES_TWO,
+            LatticeGeometryType.SA60,
+            LatticeGeometryType.RA60],
+        SymmetryType.TWELFTH : [
+            LatticeGeometryType.SYMMETRIES_TWO, LatticeGeometryType.S30],
+    },
+    CellType.RECT : {
+        SymmetryType.FULL : [
+            LatticeGeometryType.ISOTROPIC,
+            LatticeGeometryType.RECTANGLE_TRAN],
+        SymmetryType.HALF : [
+            LatticeGeometryType.SYMMETRIES_TWO,
+            LatticeGeometryType.RECTANGLE_SYM],
+        SymmetryType.QUARTER : [
+            LatticeGeometryType.SYMMETRIES_TWO,
+            LatticeGeometryType.RECTANGLE_SYM],
+        SymmetryType.EIGHTH : [
+            LatticeGeometryType.SYMMETRIES_TWO,
+            LatticeGeometryType.RECTANGLE_EIGHT],
+    }
+}
+
+
 RGB_COLORS = [(r, g, b) for r in range(0, 256, 10)
                         for g in range(0, 256, 10)
                         for b in range(0, 256, 10)]
