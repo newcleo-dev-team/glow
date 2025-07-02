@@ -1459,85 +1459,108 @@ class Lattice():
             return make_common(cmpd, self.__extract_inner_box())
         return cmpd
 
-    def add_ring_of_cells(self,
-                          cell: Cell,
-                          ring_indx: int,
-                          layer_indx: int | None = None) -> None:
+    def add_ring_of_cells(
+            self,
+            cell: Cell,
+            ring_indx: int,
+            layer_indx: int | None = None) -> None:
         """
-        Method that adds a ring of cells of the same type. The cell is
-        provided as an object of one of the 'Cell' subclasses, which
-        is iteratively added at specific construction points identified by
-        the given index of the lattice ring where the cells have to be added.
-        Additionaly, the layer index can be provided: it specifies to which
-        layer the ring of cells is added; if none, the cells are added to a
-        new layer.
+        Method that adds a ring of cells of the same type to the lattice at
+        a given ring index and layer.
+        This method iteratively adds the provided `Cell` object at specific
+        construction points determined by the `ring_indx` parameter, which
+        indicates the ring (distance from the center) where the cells should
+        be placed. Optionally, a `layer_indx` can be provided to specify the
+        layer to which the ring of cells is added; if not provided, the cells
+        are added to a new layer.
 
-        **N.B.** Index 0, means the center cell of the lattice, whereas
-        index greater than 0 indicates one of the rings of cells around
-        this center cell.
+        Notes
+        -----
+        - Index 0 refers to the center cell of the lattice (valid for lattices
+          with hexagonal cells or cartesian ones, the latter if an odd number
+          of cells is provided on the side); indices greater than 0 refer to
+          rings around the center.
+        - The method ensures that the cell to add has the same `CellType` of
+          the ones in the lattice.
 
         Parameters
         ----------
         cell : Cell
-            The cell instance to be iteratively added in order to build a
-            ring of cells
+            The `Cell` instance to be added repeatedly to form a ring
         ring_indx : int
-            The index indicating where the ring of cells should be added
+            The index indicating which ring to add the cells to
         layer_indx : int | None = None
-            Identifying the layer index where cells are added; if None, cells
-            are added to a new index
+            The index of the layer to which the cells are added. If None, a
+            new layer is created.
+
+        Raises
+        ------
+        RuntimeError
+        - If the cell's `CellType` does not match the one of the lattice
+          cells.
+        - If indicating `0` as the ring index where cells should be added.
+        - If the type of cells of the lattice is not supported.
         """
         # Check that the cell to add has the same type of the ones already
         # present
-        if cell.cell_type != self.cells_type:
-            raise AssertionError(
-                "The cell to add has a geometric surface type "
-                f"'{cell.cell_type}' which differs from the '"
-                f"{self.cells_type}' one of the lattice.")
+        if not self.cells_type:
+            self.cells_type = cell.cell_type
+        else:
+            if cell.cell_type != self.cells_type:
+                raise RuntimeError(
+                    "The cell to add has a geometric surface type "
+                    f"'{cell.cell_type}' which differs from the '"
+                    f"{self.cells_type}' one of the lattice.")
+        if ring_indx == 0:
+            raise RuntimeError(
+                "It is not possible to add a ring of cells at the indicated "
+                "0 index.")
         # If no layer index is provided, the ring of cells is added to a new
         # layer
         if layer_indx is None:
             layer_indx = len(self.layers)
             self.layers.append([])
-        # Handle the addition differently according to the type of lattice
-        # cells
+        # Evaluate the multiplication factor for determining the construction
+        # figure where the centers of the cells will be placed
+        for cell in self.lattice_cells:
+            if get_min_distance(cell.figure.o, self.lattice_center) < 1e-5:
+                n = 2*ring_indx
+                break
+        else:
+            n = 2*ring_indx - 1
+        # Build the construction figure accordingly with the type of lattice
+        # cells (either a rectangle or a hexagon figure)
         match self.cells_type:
             case CellType.RECT:
-                # Build a construction rectangle where cartesian cells have
-                # to be placed along its edges
                 construction_fig = Rectangle(
                     get_point_coordinates(self.lattice_center),
-                    2*cell.figure.ly * ring_indx,
-                    2*cell.figure.lx * ring_indx)
-                # Parameter for identifying the subdivision points
-                sbdv_param = 2
+                    n*cell.figure.ly,
+                    n*cell.figure.lx)
+                # Rotate by 90° the construction figure if the cells have
+                # a rotation angle of 90°
+                if math.isclose(90.0, self.cells_rot):
+                    construction_fig.rotate(90.0)
             case CellType.HEX:
-                # Build a construction hexagon where hexagonal cells have to
-                # be placed along its edges. Use the 'ly' attribute as it
-                # identifies the hexagon apothem
                 construction_fig = Hexagon(
                     get_point_coordinates(self.lattice_center),
-                    2*cell.figure.ly * ring_indx)
-                # Rotate the construction hexagon if the lattice is rotated
-                # by 90°
-                if math.isclose(0.0,
-                                math.degrees(self.lattice_cells[0].rotation)):
+                    n*cell.figure.ly)
+                # Rotate by 90° the construction figure if the cells have
+                # a rotation angle of 0°
+                if math.isclose(0.0, self.cells_rot):
                     construction_fig.rotate(90.0)
                 # Parameter for identifying the subdivision points
-                sbdv_param = 1
+                n = int(n/2)
             case _:
                 raise RuntimeError(f"The {self.cells_type} is not handled.")
-
         # Loop through the borders of the construction figure and place a
         # cell on each subdivision point, given by the ring index and the
         # subdivision parameter
         for border in construction_fig.borders:
-            # Build a subdivision point onto the figure borders
-            for i in range(0, sbdv_param*ring_indx):
-                p = make_vertex_on_curve(border, i/(sbdv_param*ring_indx))
+            for i in range(0, n):
+                # Build a subdivision point onto the figure borders
+                p = get_point_coordinates(make_vertex_on_curve(border, i/(n)))
                 # Add the cell at the position of the subdivision point
-                self.__add_cell_to_layer(
-                    cell, get_point_coordinates(p), layer_indx)
+                self.__add_cell_to_layer(cell, p, layer_indx)
         # Set the need to update the lattice geometry
         self.is_update_needed = True
 
