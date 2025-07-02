@@ -157,6 +157,23 @@ class PropertyType(Enum):
     # FIXME add other types
 
 
+class TrackingType(Enum):
+    """
+    Enumeration for defining the type of tracking to be applied
+    to the geometry layout of the lattice when performing a MoC
+    calculation in DRAGON 5.
+
+    Attributes
+    ----------
+    TISO : int = 0
+        Identifying an isotropic tracking
+    TSPC : int = 1
+        Identifying a cyclic tracking
+    """
+    TISO : int = 0
+    TSPC : int = 1
+
+
 # Dictionary associating the compatible BC type to the lattice type of
 # geometry
 TYPEGEO_VS_BC : Dict[LatticeGeometryType, List[BoundaryType]] = {
