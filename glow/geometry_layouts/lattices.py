@@ -464,34 +464,41 @@ class Lattice():
                     # translation on all sides
                     self.__type_geo = LatticeGeometryType.HEXAGON_TRAN
 
-    def add_cell(self,
-                 cell_to_add: Cell,
-                 position: Tuple[float, float, float]) -> None:
+    def add_cell(
+            self,
+            cell: Cell,
+            position: Tuple[float, float, float]) -> None:
         """
         Method that allows to add a new cell to the lattice at the specified
         position. The cell is added to a new layer.
 
         Parameters
         ----------
-        cell_to_add   : Cell
-                        A cell to add to the current lattice, as object of
-                        the 'Cell' subclasses
-        position      : Tuple[float, float, float]
-                        The X-Y-Z coordinates of the position where the cell
-                        should be added, i.e. the cell center should be placed
-                        at those coordinates. If the tuple is empty, the cell
-                        is placed at the position indicated by its center
+        cell : Cell
+            A cell to add to the current lattice, as object of the 'Cell'
+            subclasses.
+        position : Tuple[float, float, float]
+            The X-Y-Z coordinates of the position where the cell should be
+            added, i.e. the cell center should be placed at those coordinates.
+            If the tuple is empty, the cell is placed at the position
+            indicated by its center.
+
+        Raises
+        ------
+        RuntimeError
+            If the cell to add has a `CellType` which differs from the one
+            of the cells in the lattice.
         """
-        # Check that the added cell has the same type of the others
-        if cell_to_add.cell_type != self.cells_type:
-            raise AssertionError(
-                "The cell to add has a geometry type "
-                f"'{cell_to_add.cell_type}' which differs from the '"
-                f"{self.cells_type}' one of the lattice.")
+        try:
+            # Check that the cell to add has the same type of the ones already
+            # present
+            self.__check_cell_type(cell.cell_type)
+        except RuntimeError as e:
+            raise RuntimeError(f"Error when adding a cells: {e}")
         # Initialize a new sub list identifying a new layer of cells
         self.layers.append([])
         # Add the cell to the newly created layer
-        self.__add_cell_to_layer(cell_to_add, position, len(self.layers)-1)
+        self.__add_cell_to_layer(cell, position, len(self.layers)-1)
         # Set the need to update the lattice geometry
         self.is_update_needed = True
 
@@ -1501,20 +1508,17 @@ class Lattice():
         - If indicating `0` as the ring index where cells should be added.
         - If the type of cells of the lattice is not supported.
         """
-        # Check that the cell to add has the same type of the ones already
-        # present
-        if not self.cells_type:
-            self.cells_type = cell.cell_type
-        else:
-            if cell.cell_type != self.cells_type:
+        try:
+            # Check that the cell to add has the same type of the ones already
+            # present
+            self.__check_cell_type(cell.cell_type)
+            # Check the validity of the indicated ring index
+            if ring_indx == 0:
                 raise RuntimeError(
-                    "The cell to add has a geometric surface type "
-                    f"'{cell.cell_type}' which differs from the '"
-                    f"{self.cells_type}' one of the lattice.")
-        if ring_indx == 0:
-            raise RuntimeError(
-                "It is not possible to add a ring of cells at the indicated "
-                "0 index.")
+                    "It is not possible to add a ring of cells at the "
+                    "indicated 0 index.")
+        except RuntimeError as e:
+            raise RuntimeError(f"Error when adding a ring of cells: {e}")
         # If no layer index is provided, the ring of cells is added to a new
         # layer
         if layer_indx is None:
@@ -1563,6 +1567,35 @@ class Lattice():
                 self.__add_cell_to_layer(cell, p, layer_indx)
         # Set the need to update the lattice geometry
         self.is_update_needed = True
+
+    def __check_cell_type(self, cell_type: CellType):
+        """
+        Method that checks the consistency of the given cell type with the
+        one associated to the lattice cells.
+
+        If the lattice does not yet have a defined cell type, it is set to
+        the provided one. If the cell type for the lattice is defined, an
+        exception is raised if the provided one differs from it.
+
+        Parameters
+        ----------
+        cell_type : CellType
+            The geometric type of the cell to check or set.
+
+        Raises
+        ------
+        RuntimeError
+            If the provided `cell_type` does not match the existing lattice
+            cell type.
+        """
+        # Store the value, if not already set
+        if not self.cells_type:
+            self.cells_type = cell_type
+        else:
+            if cell_type != self.cells_type:
+                raise RuntimeError(
+                    f"The geometric type '{cell_type}' differs from the "
+                    f"'{self.cells_type}' one of the cells in the lattice.")
 
     def add_rings_of_cells(self, cell: Cell, no_rings: int) -> None:
         """
