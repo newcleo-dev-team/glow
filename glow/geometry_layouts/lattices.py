@@ -8,8 +8,8 @@ from copy import deepcopy
 from typing import Any, Dict, List, Set, Tuple, Union
 
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
-    Rectangle, build_hexagon
+from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, \
+    build_hexagon
 from glow.geometry_layouts.utility import build_compound_borders, \
     translate_wrt_reference, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
@@ -73,7 +73,7 @@ class Lattice():
         self.lattice_center: Any = self.__evaluate_lattice_center(cells,
                                                                   center)
         self.cells_type: CellType | None = None
-        self.cells_rot: float = 0.0
+        self.__cells_rot: float | None = None
         self.lattice_cells: List[Cell] = deepcopy(cells)
         self.layers: List[List[Cell]] = [deepcopy(self.lattice_cells)]
         self.name: str = name
@@ -93,6 +93,60 @@ class Lattice():
 
         # Update the instance attributes if any cells are provided
         self.__update_attributes(cells)
+
+    @property
+    def cells_rot(self) -> float | None:
+        """
+        Get or set the common rotation angle of the cells belonging to the
+        main pattern of cells in the lattice.
+
+        Parameters
+        ----------
+        cells_rot : float
+            The rotation angle of the cells belonging to the main pattern
+            of cells in the lattice.
+
+        Returns
+        -------
+        float | None
+            The rotation angle of the cells belonging to the main pattern
+            of cells.
+        """
+        return self.__cells_rot
+
+    def __get_main_pattern_rotation(self, new_val: float | None) -> float:
+        """
+        Method that determines the rotation angle (in degrees) of the cells
+        representing the main pattern in the lattice, i.e. the most common
+        value among the cells.
+
+        Parameters
+        ----------
+        new_val : float
+            An additional value of rotation angle to update the collection
+            with.
+
+        Returns
+        -------
+        float
+            The rotation angle (in degrees) of the cells representing the
+            main pattern in the lattice.
+        """
+        # Associate to each different rotation angle its frequency
+        val_no: Dict[float, int] = {}
+        for cell in self.lattice_cells:
+            rot = math.degrees(cell.rotation)
+            if rot in val_no:
+                val_no[rot] += 1
+            else:
+                val_no[rot] = 1
+        # Eventually update the dictionary with the given value
+        if new_val != None and new_val in val_no:
+            val_no[new_val] += 1
+        elif new_val != None and new_val not in val_no:
+            val_no[new_val] = 1
+        # Return the rotation angle value of the main pattern of cells
+        return max(val_no, key=val_no.get)
 
     @property
     def type_geo(self) -> LatticeGeometryType | None:
@@ -151,11 +205,27 @@ class Lattice():
             raise RuntimeError("The given cells do not share the same "
                                "rotation angle.")
         # Check if the rotation angle of the cells is valid
+        self.__check_cell_rotation_validity(cell_rot)
+        # Return the rotation angle of all the cells
+        return cell_rot
+
+    def __check_cell_rotation_validity(self, cell_rot: float) -> None:
+        """
+        Method that checks if the provided cell rotation angle is valid.
+
+        Parameters
+        ----------
+        cell_rot : float
+            The rotation angle of the cell to validate.
+
+        Raises
+        ------
+        RuntimeError
+            If the provided cell rotation angle is not among the valid ones.
+        """
         if not cell_rot in self.VALID_CELLS_ANGLES:
             raise RuntimeError("Cells can only have any of the "
                                f"{self.VALID_CELLS_ANGLES}° rotation angles")
-        # Return the rotation angle of all the cells
-        return cell_rot
 
     def __evaluate_lattice_center(
             self,
@@ -405,7 +475,7 @@ class Lattice():
         self.lattice_box.update_geometry_from_face(GeometryType.TECHNOLOGICAL,
                                                    box_face)
         # Rotate the box so to enclose the lattice (hexagonal lattice only)
-        if self.cells_rot == 0.0 and self.cells_type == CellType.HEX:
+        if self.__cells_rot == 0.0 and self.cells_type == CellType.HEX:
             self.lattice_box.rotate(90)
 
     def __configure_lattice_type(self,
@@ -486,13 +556,17 @@ class Lattice():
         Raises
         ------
         RuntimeError
-            If the cell to add has a `CellType` which differs from the one
+          - If the cell to add has a `CellType` which differs from the one
             of the cells in the lattice.
+          - If the cell to add has an invalid rotation angle.
         """
         try:
             # Check that the cell to add has the same type of the ones already
             # present
             self.__check_cell_type(cell.cell_type)
+            # Check the validity of the cell's rotation angle and update the
+            # value representative of the main pattern of cells
+            self.__set_main_rotation_angle(math.degrees(cell.rotation))
         except RuntimeError as e:
             raise RuntimeError(f"Error when adding a cells: {e}")
         # Initialize a new sub list identifying a new layer of cells
@@ -501,6 +575,24 @@ class Lattice():
         self.__add_cell_to_layer(cell, position, len(self.layers)-1)
         # Set the need to update the lattice geometry
         self.is_update_needed = True
+
+    def __set_main_rotation_angle(self, cell_rot: float) -> None:
+        """
+        Method that sets the rotation angle of the main pattern of cells
+        in the lattice based on the provided cell rotation.
+        The rotation angle of the given cell is assessed first and the
+        rotation angle of the main pattern of cells re-evaluated by taking
+        into account also for the given value.
+
+        Parameters
+        ----------
+        cell_rot : float
+            The rotation angle, in degrees, to be evaluated.
+        """
+        # Check the validity of the cell's rotation angle
+        self.__check_cell_rotation_validity(cell_rot)
+        # Update the rotation angle of the main pattern of cells
+        self.__cells_rot = self.__get_main_pattern_rotation(cell_rot)
 
     def __add_cell_to_layer(
             self, cell: Cell, position: Tuple[float], layer_indx: int) -> None:
@@ -564,11 +656,11 @@ class Lattice():
             # Update the number of rings in the lattice only if the new
             # distance is greater than the maximum one for the current ring
             # number; this distance depends on the cells rotation.
-            if math.isclose(self.cells_rot, 0.0):
+            if math.isclose(self.__cells_rot, 0.0):
                 # The distance is calculated using the cells characteristic
                 # dimension along the X-axis
                 ring_dist = 2*self.lx * self.rings_no
-            elif math.isclose(self.cells_rot, 90.0):
+            elif math.isclose(self.__cells_rot, 90.0):
                 # The distance is calculated using the cells characteristic
                 # dimension along the Y-axis
                 ring_dist = 2*self.ly * self.rings_no
@@ -765,15 +857,15 @@ class Lattice():
         -------
         A face object representing the sixth symmetry shape.
         """
-        if self.cells_rot == 0.0:
+        if self.__cells_rot == 0.0:
             # Build the triangle identifying the symmetry type
             return self.__build_triangle_on_lattice(1/12, 1 - 1/12)
-        elif self.cells_rot == 90.0:
+        elif self.__cells_rot == 90.0:
             # Build the triangle identifying the symmetry type
             return self.__build_triangle_on_lattice(2/3, 5/6)
         else:
             raise AssertionError("The cells rotation of "
-                                  f"{self.cells_rot}° is not admitted.")
+                                  f"{self.__cells_rot}° is not admitted.")
 
     def __handle_rect_symmetry(
             self, b_box: List[float], param: float) -> Any:
@@ -824,13 +916,13 @@ class Lattice():
         -------
         A face object representing the third symmetry shape.
         """
-        if self.cells_rot == 0.0:
+        if self.__cells_rot == 0.0:
             points = self.__build_vertices([1/4, 7/12, 2/3])
-        elif self.cells_rot == 90.0:
+        elif self.__cells_rot == 90.0:
             points = self.__build_vertices([0, 1-1/6, 1-1/3])
         else:
             raise AssertionError(
-                f"The cells rotation of {self.cells_rot}° is not admitted.")
+                f"The cells rotation of {self.__cells_rot}° is not admitted.")
         # Return a face built from the vertices
         return self.__build_face_from_vertices(points)
 
@@ -1506,6 +1598,7 @@ class Lattice():
         - If the cell's `CellType` does not match the one of the lattice
           cells.
         - If indicating `0` as the ring index where cells should be added.
+        - If the cell to add has an invalid rotation angle.
         - If the type of cells of the lattice is not supported.
         """
         try:
@@ -1517,6 +1610,9 @@ class Lattice():
                 raise RuntimeError(
                     "It is not possible to add a ring of cells at the "
                     "indicated 0 index.")
+            # Check the validity of the cell's rotation angle and update the
+            # value representative of the main pattern of cells
+            self.__set_main_rotation_angle(math.degrees(cell.rotation))
         except RuntimeError as e:
             raise RuntimeError(f"Error when adding a ring of cells: {e}")
         # If no layer index is provided, the ring of cells is added to a new
@@ -1542,7 +1638,7 @@ class Lattice():
                     n*cell.figure.lx)
                 # Rotate by 90° the construction figure if the cells have
                 # a rotation angle of 90°
-                if math.isclose(90.0, self.cells_rot):
+                if math.isclose(90.0, self.__cells_rot):
                     construction_fig.rotate(90.0)
             case CellType.HEX:
                 construction_fig = Hexagon(
@@ -1550,7 +1646,7 @@ class Lattice():
                     n*cell.figure.ly)
                 # Rotate by 90° the construction figure if the cells have
                 # a rotation angle of 0°
-                if math.isclose(0.0, self.cells_rot):
+                if math.isclose(0.0, self.__cells_rot):
                     construction_fig.rotate(90.0)
                 # Parameter for identifying the subdivision points
                 n = int(n/2)
@@ -2189,7 +2285,7 @@ class Lattice():
                 "The lattice presents cells with different geometry types.")
         # Check if the rotation angle of the given cells is the same for all.
         # If so, store the value.
-        self.cells_rot = self.__evaluate_cells_rotation(cells)
+        self.__cells_rot = self.__evaluate_cells_rotation(cells)
         # Set the lattice type of geometry according to the cells' type and
         # the number of cells
         self.__configure_lattice_type(self.cells_type,
