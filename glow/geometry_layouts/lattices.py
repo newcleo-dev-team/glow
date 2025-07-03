@@ -422,27 +422,28 @@ class Lattice():
 
     def __build_lattice_box_type(self) -> None:
         """
-        Method that builds the lattice box as an instance of the 'Cell'
-        class, which is stored as an instance attribute.
+        Method that builds the lattice box as an instance of the `Cell` class.
         The container geometry is built accordingly with the type of geometry
         of the cells in the lattice.
         Either a rectangle or a hexagon is built for each layer of the box and
         a partition with all the figures that make up the box is performed.
-        Either a 'RectCell' or a 'HexCell' is built for the lattice box and
-        with its face updated with the figure one built herein.
+        The lattice box is instantiated either as a `RectCell` or a `HexCell`
+        and its face updated with the figure built herein.
         """
         # Declare a list storing the geometrical figures that constitute
         # the box
-        box_surfaces: List[GenericSurface] = []
+        box_surfaces: List[Surface] = []
         center = get_point_coordinates(self.lattice_center)
+        # Get the bounding box of the lattice
+        x_min, x_max, y_min, y_max = get_bounding_box(
+            make_compound([cell.face for cell in self.lattice_cells]))
         # Build the container for the lattice according to the cells geometry
         # type
         match self.cells_type:
             case CellType.RECT:
                 # Declare the starting dimensions of the box
-                height = self.lattice_cells[0].figure.ly*(2*self.rings_no + 1)
-                width = self.lattice_cells[0].figure.lx*(2*self.rings_no + 1)
-
+                height = y_max - y_min
+                width = x_max - x_min
                 # Build a rectangle for each layer
                 for thick in self.box_layers:
                     height += 2*thick
@@ -455,10 +456,12 @@ class Lattice():
                 self.lattice_box = RectCell(center, (height, width))
             case CellType.HEX:
                 # Calculate the apothem of the hexagon enclosing the lattice
-                box_apothem = 0.5 * self.lattice_cells[0].figure.lx * (
-                    math.cos(math.pi/3) + (1 + math.cos(math.pi/3)) *
-                    (1 + self.rings_no*2))
-
+                # according to the valid rotation angles of the cells (0° or
+                # 90°)
+                if math.isclose(self.__cells_rot, 0.0):
+                    box_apothem = 0.5 * (x_max - x_min)
+                else:
+                    box_apothem = 0.5 * (y_max - y_min)
                 # Build a hexagon for each layer
                 for thick in self.box_layers:
                     box_apothem += thick
