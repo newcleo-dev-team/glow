@@ -1622,12 +1622,16 @@ class Lattice():
             self.layers.append([])
         # Evaluate the multiplication factor for determining the construction
         # figure where the centers of the cells will be placed
-        for cell in self.lattice_cells:
-            if get_min_distance(cell.figure.o, self.lattice_center) < 1e-5:
-                n = 2*ring_indx
-                break
+        if not cell.cell_type == CellType.HEX:
+            for cell in self.lattice_cells:
+                if get_min_distance(cell.figure.o,
+                                    self.lattice_center) < 1e-5:
+                    n = 2*ring_indx
+                    break
+            else:
+                n = 2*ring_indx - 1
         else:
-            n = 2*ring_indx - 1
+            n = 2*ring_indx
         # Build the construction figure accordingly with the type of lattice
         # cells (either a rectangle or a hexagon figure)
         match self.cells_type:
