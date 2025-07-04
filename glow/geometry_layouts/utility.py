@@ -6,9 +6,47 @@ import math
 from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
-  extract_sorted_sub_shapes, fuse_edges_in_wire, get_closed_free_boundary, \
-  get_inertia_matrix, get_point_coordinates, make_cdg, make_face, make_fuse, \
+  extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
+  get_closed_free_boundary, get_inertia_matrix, get_point_coordinates, \
+  get_shape_type, make_cdg, make_cut, make_face, make_fuse, \
   make_translation, make_vector_from_points, make_vertex
+
+
+def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
+    """
+    Function that determines whether two shapes are the same based on a cut
+    operation and the shape type.
+
+    Parameters
+    ----------
+    shape1 : Any
+        The first shape to compare.
+    shape2 : Any
+        The second shape to compare.
+    shapes_type : ShapeType
+        The type of sub-shapes to check for after the cut operation.
+
+    Returns
+    -------
+    bool:
+        True if the two shapes are considered the same (i.e., the cut result
+        does not contain any sub-shapes of the specified type), False
+        otherwise.
+
+    Raises
+    ------
+    RuntimeError: If the two shapes are not of the same type.
+    """
+    # Check whether the two shapes have the same type
+    if get_shape_type(shape1) != get_shape_type(shape2):
+        raise RuntimeError("Shapes not compatible")
+    # Perform a cut operation
+    cut = make_cut(shape1, shape2)
+    # If they are the same shape, the cut result must be a compound that
+    # have no shapes of the indicated type
+    if get_shape_type(cut) != ShapeType.COMPOUND:
+        return False
+    return len(extract_sub_shapes(cut, shapes_type)) == 0
 
 
 def build_compound_borders(cmpd: Any) -> List[Any]:
@@ -179,7 +217,7 @@ def translate_wrt_reference(
 
 def get_id_from_name(name: str) -> int:
     """
-    Function that extract the index of the shape whose name is provided.
+    Function that extracts the index of the shape whose name is provided.
     The shape's name must be defined as `<name>_<id>`.
 
     Parameters
