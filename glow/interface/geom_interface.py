@@ -225,8 +225,8 @@ def get_angle_between_shapes(shape1: Any, shape2: Any) -> float:
         If either `shape1` or `shape2` is not of type `SEGMENT`.
     """
     # Get the specific type name of the two shapes
-    shape1_type = get_kind_of_shape(shape1)[0]
-    shape2_type = get_kind_of_shape(shape2)[0]
+    shape1_type = str(get_kind_of_shape(shape1)[0])
+    shape2_type = str(get_kind_of_shape(shape2)[0])
     # Check if the given shapes are of the expected 'SEGMENT' type
     if shape1_type != "SEGMENT" or shape2_type != "SEGMENT":
         raise RuntimeError(

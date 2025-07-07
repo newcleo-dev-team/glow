@@ -240,3 +240,27 @@ def get_id_from_name(name: str) -> int:
     except:
         raise RuntimeError("No index could be retrieved for the given "
                            f"shape's name '{name}'.")
+
+def check_shape_expected_types(shape: Any,
+                               expected_types: List[ShapeType]) -> None:
+    """
+    Function that checks if the type of the given shape matches any of
+    the expected types.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape object whose type is to be checked.
+    expected_types : List[ShapeType]
+        A list of expected shape types.
+
+    Raises
+    ------
+    RuntimeError
+        If the type of the shape is not in the list of expected types.
+    """
+    type = get_shape_type(shape)
+    if type not in expected_types:
+        raise RuntimeError(
+            f"The GEOM object has a non-valid '{type}' type: any of the "
+            f"'{expected_types}' objects are expected.")

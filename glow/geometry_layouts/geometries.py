@@ -6,14 +6,16 @@ import math
 
 from abc import ABC, abstractmethod
 from typing import Any, List, Tuple, Union
-from glow.geometry_layouts.utility import update_relative_pos
+
+from glow.geometry_layouts.utility import check_shape_expected_types, \
+    update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, extract_sorted_sub_shapes, extract_sub_shapes, \
     get_basic_properties, get_bounding_box, get_min_distance, \
     get_point_coordinates, get_shape_name, make_arc_edge, make_cdg, \
-    make_circle, make_edge, make_face, make_rotation, make_translation, \
-    make_vector, make_vector_from_points, make_vertex, make_vertex_on_curve, \
-    remove_from_study, update_salome_study
+    make_circle, make_edge, make_face, make_partition, make_rotation, \
+    make_translation, make_vector, make_vector_from_points, make_vertex, \
+    make_vertex_on_curve, remove_from_study, update_salome_study
 
 
 class Surface(ABC):
@@ -62,7 +64,7 @@ class Surface(ABC):
             center = (0.0, 0.0, 0.0)
         self.o: Any = make_vertex(center)
         self.borders: List[Any] = []
-        self.face: Any
+        self.face: Any | None = None
         self.face_entry_id: Union[str, None] = None
         self.name: str = ""
         self.vertices: List[Any] = []
@@ -124,7 +126,7 @@ class Surface(ABC):
             self.vertices[i] = make_rotation(
                 self.vertices[i], axis, self.rotation)
         # Re-build the borders
-        self.borders = self._build_borders()
+        self.borders = extract_sub_shapes(self.face, ShapeType.EDGE)
         # Rotate the construction circle
         self.out_circle = make_rotation(self.out_circle, axis, self.rotation)
 
@@ -318,11 +320,14 @@ class Circle(Surface):
         face  : Any
                 The new GEOM face object to substitute
         """
+        # Check whether the received argument is a FACE-type object
+        check_shape_expected_types(face, [ShapeType.FACE])
         # Update the GEOM face object
         self.face = face
         # Re-evaluate all the geometrical characteristics from the face
         self.o = make_cdg(face)
         self.borders = extract_sorted_sub_shapes(face, ShapeType.EDGE)
+        self.vertices = [self.o]
         self.out_circle = self.borders[0]
         self.radius = get_min_distance(self.o, self.borders[0])
         self.lx = self.radius
@@ -404,6 +409,9 @@ class Rectangle(Surface):
                  rounded_corners: Union[List[Tuple[int, float]], None] = None,
                  name: str = "Rectangle") -> None:
         super().__init__(center)
+        # Store the characteristic dimensions of the rectangle
+        self.lx = width
+        self.ly = height
         # -------------------------------------------------
         # Build the GEOM objects representing the rectangle
         # -------------------------------------------------
@@ -414,57 +422,25 @@ class Rectangle(Surface):
         v2 = make_vertex((o_xyz[0] + width/2, o_xyz[1] + height/2, 0.0))
         v3 = make_vertex((o_xyz[0] - width/2, o_xyz[1] + height/2, 0.0))
         self.vertices: List[Any] = [v0, v1, v2, v3]
-        # Build the rectangle border edges by handling the need for
-        # rounded corners
-        self.borders: List[Any] = self.__build_rect_borders(
-            rounded_corners, o_xyz, height, width)
+        # Build the rectangle border edges
+        self.borders: List[Any] = self._build_borders()
         # Build the rectangle face
         self.face = make_face(self.borders)
+        # Build the arc edges, if any rounded corner is provided and update
+        # the rectangular shape
+        if rounded_corners is not None:
+            rc = self.__build_borders_with_rounded_corners(
+                rounded_corners, o_xyz, height, width)
+            face = make_partition([self.face], rc, ShapeType.FACE)
+            self.face = sorted(
+                extract_sub_shapes(face, ShapeType.FACE),
+                key=lambda subface: get_min_distance(self.o, subface)
+            )[0]
+            self.borders = extract_sub_shapes(self.face, ShapeType.EDGE)
         # Build the construction circle the rectangle is inscribed into
         diag = 0.5 * math.sqrt(height*height + width*width)
         self.out_circle: Any = make_circle(self.o, None, diag)
-        # Store the characteristic dimensions of the rectangle
-        self.lx = width
-        self.ly = height
-
         self.name: str = name
-
-    def __build_rect_borders(self,
-                             rounded_corners: Union[List[Tuple[int, float]]],
-                             center: Tuple[float, float, float],
-                             height: float,
-                             width: float) -> List[Any]:
-        """
-        Method that builds the borders of the rectangle. In case of presence
-        of rounded corners, arcs and segments are built.
-
-        Parameters
-        ----------
-        rounded_corners : List[Tuple[int, float]] | None = None
-                          List of tuples containing the rectangle corner ID and
-                          the corresponding radius for building a rounded
-                          corner
-        center          : Union[Tuple[float, float, float], None] = None
-                          The X-Y-Z coordinates of the surface center
-        height          : float = 1.0
-                          The rectangle height
-        width           : float = 1.0
-                          The rectangle width
-
-        Returns
-        -------
-        A list of GEOM edge objects representing the borders of the rectangle.
-        """
-        # Build the rectangle border edges by handling the need for
-        # rounded corners
-        if rounded_corners:
-            return self.__build_borders_with_rounded_corners(
-                rounded_corners=rounded_corners,
-                center=center,
-                height=height,
-                width=width)
-        # Build the rectangle border edges (no rounded corners case)
-        return self._build_borders()
 
     def _build_borders(self):
         """
@@ -489,8 +465,8 @@ class Rectangle(Surface):
         rectangle has rounded corners. The information about which corners
         are rounded and the corresponding radius is provided by an input
         list.
-        This method builds the arc and the segment edge elements of the
-        surface, stored within the corresponding instance attribute.
+        This method builds the arc edge elements of the surface, stored
+        within the corresponding instance attribute.
 
         Parameters
         ----------
@@ -510,42 +486,49 @@ class Rectangle(Surface):
         A list of GEOM edge objects representing the borders of the rectangle
         built with arcs and segments.
         """
-        print("QUA")
         arcs = []
-        borders = []
+        max_radius = min(self.lx/2, self.ly/2)
         for rc in rounded_corners:
-            # TODO: finish the implementation
+            # Check the radius of the corner does not exceed the minimum
+            # among the characteristic dimensions
+            if rc[1] > max_radius:
+                raise RuntimeError(
+                    f"The corner no. {rc[0]} has a radius of {rc[1]} that "
+                    f"exceeds the maximum allowed value of {max_radius}.")
+            # Build the XY coordinates of the arc's start/end points and its
+            # center
             match rc[0]:
                 case 0:
                     # Build the GEOM objects to create an arc
-                    v0_1 = make_vertex((center[0] - width/2,
-                                       center[1] - height/2 + rc[1],
-                                       0.0))
-                    v0_2 = make_vertex((center[0] - width/2 + rc[1],
-                                       center[1] - height/2,
-                                       0.0))
-                    v0_3 = make_vertex((center[0] - width/2 + rc[1],
-                                       center[1] - height/2 + rc[1],
-                                       0.0))
-                    arc0 = make_arc_edge(v0_3, v0_1, v0_2)
-                    # Build a cutting face
-                    # cut_face_0 =
-                    arcs.append((0, arc0))
+                    xy1 = center[0] - width/2, center[1] - height/2 + rc[1]
+                    xy2 = center[0] - width/2 + rc[1], center[1] - height/2
+                    cxy = (center[0] - width/2 + rc[1],
+                           center[1] - height/2 + rc[1])
                 case 1:
-                    ...
+                    xy1 = center[0] + width/2 - rc[1], center[1] - height/2
+                    xy2 = center[0] + width/2, center[1] - height/2 + rc[1]
+                    cxy = (center[0] + width/2 - rc[1],
+                           center[1] - height/2 + rc[1])
                 case 2:
-                    ...
+                    xy1 = center[0] + width/2, center[1] + height/2 - rc[1]
+                    xy2 = center[0] + width/2 - rc[1], center[1] + height/2
+                    cxy = (center[0] + width/2 - rc[1],
+                           center[1] + height/2 - rc[1])
                 case 3:
-                    ...
+                    xy1 = center[0] - width/2 + rc[1], center[1] + height/2
+                    xy2 = center[0] - width/2, center[1] + height/2 - rc[1]
+                    cxy = (center[0] - width/2 + rc[1],
+                           center[1] + height/2 - rc[1])
+            v1 = make_vertex((*xy1, 0.0))
+            v2 = make_vertex((*xy2, 0.0))
+            cv = make_vertex((*cxy, 0.0))
             # Add the arc construction points to the list of GEOM points
-            self.vertices.append(v0_1)
-            self.vertices.append(v0_2)
-            self.vertices.append(v0_3)
-        for arc in arcs:
-            # TODO Add the arc edges to the list of the surface borders
-            ...
-        # Build 'self.borders'
-        return borders
+            self.vertices.append(v1)
+            self.vertices.append(v2)
+            self.vertices.append(cv)
+            arcs.append(make_arc_edge(cv, v1, v2))
+        # Return the built arcs
+        return arcs
 
     def show_edges_and_vertices(self) -> None:
         """
@@ -568,16 +551,18 @@ class Rectangle(Surface):
         face  : Any
                 The new GEOM face object to substitute
         """
+        # Check whether the received argument is a FACE-type object
+        check_shape_expected_types(face, [ShapeType.FACE])
         # Update the GEOM face object
         self.face = face
         # Re-evaluate all the geometrical characteristics from the face
         self.o = make_cdg(face)
         self.borders = extract_sorted_sub_shapes(face, ShapeType.EDGE)
-        # Extract the outer borders
-        box_outer_borders = sorted(
-            self.borders,
-            key=lambda item: get_min_distance(self.o, item))[-1:-5]
-        # add_to_study(make_compound(box_outer_borders), "OUTER BORDERS")
+        # Chech if the borders represent a rectangular shape
+        if len(self.borders) != 4 or len({
+            get_basic_properties(b)[0] for b in self.borders}) != 2:
+            raise RuntimeError(
+                "The provided face does not represent a rectangular shape.")
         # Get the buonding box dimension
         b_box = get_bounding_box(self.face)
         # Update the characteristic dimensions of the rectangle
@@ -588,9 +573,7 @@ class Rectangle(Surface):
         self.out_circle = make_circle(
             self.o, None, 0.5*math.sqrt(self.lx*self.lx + self.ly*self.ly))
         # Update the list of vertices representing the rectangle corners
-        vert = []
-        for border in box_outer_borders:
-            vert += extract_sub_shapes(border, ShapeType.VERTEX)
+        self.vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
 
 
 class Hexagon(Surface):
@@ -704,45 +687,27 @@ class Hexagon(Surface):
         face  : Any
                 The new GEOM face object to substitute
         """
+        # Check whether the received argument is a FACE-type object
+        check_shape_expected_types(face, [ShapeType.FACE])
         # Update the GEOM face object
         self.face = face
         # Re-evaluate all the geometrical characteristics from the face
-        self.o = make_cdg(face)
-        self.borders = sorted(
-            extract_sorted_sub_shapes(face, ShapeType.EDGE),
-            key=lambda edge: get_min_distance(self.o, make_cdg(edge))
-                                and get_basic_properties(edge)[0],
-            reverse=True)
+        self.o = make_cdg(self.face)
+        self.borders = extract_sub_shapes(self.face, ShapeType.EDGE)
+        # Chech if the borders represent a hexagonal shape
+        if len(self.borders) != 6 or len({
+            get_basic_properties(b)[0] for b in self.borders}) != 6:
+            raise RuntimeError(
+                "The provided face does not represent a hexagonal shape.")
         self.radius = get_basic_properties(self.borders[0])[0]
         self.apothem = 0.5 * self.radius / math.tan(math.radians(30))
         # Update the characteristic dimensions of the hexagon
         self.lx = self.radius
-        self.ly = get_point_coordinates(self.o)[1] + self.apothem
+        self.ly = self.apothem
         # Update the construction circle the hexagon is inscribed into
-        self.out_circle: Any = make_circle(self.o, None, self.radius)
+        self.out_circle = make_circle(self.o, None, self.radius)
         # Update the list of vertices representing the hexagon corners
-        self.vertices: List[Any] = [
-            make_vertex_on_curve(self.out_circle, i/6) for i in range(6)]
-        # Verify that the updated face is an hexagon by checking if the
-        # vertices coincides with the start-end points of the borders
-        for vertex in self.vertices:
-            vertex_coords = tuple(map(lambda x: round(x, 7),
-                                      get_point_coordinates(vertex)))
-            found = False
-            for border in self.borders:
-                # Extract the start-end points of the border
-                points = extract_sub_shapes(border, ShapeType.VERTEX)
-                v1 = tuple(map(lambda x: round(x, 7),
-                               get_point_coordinates(points[0])))
-                v2 = tuple(map(lambda x: round(x, 7),
-                               get_point_coordinates(points[1])))
-                if vertex_coords in [v1, v2]:
-                    found = True
-                    break
-            if not found:
-                raise AssertionError("Vertex with coordinates ("
-                                     f"{vertex_coords}) does not correspond "
-                                     "to any border of the provided surface.")
+        self.vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
 
 
 class GenericSurface(Surface):
@@ -826,6 +791,9 @@ class GenericSurface(Surface):
         face  : Any
                 The new face object to substitute the current face with
         """
+        # Check whether the received argument is a FACE or COMPOUND-type
+        # object
+        check_shape_expected_types(face, [ShapeType.FACE, ShapeType.COMPOUND])
         # Update the GEOM face object
         self.face = face
         # Re-evaluate all the geometrical characteristics from the face
@@ -872,6 +840,10 @@ if __name__ == "__main__":
     shape.rotate(-90)
     shape.show_face()
     shape.show_edges_and_vertices()
+
+    r = Rectangle(height=1, width=2, rounded_corners=[
+        (0, 0.1), (1, 0.1), (2, 0.1), (3, 0.1)])
+    r.show_face()
 
     # Show everything on the SALOME application
     update_salome_study()
