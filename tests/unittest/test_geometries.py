@@ -6,7 +6,7 @@ import math
 
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
-from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, Circle
+from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, Circle
 
 
 class TestSurface(ABC, unittest.TestCase):
@@ -847,7 +847,7 @@ class TestHexagon(TestSurface):
         """
         # Build a hexagonal shape with the same geometric characteristics
         # for comparison purposes
-        vertices, edges = self.__build_hex_geom_elements(self.edge_length)
+        vertices, edges = _build_hex_geom_elements(self.o, self.edge_length)
         ref_circle = make_circle(self.o, None, self.edge_length)
         # Check the correct instantiation
         self.__assess_instantiation(vertices, edges, self.o)
@@ -904,7 +904,7 @@ class TestHexagon(TestSurface):
         # attributes
         self.surf = Hexagon.__new__(Hexagon)
         # Setup the hexagonal shape to update the 'Hexagon' object with
-        vertices, edges = self.__build_hex_geom_elements(self.edge_length)
+        vertices, edges = _build_hex_geom_elements(self.o, self.edge_length)
         face = make_face(edges)
 
         # Update the face and the attributes of the 'Hexagon' object
@@ -971,30 +971,224 @@ class TestHexagon(TestSurface):
                 self.surf.face, make_face(edges), ShapeType.FACE)
         )
 
-    def __build_hex_geom_elements(
-            self, edge_length: float) -> Tuple[List[Any], List[Any]]:
+
+class TestGenericSurface(TestSurface):
+    """
+    Test case for verifying the geometric operations and visualization
+    capabilities of the `GenericSurface` class.
+
+    This test suite provides common setup and a set of tests to ensure that
+    the `GenericSurface` class can be correctly instantiated and that it
+    properly handles rotation, translation, and visualization of their
+    geometric elements (i.e. faces, borders, and vertices).
+    Tests dealing with the above-mentioned operations are declared in the
+    `TestSurface` class this class inherits from. They are run here, as this
+    class declares the `surf` attribute.
+
+    In addition, there are tests to check whether the operations for updating
+    the `GenericSurface` object's face are correctly handled.
+
+    Attributes
+    ----------
+    In addition to the attributes declared in the `TestSurface` superclass,
+    there are the following ones:
+
+    face : Any
+        The face object to build the `GenericSurface` instance from.
+    name : str
+        The name of the generic surface when added in the SALOME study.
+    surf : GenericSurface
+        The `Surface` subclass that describes the geometric characteristics
+        of a generic surface.
+    """
+    def setUp(self) -> None:
         """
-        Method that, given the length of the hexagon edge, builds the vertex
-        and edge objects that represent a hexagon.
+        Method that sets up the test environment for a `GenericSurface` class.
+        It initializes the common geometric characteristics for a SALOME
+        surface and the ones specific for a generic surface.
+        The `surf` attribute is assigned to an instance of the
+        `GenericSurface` class so that the test methods can be run and
+        addressed to the correct geometric object.
+        """
+        # Setup the common geometric elements
+        super().setUp()
+        # Setup the specific attributes for testing the `Surface` subclass
+        self.face = self.__build_generic_face()
+        self.name = "GenericSurface"
+        self.surf: GenericSurface = GenericSurface(
+            face=self.face,
+            name=self.name
+        )
+
+    def test_init(self) -> None:
+        """
+        Method that tests the initialization of the `GenericSurface` object
+        by verifying it is correctly instantiated with the provided face and
+        name.
+        It also checks that the geometric properties and associated shapes
+        (vertex, border, face) are correctly set and match the expected
+        reference objects.
+        """
+        # Extract the vertices and edges from the generic surface
+        vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
+        edges = extract_sub_shapes(self.face, ShapeType.EDGE)
+        # Check the correct instantiation
+        self.__assess_instantiation(vertices, edges, self.o)
+        self.assertEqual(self.surf.rotation, self.rotation)
+        self.assertEqual(self.surf.face_entry_id, None)
+        self.assertEqual(self.surf.name, self.name)
+
+    def test_build_borders(self) -> None:
+        """
+        Method that tests the implementation of the `_build_borders` method
+        for a `GenericSurface` class.
+        It is checked whether the returned object is:
+        - a list of objects;
+        - it contains six elements;
+        - each element is an EDGE of type `SEGMENT`, `ARC_CIRCLE` or `CIRCLE`;
+        - each element has the geometric charateristics used to initialize
+          the corresponding `GenericSurface` instance.
+        """
+        # Build the list of borders of the surface
+        borders = self.surf._build_borders()
+        # Assess the correct creation of the borders
+        self.assertTrue(isinstance(borders, List))
+        for border in borders:
+            self.assertTrue(get_shape_type(border) == ShapeType.EDGE)
+            self.assertTrue(
+                str(get_kind_of_shape(border)[0]) in [
+                    'SEGMENT', 'ARC_CIRCLE', 'CIRCLE'])
+
+    def test_update_from_face(self) -> None:
+        """
+        Method that tests the implementation of the `update_from_face` method
+        for a `GenericSurface` class.
+        A generic face object is built and used to update the one of a
+        `GenericSurface` instance.
+        Afterwards, the geometric characteristics of the `GenericSurface`
+        object are checked to assess they matches the ones of the new face.
+        """
+        # Instantiate the 'GenericSurface' object without initializing its
+        # attributes
+        self.surf = GenericSurface.__new__(GenericSurface)
+        # Setup the shape to update the 'GenericSurface' object with
+        self.face = make_face(make_face([make_circle(self.o, None, 5.0)]))
+
+        # Update the face and the attributes of the 'GenericSurface' object
+        self.surf.update_from_face(self.face)
+
+        # Check the instance has been updated correctly
+        self.__assess_instantiation(
+            extract_sub_shapes(self.face, ShapeType.VERTEX),
+            extract_sub_shapes(self.face, ShapeType.EDGE),
+            make_cdg(self.face))
+
+    def test_update_from_non_valid_face(self) -> None:
+        """
+        Method that tests the implementation of the `update_from_face` method
+        for a `GenericSurface` class when providing an invalid face object.
+        It verifies that an exception is correctly raised when updating the
+        `GenericSurface` instance with an object that has an invalid type,
+        i.e. neither `ShapeType.COMPOUND`, nor `ShapeType.FACE`.
+        """
+        # Verify the exception is raised when updating the 'GenericSurface'
+        # object
+        with self.assertRaises(RuntimeError):
+            self.surf.update_from_face(make_circle(self.o, None, 1.0))
+
+    def __assess_instantiation(
+            self, vertices: List[Any], edges: List[Any], center: Any) -> None:
+        """
+        Method that verifies whether the `GenericSurface` class has been
+        correctly instantiated by checking that its geometric characteristics
+        match the ones used to initialize the instance.
 
         Parameters
         ----------
-        edge_length : float
-            The length of the hexagon's edge.
-
-        Returns
-        -------
-        Tuple[List[Any], List[Any]]
-            A tuple with the list of vertices and edges of the hexagon.
+        vertices : List[Any]
+            The list of vertex objects of the reference surface.
+        edges : List[Any]
+            The list of edge objects of the reference surface.
+        center : Any
+            The vertex object being the center of the reference surface.
         """
-        vertices = [
-            make_vertex_on_curve(
-                make_circle(self.o, None, edge_length), i/6) for i in range(6)
-        ]
-        edges = [
-                make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
-        ]
-        return vertices, edges
+        # Extract the extension of the surface's bounding box
+        b_box = get_bounding_box(self.face)
+        lx = (b_box[1] - b_box[0]) / 2
+        ly = (b_box[3] - b_box[2]) / 2
+        # Check the attributes of 'GenericSurface'
+        self.assertTrue(
+            math.isclose(self.surf.lx, lx, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(self.surf.ly, ly, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(
+                get_min_distance(self.surf.o, center), 0.0, abs_tol=1e-6)
+        )
+        self.assertEqual(len(self.surf.vertices), len(vertices))
+        self.assertEqual(len(self.surf.borders), len(edges))
+        self.assertTrue(
+            are_same_shapes(self.surf.out_circle,
+                            make_circle(self.o, None, max(lx, ly)),
+                            ShapeType.EDGE)
+        )
+        for v_rect, v_ref in zip(self.surf.vertices, vertices):
+            self.assertTrue(
+                math.isclose(get_min_distance(v_rect, v_ref), 0.0)
+        )
+        for b_rect, b_ref in zip(self.surf.borders, edges):
+            self.assertTrue(
+                are_same_shapes(b_rect, b_ref, ShapeType.EDGE)
+        )
+        self.assertTrue(
+            are_same_shapes(
+                self.surf.face, self.face, ShapeType.FACE)
+        )
+
+    def __build_generic_face(self) -> Any:
+        """
+        Method that builds a generic shape made by two hexagons one into the
+        other.
+
+        Return
+        ------
+        Any
+            A GEOM object made by partitioning a hexagon face with another
+            hexagon with smaller dimensions.
+        """
+        _, edges1 = _build_hex_geom_elements(self.o, 1.0)
+        _, edges2 = _build_hex_geom_elements(self.o, 2.0)
+        return make_partition(
+            [make_face(edges2)], [make_face(edges1)], ShapeType.FACE)
+
+
+def _build_hex_geom_elements(
+        center: Any, edge_length: float) -> Tuple[List[Any], List[Any]]:
+    """
+    Function that, given the center and the length of the hexagon edge,
+    builds the vertex and edge objects that represent a hexagon.
+
+    Parameters
+    ----------
+    center : Any
+        A vertex object representing the center of the resulting hexagonal
+        shape.
+    edge_length : float
+        The length of the hexagon's edge.
+
+    Returns
+    -------
+    Tuple[List[Any], List[Any]]
+        A tuple with the list of vertices and edges of the hexagon.
+    """
+    vertices = [
+        make_vertex_on_curve(
+            make_circle(center, None, edge_length), i/6) for i in range(6)
+    ]
+    edges = [
+            make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
+    ]
+    return vertices, edges
 
 
 if __name__ == "__main__":
