@@ -237,7 +237,7 @@ def get_angle_between_shapes(shape1: Any, shape2: Any) -> float:
     return geompy.GetAngle(shape1, shape2)
 
 
-def get_basic_properties(shape: Any) -> Tuple:
+def get_basic_properties(shape: Any) -> List[float]:
     """
     Function that returns the sum of the lengths of all the wires, the
     area and volume of the given shape.

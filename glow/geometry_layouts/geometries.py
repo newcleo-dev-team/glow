@@ -650,9 +650,9 @@ class Hexagon(Surface):
         super().__init__(center)
         # Calculate the radius of the construction circle the hexagon is
         # inscribed into
-        self.radius: float = 0.5 * edge_length / math.sin(math.radians(30))
+        self.radius: float = edge_length
         # Calculate the apothem of the hexagon
-        self.apothem: float = 0.5 * edge_length / math.tan(math.radians(30))
+        self.apothem: float = edge_length * math.sin(math.pi/3)
         # Build the construction circle the hexagon is inscribed into
         self.out_circle: Any = make_circle(self.o, None, self.radius)
         # Build the list of vertices representing the hexagon corners
@@ -698,7 +698,7 @@ class Hexagon(Surface):
         self.borders = extract_sub_shapes(self.face, ShapeType.EDGE)
         # Chech if the borders represent a hexagonal shape
         if len(self.borders) != 6 or len({
-            get_basic_properties(b)[0] for b in self.borders}) != 6:
+            round(get_basic_properties(b)[0], 6) for b in self.borders}) != 1:
             raise RuntimeError(
                 "The provided face does not represent a hexagonal shape.")
         self.radius = get_basic_properties(self.borders[0])[0]

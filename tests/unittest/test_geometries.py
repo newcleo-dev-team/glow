@@ -6,7 +6,7 @@ import math
 
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
-from glow.geometry_layouts.geometries import Rectangle, Surface, Circle
+from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, Circle
 
 
 class TestSurface(ABC, unittest.TestCase):
@@ -705,12 +705,12 @@ class TestRectangle(TestSurface):
         two shapes (having an invalid type `ShapeType.COMPOUND`) or a
         non-rectangular shape.
         """
-        # Setup the non-valid object to update the 'Circle' object with
+        # Setup the non-valid object to update the 'Rectangle' object with
         face = make_partition(
             [make_face(make_circle(self.o, None, self.width))],
             [make_face(make_circle(self.o, None, self.width-0.1))],
             ShapeType.FACE)
-        # Verify the exception is raised when updating the 'Circle' object
+        # Verify the exception is raised when updating the 'Rectangle' object
         with self.assertRaises(RuntimeError):
             self.surf.update_from_face(face)
         with self.assertRaises(RuntimeError):
@@ -780,6 +780,219 @@ class TestRectangle(TestSurface):
         ]
         edges = [
             make_edge(vertices[i], vertices[(i+1) % 4]) for i in range(4)
+        ]
+        return vertices, edges
+
+
+class TestHexagon(TestSurface):
+    """
+    Test case for verifying the geometric operations and visualization
+    capabilities of the `Hexagon` class.
+
+    This test suite provides common setup and a set of tests to ensure that
+    the `Hexagon` class can be correctly instantiated and that it properly
+    handles rotation, translation, and visualization of their geometric
+    elements (i.e. faces, borders, and vertices).
+    Tests dealing with the above-mentioned operations are declared in the
+    `TestSurface` class this class inherits from. They are run here, as this
+    class declares the `surf` attribute.
+
+    In addition, there are tests to check whether the operations for updating
+    the `Hexagon` object's face are correctly handled.
+
+    Attributes
+    ----------
+    In addition to the attributes declared in the `TestSurface` superclass,
+    there are the following ones:
+
+    edge_length : float
+        The length of the hexagon's edge.
+    apothem : float
+        The length of the hexagon's apothem.
+    name : str
+        The name of the hexagon's face when added in the SALOME study.
+    surf : Hexagon
+        The `Surface` subclass that describes the geometric characteristics
+        of a hexagon.
+    """
+    def setUp(self) -> None:
+        """
+        Method that sets up the test environment for a `Hexagon` class.
+        It initializes the common geometric characteristics for a SALOME
+        surface and the ones specific for describing a hexagon.
+        The `surf` attribute is assigned to an instance of the `Hexagon`
+        class so that the test methods can be run and addressed to the
+        correct geometric object.
+        """
+        # Setup the common geometric elements
+        super().setUp()
+        # Setup the specific attributes for testing the `Surface` subclass
+        self.edge_length = 1.0
+        self.apothem = self.edge_length * math.sin(math.pi/3)
+        self.name = "Hexagon"
+        self.surf: Hexagon = Hexagon(
+            center=get_point_coordinates(self.o),
+            edge_length=self.edge_length,
+            name=self.name
+        )
+
+    def test_hex_init(self) -> None:
+        """
+        Method that tests the initialization of the `Hexagon` object by
+        verifying it is correctly instantiated with the provided center,
+        edge length, and name.
+        It also checks that the geometric properties and associated shapes
+        (vertex, border, face) are correctly set and match the expected
+        reference objects.
+        """
+        # Build a hexagonal shape with the same geometric characteristics
+        # for comparison purposes
+        vertices, edges = self.__build_hex_geom_elements(self.edge_length)
+        ref_circle = make_circle(self.o, None, self.edge_length)
+        # Check the correct instantiation
+        self.__assess_instantiation(vertices, edges, self.o)
+        self.assertTrue(
+            are_same_shapes(self.surf.out_circle, ref_circle, ShapeType.EDGE)
+        )
+        self.assertEqual(self.surf.rotation, self.rotation)
+        self.assertEqual(self.surf.face_entry_id, None)
+        self.assertEqual(self.surf.name, self.name)
+
+    def test_build_borders(self) -> None:
+        """
+        Method that tests the implementation of the `_build_borders` method
+        for a `Hexagon` class.
+        It is checked whether the returned object is:
+        - a list of objects;
+        - it contains six elements;
+        - each element is an EDGE of type `SEGMENT`;
+        - each element has the geometric charateristics used to initialize
+          the corresponding `Hexagon` instance.
+        """
+        # Build the list of borders of the surface
+        borders = self.surf._build_borders()
+        # Assess the correct creation of the borders
+        self.assertTrue(isinstance(borders, List))
+        self.assertEqual(len(borders), 6)
+        for border in borders:
+            self.assertTrue(get_shape_type(border) == ShapeType.EDGE)
+            self.assertTrue(
+                str(get_kind_of_shape(border)[0]) == 'SEGMENT')
+            self.assertTrue(
+                math.isclose(
+                    get_min_distance(make_cdg(border), self.o),
+                    self.surf.ly)
+            )
+            border_len = get_basic_properties(border)[0]
+            self.assertTrue(
+                math.isclose(border_len, self.surf.lx)
+            )
+
+    def test_update_from_face(self) -> None:
+        """
+        Method that tests the implementation of the `update_from_face` method
+        for a `Hexagon` class.
+        A face object representing a hexagon is built and used to update the
+        one of a `Hexagon` instance.
+        Afterwards, the geometric characteristics of the `Hexagon` object
+        are checked to assess they matches the ones of the new face.
+        """
+        # Dimensions of the new hexagon
+        self.edge_length = 2.0
+        self.apothem = self.edge_length * math.sin(math.pi/3)
+        # Instantiate the 'Hexagon' object without initializing its
+        # attributes
+        self.surf = Hexagon.__new__(Hexagon)
+        # Setup the hexagonal shape to update the 'Hexagon' object with
+        vertices, edges = self.__build_hex_geom_elements(self.edge_length)
+        face = make_face(edges)
+
+        # Update the face and the attributes of the 'Hexagon' object
+        self.surf.update_from_face(face)
+
+        # Check the instance has been updated correctly
+        self.__assess_instantiation(vertices, edges, make_cdg(face))
+
+    def test_update_from_non_valid_face(self) -> None:
+        """
+        Method that tests the implementation of the `update_from_face` method
+        for a `Hexagon` class when providing an invalid face object.
+        It verifies that an exception is correctly raised when updating the
+        `Hexagon` instance with an object resulting from the partition of
+        two shapes (having an invalid type `ShapeType.COMPOUND`) or a
+        non-hexagonal shape.
+        """
+        # Setup the non-valid object to update the 'Hexagon' object with
+        face = make_partition(
+            [make_face(make_circle(self.o, None, self.edge_length))],
+            [make_face(make_circle(self.o, None, self.edge_length-0.1))],
+            ShapeType.FACE)
+        # Verify the exception is raised when updating the 'Hexagon' object
+        with self.assertRaises(RuntimeError):
+            self.surf.update_from_face(face)
+        with self.assertRaises(RuntimeError):
+            self.surf.update_from_face(
+                make_face(make_circle(self.o, None, self.edge_length)))
+
+    def __assess_instantiation(
+            self, vertices: List[Any], edges: List[Any], center: Any) -> None:
+        """
+        Method that verifies whether the `Hexagon` class has been correctly
+        instantiated by checking that its geometric characteristics match the
+        ones used to initialize the instance.
+
+        Parameters
+        ----------
+        vertices : List[Any]
+            The list of vertex objects of the reference hexagon.
+        edges : List[Any]
+            The list of edge objects of the reference hexagon.
+        center : Any
+            The vertex object being the center of the reference hexagon.
+        """
+        self.assertTrue(
+            math.isclose(self.surf.lx, self.edge_length, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(self.surf.ly, self.apothem, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(get_min_distance(self.surf.o, center), 0.0))
+        self.assertEqual(len(self.surf.vertices), 6)
+        self.assertEqual(len(self.surf.borders), 6)
+        for v_rect, v_ref in zip(self.surf.vertices, vertices):
+            self.assertTrue(
+                math.isclose(get_min_distance(v_rect, v_ref), 0.0)
+        )
+        for b_rect, b_ref in zip(self.surf.borders, edges):
+            self.assertTrue(
+                are_same_shapes(b_rect, b_ref, ShapeType.EDGE)
+        )
+        self.assertTrue(
+            are_same_shapes(
+                self.surf.face, make_face(edges), ShapeType.FACE)
+        )
+
+    def __build_hex_geom_elements(
+            self, edge_length: float) -> Tuple[List[Any], List[Any]]:
+        """
+        Method that, given the length of the hexagon edge, builds the vertex
+        and edge objects that represent a hexagon.
+
+        Parameters
+        ----------
+        edge_length : float
+            The length of the hexagon's edge.
+
+        Returns
+        -------
+        Tuple[List[Any], List[Any]]
+            A tuple with the list of vertices and edges of the hexagon.
+        """
+        vertices = [
+            make_vertex_on_curve(
+                make_circle(self.o, None, edge_length), i/6) for i in range(6)
+        ]
+        edges = [
+                make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
         ]
         return vertices, edges
 
