@@ -1,12 +1,12 @@
 from abc import ABC
 from copy import deepcopy
-from typing import Callable, Self
+from typing import Callable
 import unittest
 import math
 
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
-from glow.geometry_layouts.geometries import Surface, Circle
+from glow.geometry_layouts.geometries import Rectangle, Surface, Circle
 
 
 class TestSurface(ABC, unittest.TestCase):
@@ -346,7 +346,7 @@ class TestCircle(TestSurface):
 
     This test suite provides common setup and a set of tests to ensure that
     the `Circle` class can be correctly instantiated and that it properly
-    handle rotation, translation, and visualization of their geometric
+    handles rotation, translation, and visualization of their geometric
     elements (i.e. faces, borders, and vertices).
     Tests dealing with the above-mentioned operations are declared in the
     `TestSurface` class this class inherits from. They are run here, as this
@@ -507,6 +507,281 @@ class TestCircle(TestSurface):
         # Verify the exception is raised when updating the 'Circle' object
         with self.assertRaises(RuntimeError):
             c.update_from_face(face)
+
+
+class TestRectangle(TestSurface):
+    """
+    Test case for verifying the geometric operations and visualization
+    capabilities of the `Rectangle` class.
+
+    This test suite provides common setup and a set of tests to ensure that
+    the `Rectangle` class can be correctly instantiated and that it properly
+    handles rotation, translation, and visualization of their geometric
+    elements (i.e. faces, borders, and vertices).
+    Tests dealing with the above-mentioned operations are declared in the
+    `TestSurface` class this class inherits from. They are run here, as this
+    class declares the `surf` attribute.
+
+    In addition, there are tests to check whether the operations for updating
+    the `Rectangle` object's face are correctly handled.
+
+    Attributes
+    ----------
+    In addition to the attributes declared in the `TestSurface` superclass,
+    there are the following ones:
+
+    height : float
+        The height of the rectangle.
+    width : float
+        The width of the rectangle.
+    rounded_corners : List[Tuple[int, float]]
+        Indicating the corner index and the curvature radius
+    name : str
+        The name of the rectangle's face when added in the SALOME study.
+    surf : Rectangle
+        The `Surface` subclass that describes the geometric characteristics
+        of a rectangle.
+    """
+    def setUp(self) -> None:
+        """
+        Method that sets up the test environment for a `Rectangle` class.
+        It initializes the common geometric characteristics for a SALOME
+        surface and the ones specific for describing a rectangle.
+        The `surf` attribute is assigned to an instance of the `Rectangle`
+        class so that the test methods can be run and addressed to the
+        correct geometric object.
+        """
+        # Setup the common geometric elements
+        super().setUp()
+        # Setup the specific attributes for testing the `Surface` subclass
+        self.height = 1.0
+        self.width = 1.0
+        self.curv_radius = 0.2
+        self.rounded_corners = [(i, self.curv_radius) for i in range(4)]
+        self.name = "Rectangle"
+        self.surf: Rectangle = Rectangle(
+            center=get_point_coordinates(self.o),
+            height=self.height,
+            width=self.width,
+            name=self.name
+        )
+
+    def test_rect_init(self) -> None:
+        """
+        Method that tests the initialization of the `Rectangle` object by
+        verifying it is correctly instantiated with the provided center,
+        height, width, and name.
+        It also checks that the geometric properties and associated shapes
+        (vertex, border, face) are correctly set and match the expected
+        reference objects.
+        """
+        # Build a rectangular shape with the same geometric characteristics
+        # for comparison purposes
+        vertices, rectangle_edges = self.__build_rect_geom_elements(
+            self.width, self.height
+        )
+        ref_circle = make_circle(
+            self.o,
+            None,
+            math.sqrt(self.width*self.width/4 + self.height*self.height/4))
+        # Check the correct instantiation
+        self.__assess_instantiation(vertices, rectangle_edges, self.o)
+        self.assertTrue(
+            are_same_shapes(self.surf.out_circle, ref_circle, ShapeType.EDGE)
+        )
+        self.assertEqual(self.surf.rotation, self.rotation)
+        self.assertEqual(self.surf.face_entry_id, None)
+        self.assertEqual(self.surf.name, self.name)
+
+    def test_build_borders(self) -> None:
+        """
+        Method that tests the implementation of the `_build_borders` method
+        for a `Rectangle` class.
+        It is checked whether the returned object is:
+        - a list of objects;
+        - it contains four elements;
+        - each element is an EDGE of type `SEGMENT`;
+        - each element has the geometric charateristics used to initialize
+          the corresponding `Rectangle` instance.
+        """
+        # Build the list of borders of the surface
+        borders = self.surf._build_borders()
+        # Assess the correct creation of the borders
+        self.assertTrue(isinstance(borders, List))
+        self.assertEqual(len(borders), 4)
+        for border in borders:
+            self.assertTrue(get_shape_type(border) == ShapeType.EDGE)
+            self.assertTrue(
+                str(get_kind_of_shape(border)[0]) == 'SEGMENT')
+            self.assertTrue(
+                math.isclose(
+                    get_min_distance(make_cdg(border), self.o),
+                    self.surf.lx/2) or
+                math.isclose(
+                    get_min_distance(make_cdg(border), self.o),
+                    self.surf.ly/2)
+            )
+            border_len = get_basic_properties(border)[0]
+            self.assertTrue(
+                math.isclose(border_len, self.surf.lx) or
+                math.isclose(border_len, self.surf.ly)
+            )
+
+    def test_build_borders_with_rounded_corners(self) -> None:
+        """
+        Method that tests the implementation of the private method
+        `__build_borders_with_rounded_corners` for a `Rectangle` class.
+        It is checked whether the returned object is:
+        - a list of objects;
+        - it contains four elements;
+        - each element is an EDGE of type `ARC_CIRCLE`;
+        - each element has its vertices and radius set accordingly.
+        """
+        # Build the arcs representing the rounded corners
+        arcs = self.surf._Rectangle__build_borders_with_rounded_corners(
+            self.rounded_corners,
+            get_point_coordinates(self.o),
+            self.surf.ly,
+            self.surf.lx
+        )
+        # Assess the correct creation of the arc borders
+        self.assertTrue(isinstance(arcs, List))
+        self.assertEqual(len(arcs), 4)
+        for arc in arcs:
+            # Get the geometric information about each arc
+            data = get_kind_of_shape(arc)
+            self.assertTrue(get_shape_type(arc) == ShapeType.EDGE)
+            self.assertTrue(str(data[0]) == 'ARC_CIRCLE')
+            for v in extract_sub_shapes(arc, ShapeType.VERTEX):
+                self.assertTrue(
+                    math.isclose(
+                        get_min_distance(v, self.o),
+                        math.sqrt(
+                            self.surf.lx/2*self.surf.lx/2 + (
+                                self.surf.ly/2 - self.curv_radius)*(
+                                    self.surf.ly/2 - self.curv_radius))) or
+                    math.isclose(
+                        get_min_distance(v, self.o),
+                        math.sqrt(
+                            (self.surf.lx/2 - self.curv_radius)*(
+                                self.surf.lx/2 - self.curv_radius) +
+                            self.surf.ly/2*self.surf.ly/2))
+                )
+            self.assertTrue(
+                math.isclose(data[7], self.curv_radius)
+            )
+
+    def test_update_from_face(self) -> None:
+        """
+        Method that tests the implementation of the `update_from_face` method
+        for a `Rectangle` class.
+        A face object representing a rectangle is built and used to update the
+        one of a `Rectangle` instance.
+        Afterwards, the geometric characteristics of the `Rectangle` object
+        are checked to assess they matches the ones of the new face.
+        """
+        # Dimensions of the new rectangle
+        self.width = 2.0
+        self.height = 1.0
+        # Instantiate the 'Rectangle' object without initializing its
+        # attributes
+        self.surf = Rectangle.__new__(Rectangle)
+        # Setup the rectangular shape to update the 'Rectangle' object with
+        vertices, edges = self.__build_rect_geom_elements(self.width,
+                                                          self.height)
+        face = make_face(edges)
+        # Update the face and the attributes of the 'Rectangle' object
+        self.surf.update_from_face(face)
+
+        # Check the instance has been updated correctly
+        self.__assess_instantiation(vertices, edges, make_cdg(face))
+
+    def test_update_from_non_valid_face(self) -> None:
+        """
+        Method that tests the implementation of the `update_from_face` method
+        for a `Rectangle` class when providing an invalid face object.
+        It verifies that an exception is correctly raised when updating the
+        `Rectangle` instance with an object resulting from the partition of
+        two shapes (having an invalid type `ShapeType.COMPOUND`) or a
+        non-rectangular shape.
+        """
+        # Setup the non-valid object to update the 'Circle' object with
+        face = make_partition(
+            [make_face(make_circle(self.o, None, self.width))],
+            [make_face(make_circle(self.o, None, self.width-0.1))],
+            ShapeType.FACE)
+        # Verify the exception is raised when updating the 'Circle' object
+        with self.assertRaises(RuntimeError):
+            self.surf.update_from_face(face)
+        with self.assertRaises(RuntimeError):
+            self.surf.update_from_face(
+                make_face(make_circle(self.o, None, self.width)))
+
+    def __assess_instantiation(
+            self, vertices: List[Any], edges: List[Any], center: Any) -> None:
+        """
+        Method that verifies whether the `Rectangle` class has been correctly
+        instantiated by checking that its geometric characteristics match the
+        ones used to initialize the instance.
+
+        Parameters
+        ----------
+        vertices : List[Any]
+            The list of vertex objects of the reference rectangle.
+        edges : List[Any]
+            The list of edge objects of the reference rectangle.
+        center : Any
+            The vertex object being the center of the reference rectangle.
+        """
+        self.assertTrue(
+            math.isclose(self.surf.lx, self.width, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(self.surf.ly, self.height, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(get_min_distance(self.surf.o, center), 0.0))
+        self.assertEqual(len(self.surf.vertices), 4)
+        self.assertEqual(len(self.surf.borders), 4)
+        for v_rect, v_ref in zip(self.surf.vertices, vertices):
+            self.assertTrue(
+                math.isclose(get_min_distance(v_rect, v_ref), 0.0)
+        )
+        for b_rect, b_ref in zip(self.surf.borders, edges):
+            self.assertTrue(
+                are_same_shapes(b_rect, b_ref, ShapeType.EDGE)
+        )
+        self.assertTrue(
+            are_same_shapes(
+                self.surf.face, make_face(edges), ShapeType.FACE)
+        )
+
+    def __build_rect_geom_elements(
+            self, width: float, height: float) -> Tuple[List[Any], List[Any]]:
+        """
+        Method that, given the width and height, builds the vertex and edge
+        objects that represent a rectangle.
+
+        Parameters
+        ----------
+        width : float
+            The width of the rectangle.
+        height : float
+            The height of the rectangle.
+
+        Returns
+        -------
+        Tuple[List[Any], List[Any]]
+            A tuple with the list of vertices and edges of the rectangle.
+        """
+        vertices = [
+            make_vertex((-width/2, -height/2, 0)),
+            make_vertex((width/2, -height/2, 0)),
+            make_vertex((width/2, height/2, 0)),
+            make_vertex((-width/2, height/2, 0)),
+        ]
+        edges = [
+            make_edge(vertices[i], vertices[(i+1) % 4]) for i in range(4)
+        ]
+        return vertices, edges
 
 
 if __name__ == "__main__":
