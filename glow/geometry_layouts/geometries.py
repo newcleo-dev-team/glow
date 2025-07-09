@@ -756,11 +756,13 @@ class GenericSurface(Surface):
                     The characteristic dimension of the generic geometric
                     surface along the Y-axis
     """
-    def __init__(self, face: Any):
+    def __init__(self, face: Any, name: Union[str, None] = None):
         super().__init__(get_point_coordinates(make_cdg(face)))
         self.face = face
-        self.name = get_shape_name(face)
-        # Build the list of vertices representing the hexagon corners
+        if not name:
+            name = get_shape_name(face)
+        self.name = name
+        # Build the list of vertices of the generic surface
         self.vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
         # Build the list of edges connecting successive vertices
         self.borders = self._build_borders()
@@ -769,6 +771,7 @@ class GenericSurface(Surface):
         b_box = get_bounding_box(self.face)
         self.lx = (b_box[1] - b_box[0]) / 2
         self.ly = (b_box[3] - b_box[2]) / 2
+        self.out_circle = make_circle(self.o, None, max(self.lx, self.ly))
 
         self.rotation: float = 0.0
 
@@ -802,10 +805,11 @@ class GenericSurface(Surface):
         self.o = make_cdg(face)
         self.vertices = extract_sub_shapes(self.face, ShapeType.VERTEX)
         self.borders = self._build_borders()
-        # Store the characteristic dimensions of the hexagon
+        # Store the characteristic dimensions of the generic surface
         b_box = get_bounding_box(self.face)
-        self.lx = b_box[1] - b_box[0]
-        self.ly = b_box[3] - b_box[2]
+        self.lx = (b_box[1] - b_box[0]) / 2
+        self.ly = (b_box[3] - b_box[2]) / 2
+        self.out_circle = make_circle(self.o, None, max(self.lx, self.ly))
 
 
 def build_hexagon(
