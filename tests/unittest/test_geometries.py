@@ -1,12 +1,12 @@
 from abc import ABC
 from copy import deepcopy
-from typing import Callable
+from typing import Callable, Self
 import unittest
 import math
 
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, Circle
+from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, Circle, build_hexagon
 
 
 class TestSurface(ABC, unittest.TestCase):
@@ -1132,13 +1132,13 @@ class TestGenericSurface(TestSurface):
                             make_circle(self.o, None, max(lx, ly)),
                             ShapeType.EDGE)
         )
-        for v_rect, v_ref in zip(self.surf.vertices, vertices):
+        for v_surf, v_ref in zip(self.surf.vertices, vertices):
             self.assertTrue(
-                math.isclose(get_min_distance(v_rect, v_ref), 0.0)
+                math.isclose(get_min_distance(v_surf, v_ref), 0.0)
         )
-        for b_rect, b_ref in zip(self.surf.borders, edges):
+        for b_surf, b_ref in zip(self.surf.borders, edges):
             self.assertTrue(
-                are_same_shapes(b_rect, b_ref, ShapeType.EDGE)
+                are_same_shapes(b_surf, b_ref, ShapeType.EDGE)
         )
         self.assertTrue(
             are_same_shapes(
@@ -1160,6 +1160,57 @@ class TestGenericSurface(TestSurface):
         _, edges2 = _build_hex_geom_elements(self.o, 2.0)
         return make_partition(
             [make_face(edges2)], [make_face(edges1)], ShapeType.FACE)
+
+
+class TestHexagonBuilder(unittest.TestCase):
+    """
+    Test case for verifying the correct functioning of the `build_hexagon`
+    function that allows to build a `Hexagon` instance from the apothem of
+    the hexagonal shape.
+    """
+    def setUp(self):
+        """
+        Method that sets up the test environment for the `build_hexagon`
+        function.
+        """
+        self.apothem = 1.0
+        self.center = (1.0, 1.0, 0.0)
+        self.edge_length = self.apothem / math.sin(math.pi/3)
+        self.o = make_vertex(self.center)
+
+    def test_build_hexagon(self) -> None:
+        """
+        Method that verifies the `build_hexagon` function by checking if the
+        attributes of the built `Hexagon` instance are correctly set.
+        """
+        # Build the 'Hexagon' instance
+        hex = build_hexagon(self.apothem, self.center)
+        # Check the correct instantiation
+        self.assertTrue(
+            math.isclose(hex.lx, self.edge_length, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(hex.ly, self.apothem, abs_tol=1e-6))
+        self.assertTrue(
+            math.isclose(get_min_distance(hex.o, self.o), 0.0, abs_tol=1e-6)
+        )
+        self.assertEqual(len(hex.vertices), 6)
+        self.assertEqual(len(hex.borders), 6)
+        self.assertTrue(
+            all(
+                math.isclose(
+                    get_min_distance(v, self.o),
+                    self.edge_length,
+                    abs_tol=1e-6) for v in hex.vertices
+            )
+        )
+        self.assertTrue(
+            all(
+                math.isclose(
+                    round(get_basic_properties(b)[0], 6),
+                    self.edge_length,
+                    abs_tol=1e-6) for b in hex.borders
+            )
+        )
 
 
 def _build_hex_geom_elements(
