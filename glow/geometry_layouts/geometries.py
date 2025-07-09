@@ -10,12 +10,12 @@ from typing import Any, List, Tuple, Union
 from glow.geometry_layouts.utility import check_shape_expected_types, \
     update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
-    add_to_study_in_father, extract_sorted_sub_shapes, extract_sub_shapes, \
-    get_basic_properties, get_bounding_box, get_min_distance, \
-    get_point_coordinates, get_shape_name, make_arc_edge, make_cdg, \
-    make_circle, make_edge, make_face, make_partition, make_rotation, \
-    make_translation, make_vector, make_vector_from_points, make_vertex, \
-    make_vertex_on_curve, remove_from_study, update_salome_study
+    add_to_study_in_father, extract_sub_shapes, get_basic_properties, \
+    get_bounding_box, get_min_distance, get_point_coordinates, \
+    get_shape_name, make_arc_edge, make_cdg, make_circle, make_edge, \
+    make_face, make_partition, make_rotation, make_translation, make_vector, \
+    make_vector_from_points, make_vertex, make_vertex_on_curve, \
+    remove_from_study, update_salome_study
 
 
 class Surface(ABC):
@@ -326,7 +326,7 @@ class Circle(Surface):
         self.face = face
         # Re-evaluate all the geometrical characteristics from the face
         self.o = make_cdg(face)
-        self.borders = extract_sorted_sub_shapes(face, ShapeType.EDGE)
+        self.borders = extract_sub_shapes(face, ShapeType.EDGE)
         self.vertices = [self.o]
         self.out_circle = self.borders[0]
         self.radius = get_min_distance(self.o, self.borders[0])
@@ -457,9 +457,11 @@ class Rectangle(Surface):
         return [l0, l1, l2, l3]
 
     def __build_borders_with_rounded_corners(
-            self, rounded_corners: List[Tuple[int, float]],
+            self,
+            rounded_corners: List[Tuple[int, float]],
             center: Tuple[float, float, float],
-            height: float, width: float) -> List[Any]:
+            height: float,
+            width: float) -> List[Any]:
         """
         Build the surface borders as GEOM edge objects in the case the
         rectangle has rounded corners. The information about which corners
@@ -483,8 +485,8 @@ class Rectangle(Surface):
 
         Returns
         -------
-        A list of GEOM edge objects representing the borders of the rectangle
-        built with arcs and segments.
+        A list of GEOM edge objects representing the arcs of circle for the
+        rounded corners on the borders of the rectangle.
         """
         arcs = []
         max_radius = min(self.lx/2, self.ly/2)
@@ -557,7 +559,7 @@ class Rectangle(Surface):
         self.face = face
         # Re-evaluate all the geometrical characteristics from the face
         self.o = make_cdg(face)
-        self.borders = extract_sorted_sub_shapes(face, ShapeType.EDGE)
+        self.borders = extract_sub_shapes(face, ShapeType.EDGE)
         # Chech if the borders represent a rectangular shape
         if len(self.borders) != 4 or len({
             get_basic_properties(b)[0] for b in self.borders}) != 2:
