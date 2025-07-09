@@ -1,12 +1,17 @@
+"""
+Module containing unittest classes to assess that the classes and functions
+of the `glow.geometry_layouts.geometries` module have a valid implementation.
+"""
 from abc import ABC
 from copy import deepcopy
-from typing import Callable, Self
+from typing import Callable
 import unittest
 import math
 
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, Circle, build_hexagon
+from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
+    Rectangle, Surface, Circle, build_hexagon
 
 
 class TestSurface(ABC, unittest.TestCase):
