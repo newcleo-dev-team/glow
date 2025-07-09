@@ -23,6 +23,8 @@ class TestSurface(ABC, unittest.TestCase):
     implementations of `Surface` correctly handle rotation, translation, and
     visualization of their geometric elements (i.e. faces, borders, and
     vertices).
+    Tests methods declared herein are skipped as no `Surface` subclass
+    is instantiated.
 
     Attributes
     ----------
@@ -53,8 +55,6 @@ class TestSurface(ABC, unittest.TestCase):
         It initializes the common geometric characteristics for a SALOME
         surface while setting to `None` the ones specific to the geometric
         surface being tested.
-        Tests methods declared herein are skipped as no `Surface` subclass
-        is instantiated.
         """
         # Setup the common geometric characteristics used for testing the
         # subclasses of 'Surface'
@@ -963,13 +963,13 @@ class TestHexagon(TestSurface):
             math.isclose(get_min_distance(self.surf.o, center), 0.0))
         self.assertEqual(len(self.surf.vertices), 6)
         self.assertEqual(len(self.surf.borders), 6)
-        for v_rect, v_ref in zip(self.surf.vertices, vertices):
+        for v_hex, v_ref in zip(self.surf.vertices, vertices):
             self.assertTrue(
-                math.isclose(get_min_distance(v_rect, v_ref), 0.0)
+                math.isclose(get_min_distance(v_hex, v_ref), 0.0)
         )
-        for b_rect, b_ref in zip(self.surf.borders, edges):
+        for b_hex, b_ref in zip(self.surf.borders, edges):
             self.assertTrue(
-                are_same_shapes(b_rect, b_ref, ShapeType.EDGE)
+                are_same_shapes(b_hex, b_ref, ShapeType.EDGE)
         )
         self.assertTrue(
             are_same_shapes(
