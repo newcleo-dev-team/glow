@@ -12,6 +12,7 @@ from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
 from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
     Rectangle, Surface, Circle, build_hexagon
+from support_funcs import build_hex_geom_elements, make_ref_vectors
 
 
 class TestSurface(ABC, unittest.TestCase):
@@ -88,11 +89,11 @@ class TestSurface(ABC, unittest.TestCase):
         # Check the surface istantiation
         self.__check_surface_setup()
         # Build reference vectors before the rotation
-        face_ref_vect, out_circle_ref_vect = self.__make_ref_vectors()
+        face_ref_vect, out_circle_ref_vect = make_ref_vectors(self.surf)
         # Rotate the surface
         self.surf.rotate(self.rotation_angle)
         # Build reference vectors after the rotation
-        face_ref_vect2, out_circle_ref_vect2 = self.__make_ref_vectors()
+        face_ref_vect2, out_circle_ref_vect2 = make_ref_vectors(self.surf)
         # Check the correct rotation happened
         self.__assert_rotation(
             face_ref_vect,
@@ -118,11 +119,11 @@ class TestSurface(ABC, unittest.TestCase):
         # Check the surface istantiation
         self.__check_surface_setup()
         # Build reference vectors before the rotation
-        face_ref_vect, out_circle_ref_vect = self.__make_ref_vectors()
+        face_ref_vect, out_circle_ref_vect = make_ref_vectors(self.surf)
         # Rotate the surface, using the declared axis
         self.surf.rotate_from_axis(self.rotation_angle, self.z_axis)
         # Build reference vectors after the rotation
-        face_ref_vect2, out_circle_ref_vect2 = self.__make_ref_vectors()
+        face_ref_vect2, out_circle_ref_vect2 = make_ref_vectors(self.surf)
         # Check the correct rotation happened
         self.__assert_rotation(
             face_ref_vect,
@@ -325,24 +326,6 @@ class TestSurface(ABC, unittest.TestCase):
         for b in self.surf.borders:
             _ = get_id_from_object(b)
 
-    def __make_ref_vectors(self) -> Tuple[Any, Any]:
-        """
-        Method that returns two vector objects built on the `Surface` first
-        border element and on its corresponding circle the surface is
-        inscribed into.
-
-        Returns
-        -------
-        Tuple[Any, Any]
-            Tuple providing two reference vector objects, the first built
-            on the surface border, the second on the circle the surface is
-            inscribed into.
-        """
-        face_ref_vect = make_vector_from_points(
-            self.surf.o, make_vertex_on_curve(self.surf.borders[0], 0.0))
-        out_circle_ref_vect = make_vector_from_points(
-            self.surf.o, make_vertex_on_curve(self.surf.out_circle, 0.0))
-        return face_ref_vect, out_circle_ref_vect
 
 class TestCircle(TestSurface):
     """
@@ -852,7 +835,7 @@ class TestHexagon(TestSurface):
         """
         # Build a hexagonal shape with the same geometric characteristics
         # for comparison purposes
-        vertices, edges = _build_hex_geom_elements(self.o, self.edge_length)
+        vertices, edges = build_hex_geom_elements(self.o, self.edge_length)
         ref_circle = make_circle(self.o, None, self.edge_length)
         # Check the correct instantiation
         self.__assess_instantiation(vertices, edges, self.o)
@@ -909,7 +892,7 @@ class TestHexagon(TestSurface):
         # attributes
         self.surf = Hexagon.__new__(Hexagon)
         # Setup the hexagonal shape to update the 'Hexagon' object with
-        vertices, edges = _build_hex_geom_elements(self.o, self.edge_length)
+        vertices, edges = build_hex_geom_elements(self.o, self.edge_length)
         face = make_face(edges)
 
         # Update the face and the attributes of the 'Hexagon' object
@@ -1161,8 +1144,8 @@ class TestGenericSurface(TestSurface):
             A GEOM object made by partitioning a hexagon face with another
             hexagon with smaller dimensions.
         """
-        _, edges1 = _build_hex_geom_elements(self.o, 1.0)
-        _, edges2 = _build_hex_geom_elements(self.o, 2.0)
+        _, edges1 = build_hex_geom_elements(self.o, 1.0)
+        _, edges2 = build_hex_geom_elements(self.o, 2.0)
         return make_partition(
             [make_face(edges2)], [make_face(edges1)], ShapeType.FACE)
 
@@ -1216,35 +1199,6 @@ class TestHexagonBuilder(unittest.TestCase):
                     abs_tol=1e-6) for b in hex.borders
             )
         )
-
-
-def _build_hex_geom_elements(
-        center: Any, edge_length: float) -> Tuple[List[Any], List[Any]]:
-    """
-    Function that, given the center and the length of the hexagon edge,
-    builds the vertex and edge objects that represent a hexagon.
-
-    Parameters
-    ----------
-    center : Any
-        A vertex object representing the center of the resulting hexagonal
-        shape.
-    edge_length : float
-        The length of the hexagon's edge.
-
-    Returns
-    -------
-    Tuple[List[Any], List[Any]]
-        A tuple with the list of vertices and edges of the hexagon.
-    """
-    vertices = [
-        make_vertex_on_curve(
-            make_circle(center, None, edge_length), i/6) for i in range(6)
-    ]
-    edges = [
-            make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
-    ]
-    return vertices, edges
 
 
 if __name__ == "__main__":
