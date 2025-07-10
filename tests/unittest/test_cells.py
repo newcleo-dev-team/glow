@@ -3,6 +3,8 @@ Module containing unittest classes to assess that the classes and functions
 of the `glow.geometry_layouts.cells` module have a valid implementation.
 """
 from abc import ABC
+from copy import deepcopy
+import math
 from typing import Any, Dict, Tuple, Union
 import unittest
 
@@ -11,6 +13,7 @@ from glow.geometry_layouts.cells import Cell, RectCell, Region
 from glow.geometry_layouts.geometries import Rectangle, Surface
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
+from support_funcs import make_ref_vectors
 
 
 class TestRegion(unittest.TestCase):
@@ -330,6 +333,67 @@ class TestCell(ABC, unittest.TestCase):
                 self.cell.face, self.cell.figure.face, ShapeType.FACE)
         )
 
+    def test_rotate(self) -> None:
+        """
+        Method that tests the implementation of the method `rotate` of
+        the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Store the initial rotation angle
+        rotation_0 = self.cell.rotation
+        rot_angle = 90.0
+        # Build reference vectors for each cell's face object before and
+        # after the rotation
+        ref_vectors1 = self.__build_cell_ref_vectors()
+        self.cell.rotate(rot_angle)
+        ref_vectors2 = self.__build_cell_ref_vectors()
+        # Check the correct rotation happened by assessing that the angle
+        # between the reference vectors is the rotation angle
+        for v1, v2 in zip(ref_vectors1, ref_vectors2):
+            self.assertTrue(
+                math.isclose(
+                    get_angle_between_shapes(v1, v2),
+                    rot_angle)
+            )
+        # Check the 'rotation' attribute has updated
+        self.assertTrue(
+            math.isclose(
+                self.cell.rotation, rotation_0 + math.radians(rot_angle))
+        )
+
+    def test_rotate_from_axis(self) -> None:
+        """
+        Method that tests the implementation of the method `rotate_from_axis`
+        of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Store the initial rotation angle and the rotation axis
+        rotation_0 = self.cell.rotation
+        rot_angle = 90.0
+        center = get_point_coordinates(self.cell.figure.o)
+        rot_axis = make_vector_from_points(
+            self.o, make_vertex((center[0], center[1], 1)))
+        # Build reference vectors for each cell's face object before and
+        # after the rotation
+        ref_vectors1 = self.__build_cell_ref_vectors()
+        self.cell.rotate_from_axis(rot_angle, rot_axis)
+        ref_vectors2 = self.__build_cell_ref_vectors()
+        # Check the correct rotation happened by assessing that the angle
+        # between the reference vectors is the rotation angle
+        for v1, v2 in zip(ref_vectors1, ref_vectors2):
+            self.assertTrue(
+                math.isclose(
+                    get_angle_between_shapes(v1, v2),
+                    rot_angle)
+            )
+        # Check the 'rotation' attribute has updated
+        self.assertTrue(
+            math.isclose(
+                self.cell.rotation, rotation_0 + math.radians(rot_angle))
+        )
+
     def __assess_add_circle(
             self,
             pos: Tuple[float, float, float] | None,
@@ -448,6 +512,36 @@ class TestCell(ABC, unittest.TestCase):
                                               self.cell.tech_geom_sect_opts)
                 )
             self.assertEqual(i+1, len(self.cell.tech_geom_sect_opts))
+
+    def __build_cell_ref_vectors(self) -> List[Any]:
+        """
+        Method that builds a list of vector objects on the first edge of
+        each of the face objects belonging to a `Cell` instance, i.e. the
+        whole cell's face and the faces stored in the dictionaries of
+        properties and sectorization options.
+
+        Returns
+        -------
+        List[Any]
+            A list of vectors built of the first edge of the faces in the
+            cell.
+        """
+        # List all the face objects comprising the cell's face and those
+        # stored in the cell's dictionaries
+        faces = [self.cell.face] + list(self.cell.tech_geom_props.keys())
+        if self.cell.sectorized_face:
+            faces += list(self.cell.tech_geom_sect_opts.keys())
+        # Store the edge '0' for each face
+        edges = [extract_sub_shapes(f, ShapeType.EDGE)[0] for f in faces]
+        # Append the edge '0' for the cell's 'Surface' and reference circle
+        edges.append(self.cell.figure.borders[0])
+        edges.append(self.cell.figure.out_circle)
+        # Build reference vectors for each edge
+        return [
+            make_vector_from_points(
+                self.cell.figure.o,
+                make_vertex_on_curve(e, 0.0)) for e in edges
+        ]
 
     def __check_cell_setup(self) -> None:
         """
