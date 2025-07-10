@@ -6,7 +6,7 @@ import math
 from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
-  extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
+  extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, get_basic_properties, \
   get_closed_free_boundary, get_inertia_matrix, get_point_coordinates, \
   get_shape_type, make_cdg, make_cut, make_face, make_fuse, \
   make_translation, make_vector_from_points, make_vertex
@@ -14,8 +14,9 @@ from glow.interface.geom_interface import ShapeType, \
 
 def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
     """
-    Function that determines whether two shapes are the same based on a cut
-    operation and the shape type.
+    Function that determines whether two shapes are the same based on their
+    geometric properties (perimeter, area and volume), a cut operation, and
+    the shape type.
 
     Parameters
     ----------
@@ -40,6 +41,9 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
     # Check whether the two shapes have the same type
     if get_shape_type(shape1) != get_shape_type(shape2):
         raise RuntimeError("Shapes not compatible")
+    # Check whether the two shapes has same perimeter, area and volume
+    if get_basic_properties(shape1) != get_basic_properties(shape2):
+        return False
     # Perform a cut operation
     cut = make_cut(shape1, shape2)
     # If they are the same shape, the cut result must be a compound that
