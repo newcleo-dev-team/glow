@@ -571,9 +571,6 @@ class Cell(ABC):
         # Rotate the cell geometrical elements around its central axis
         self.rotate_from_axis(angle, z_axis)
 
-        # Update the cell rotation
-        self.rotation += math.radians(angle)
-
     def rotate_from_axis(self, angle: float, axis: Any) -> None:
         """
         Method that rotates all the geometrical elements the cell is made of
@@ -621,6 +618,9 @@ class Cell(ABC):
                 new_dict[make_rotation(f, axis, rotation)] = p
             # Copy the just built dictionary back into the old one
             self.tech_geom_sect_opts = deepcopy(new_dict)
+
+        # Update the cell rotation
+        self.rotation += math.radians(angle)
 
     def translate(self, new_pos: Tuple[float, float, float]) -> Self:
         """

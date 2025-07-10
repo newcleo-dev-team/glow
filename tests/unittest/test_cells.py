@@ -361,6 +361,9 @@ class TestCell(ABC, unittest.TestCase):
             math.isclose(
                 self.cell.rotation, rotation_0 + math.radians(rot_angle))
         )
+        # Restore the cell to the initial condition, so that other tests are
+        # not affected by this one
+        self.cell.rotate(-rot_angle)
 
     def test_rotate_from_axis(self) -> None:
         """
@@ -393,6 +396,9 @@ class TestCell(ABC, unittest.TestCase):
             math.isclose(
                 self.cell.rotation, rotation_0 + math.radians(rot_angle))
         )
+        # Restore the cell to the initial condition, so that other tests are
+        # not affected by this one
+        self.cell.rotate_from_axis(-rot_angle, rot_axis)
 
     def __assess_add_circle(
             self,
