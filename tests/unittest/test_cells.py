@@ -400,6 +400,63 @@ class TestCell(ABC, unittest.TestCase):
         # not affected by this one
         self.cell.rotate_from_axis(-rot_angle, rot_axis)
 
+    def test_translate(self) -> None:
+        """
+        Method that tests the implementation of the method `translate`
+        of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Store the elements for assessing the correct translation
+        new_cntr = (1.0, 1.0, 0.0)
+        new_cntr_vrtx = make_vertex(new_cntr)
+        cdg_pre = make_cdg(self.cell.face)
+        distance = get_min_distance(self.cell.figure.o, new_cntr_vrtx)
+        cell_org = deepcopy(self.cell)
+
+        # Translate the cell
+        self.cell = self.cell.translate(new_cntr)
+        # Check the correct translation happened
+        self.assertTrue(
+            are_same_shapes(
+                self.cell.figure.o, new_cntr_vrtx, ShapeType.VERTEX)
+        )
+        self.assertTrue(
+            math.isclose(
+                get_min_distance(cdg_pre, make_cdg(self.cell.face)),
+                distance)
+        )
+        self.assertTrue(
+            math.isclose(
+                get_min_distance(cdg_pre,
+                                 make_cdg(self.cell.figure.out_circle)),
+                distance)
+        )
+        for ic1, ic2 in zip(cell_org.inner_circles, self.cell.inner_circles):
+            self.assertTrue(
+                math.isclose(
+                    get_min_distance(ic1.o, ic2.o), distance)
+            )
+        for tf1, tf2 in zip(cell_org.tech_geom_props,
+                            self.cell.tech_geom_props):
+            self.assertTrue(
+                math.isclose(
+                    get_min_distance(make_cdg(tf1), make_cdg(tf2)),
+                    distance)
+            )
+        if self.cell.sectorized_face:
+            self.assertTrue(
+                math.isclose(
+                    get_min_distance(
+                        make_cdg(cell_org.sectorized_face),
+                        make_cdg(self.cell.sectorized_face)),
+                    distance)
+            )
+
+        # Restore the cell to the initial condition, so that other tests are
+        # not affected by this one
+        self.cell = self.cell.translate(get_point_coordinates(self.o))
+
     def __assess_add_circle(
             self,
             pos: Tuple[float, float, float] | None,
