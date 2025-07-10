@@ -6,10 +6,10 @@ import math
 from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
-  extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, get_basic_properties, \
-  get_closed_free_boundary, get_inertia_matrix, get_point_coordinates, \
-  get_shape_type, make_cdg, make_cut, make_face, make_fuse, \
-  make_translation, make_vector_from_points, make_vertex
+  extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
+  get_basic_properties, get_closed_free_boundary, get_inertia_matrix, \
+  get_point_coordinates, get_shape_type, make_cdg, make_cut, make_face, \
+  make_fuse, make_translation, make_vector_from_points, make_vertex
 
 
 def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
@@ -30,9 +30,9 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
     Returns
     -------
     bool:
-        True if the two shapes are considered the same (i.e., the cut result
-        does not contain any sub-shapes of the specified type), False
-        otherwise.
+        `True` if the two shapes are considered the same (i.e., they have
+        the same geometric properties and the cut result does not contain
+        any sub-shapes of the specified type), `False` otherwise.
 
     Raises
     ------

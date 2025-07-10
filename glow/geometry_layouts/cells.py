@@ -17,11 +17,11 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_point_inside_shape, make_cdg, make_common, make_face, make_line, \
-    make_partition, make_rotation, make_translation, make_vector_from_points, \
-    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
-    make_vertex_on_lines_intersection, remove_from_study, set_color_face, \
-    update_salome_study
+    get_shape_type, is_point_inside_shape, make_cdg, make_compound, \
+    make_face, make_line, make_partition, make_rotation, make_translation, \
+    make_vector_from_points, make_vertex, make_vertex_inside_face, \
+    make_vertex_on_curve, make_vertex_on_lines_intersection, \
+    remove_from_study, set_color_face, update_salome_study
 from glow.generator.support import CellType, GeometryType, PropertyType, \
     generate_unique_random_colors
 
@@ -422,11 +422,13 @@ class Cell(ABC):
         """
         # Assemble the cell's figure with the cell's centered circles only
         centered_regions = extract_sub_shapes(
-            make_partition(
-                [self.figure.face] + [
-                    c.face for c in self.get_centered_circles()],
-                [],
-                ShapeType.FACE),
+            make_compound([
+                make_partition(
+                    [self.figure.face] + [
+                        c.face for c in self.get_centered_circles()],
+                    [],
+                    ShapeType.FACE)]
+            ),
             ShapeType.FACE
         )
         # Sort the regions according to the distance from the cell center
