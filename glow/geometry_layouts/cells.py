@@ -1467,6 +1467,8 @@ class Cell(ABC):
         self.face = face
         # Clear the previously stored 'Circle' objects
         self.inner_circles = []
+        # Set the attribute storing the cell's sectorized face to None
+        self.sectorized_face = None
 
     def __initialize_region_dicts(self) -> None:
         """

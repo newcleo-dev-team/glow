@@ -13,7 +13,6 @@ from glow.geometry_layouts.cells import Cell, RectCell, Region
 from glow.geometry_layouts.geometries import Rectangle, Surface
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
-from support_funcs import make_ref_vectors
 
 
 class TestRegion(unittest.TestCase):
@@ -283,10 +282,6 @@ class TestCell(ABC, unittest.TestCase):
         self.__assess_add_circle(
             None, 0.2, len(self.cell.inner_circles))
 
-        # Restore the cell to the initial condition, so that other tests are
-        # not affected by this one
-        self.cell.restore()
-
     def test_remove_circle(self) -> None:
         """
         Method that tests the implementation of the method `remove_circle`
@@ -361,9 +356,6 @@ class TestCell(ABC, unittest.TestCase):
             math.isclose(
                 self.cell.rotation, rotation_0 + math.radians(rot_angle))
         )
-        # Restore the cell to the initial condition, so that other tests are
-        # not affected by this one
-        self.cell.rotate(-rot_angle)
 
     def test_rotate_from_axis(self) -> None:
         """
@@ -396,9 +388,6 @@ class TestCell(ABC, unittest.TestCase):
             math.isclose(
                 self.cell.rotation, rotation_0 + math.radians(rot_angle))
         )
-        # Restore the cell to the initial condition, so that other tests are
-        # not affected by this one
-        self.cell.rotate_from_axis(-rot_angle, rot_axis)
 
     def test_translate(self) -> None:
         """
@@ -452,10 +441,6 @@ class TestCell(ABC, unittest.TestCase):
                         make_cdg(self.cell.sectorized_face)),
                     distance)
             )
-
-        # Restore the cell to the initial condition, so that other tests are
-        # not affected by this one
-        self.cell = self.cell.translate(get_point_coordinates(self.o))
 
     def __assess_add_circle(
             self,
@@ -523,6 +508,7 @@ class TestCell(ABC, unittest.TestCase):
             are_same_shapes(self.cell.face, self.surf.face, ShapeType.FACE)
         )
         self.assertTrue(len(self.cell.inner_circles) == 0)
+        self.assertIsNone(self.cell.sectorized_face)
 
     def __assess_remove_circle(
             self,
@@ -740,6 +726,87 @@ class TestRectCell(TestCell):
             self.cell._check_radius_vs_cell_dim(1.0)
         # Test the check passes with a valid radius
         self.cell._check_radius_vs_cell_dim(0.1)
+
+    def test_sectorize(self) -> None:
+        """
+        Method that tests the implementation of the method `sectorize`
+        of the `RectCell` class.
+        """
+        # Add a circle to the cell
+        radius = 0.2
+        self.cell.add_circle(radius)
+        # Test an exception is raised when passing an incorrect number of
+        # sectorization options or the combination of sectors-angle is not
+        # admitted
+        with self.assertRaises(ValueError):
+            self.cell.sectorize([4], [0])
+        with self.assertRaises(ValueError):
+            self.cell.sectorize([4, 5], [0, 10])
+        # Verify the cell's sectorized face is not present
+        self.assertIsNone(self.cell.sectorized_face)
+
+        # Apply the sectorization without and with windmill and verify them
+        self.__assess_sectorization(radius, ([4, 8], [0, 22.5]), False)
+        self.__assess_sectorization(radius, ([4, 8], [0, 22.5]), True)
+
+    def __assess_sectorization(
+            self, radius, sect_opts: Tuple[List], windmill: bool) -> None:
+        """
+        Method that applies the sectorization to the instance of the
+        `RectCell` class and verifies it has been applied correctly.
+
+        Parameters
+        ----------
+        radius : float
+            The radius of the only circle added to the cell.
+        sect_opts : Tuple[List]
+            A tuple containing two lists, the first indicating the number
+            of sectors for each zone, the second the starting angle for
+            the sectorization in each zone.
+        windmill : bool
+            Indicating whether the sectorization includes a windmill.
+        """
+        self.cell.sectorize(sect_opts[0], sect_opts[1], windmill=windmill)
+
+        # Verify the sectorization happened successfully
+        self.assertIsNotNone(self.cell.sectorized_face)
+        n_zones = sum([4, 8]) + (4 if self.cell.is_windmill_applied else 0)
+        self.assertEqual(
+            len(
+                extract_sub_shapes(self.cell.sectorized_face,
+                                   ShapeType.FACE)),
+            n_zones
+        )
+        edges = extract_sub_shapes(self.cell.sectorized_face, ShapeType.EDGE)
+        sect_edges = {}
+        for e in edges:
+            if str(get_kind_of_shape(e)[0]) != "SEGMENT":
+                continue
+            length = round(get_basic_properties(e)[0], 6)
+            if (math.isclose(length, self.cell.figure.lx) or
+                math.isclose(length, self.cell.figure.ly)):
+                continue
+            if length in sect_edges:
+                sect_edges[length] += 1
+            else:
+                sect_edges[length] = 1
+
+        # Assess the correct number of sectorization edges for the central
+        # area, the outer one and the windimill, if applied
+        l_outer = self.cell.figure.lx / math.cos(math.radians(22.5)) - radius
+        l_wndml = (self.cell.figure.ly - self.cell.figure.lx / math.sin(
+            math.radians(22.5))) / math.cos(math.pi/4)
+        for e in sect_edges:
+            if math.isclose(e, radius):
+                self.assertEqual(sect_edges[e], 4)
+                continue
+            elif math.isclose(e, l_outer):
+                self.assertEqual(sect_edges[e], 8)
+                continue
+            if self.cell.is_windmill_applied:
+                if math.isclose(e, l_wndml):
+                    self.assertEqual(sect_edges[e], 4)
+                    continue
 
 
 if __name__ == "__main__":
