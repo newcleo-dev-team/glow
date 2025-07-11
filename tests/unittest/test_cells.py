@@ -8,7 +8,7 @@ import math
 from typing import Any, Dict, Tuple, Union
 import unittest
 
-from glow.generator.support import PropertyType
+from glow.generator.support import GeometryType, PropertyType
 from glow.geometry_layouts.cells import Cell, RectCell, Region
 from glow.geometry_layouts.geometries import Rectangle, Surface
 from glow.geometry_layouts.utility import are_same_shapes
@@ -420,6 +420,40 @@ class TestCell(ABC, unittest.TestCase):
                     materials[PropertyType.MATERIAL][i]
                 )
 
+    def test_show(self) -> None:
+        """
+        Method that tests the implementation of the method `show` of the
+        `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Add circles
+        self.cell.add_circle(0.1)
+        self.cell.add_circle(0.2)
+        # Apply the sectorization
+        sect_opts = ([1, 4, 8], [0, 0, 22.5])
+        self.cell.sectorize(*sect_opts)
+        # Check the cell's face has not been displayed yet
+        self.assertIsNone(self.cell.face_entry_id)
+
+        # Display the cell's technological geometry in the SALOME viewer
+        self.cell.show()
+        # Verify cell's regions are correctly shown
+        self.__assess_show(None, GeometryType.TECHNOLOGICAL)
+        self.__assess_show(None, GeometryType.SECTORIZED)
+        # Verify an exception is raised when trying to show regions according
+        # to a property type without assigning values to regions
+        with self.assertRaises(RuntimeError):
+            self.__assess_show(PropertyType.MATERIAL,
+                               GeometryType.TECHNOLOGICAL)
+
+        # Apply values for the PropertyType.MATERIAL to regions
+        self.cell.set_properties(
+            {PropertyType.MATERIAL: ['MAT1', 'MAT2', 'MAT1']})
+        # Verify cell's regions are shown according to the property values
+        self.__assess_show(PropertyType.MATERIAL, GeometryType.TECHNOLOGICAL)
+        self.__assess_show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
+
     def test_translate(self) -> None:
         """
         Method that tests the implementation of the method `translate`
@@ -592,6 +626,74 @@ class TestCell(ABC, unittest.TestCase):
                                               self.cell.tech_geom_sect_opts)
                 )
             self.assertEqual(i+1, len(self.cell.tech_geom_sect_opts))
+
+    def __assess_show(
+            self,
+            property: PropertyType | None,
+            geometry: GeometryType) -> None:
+        """
+        Method that assesses the correct display of cell's regions according
+        to whether regions should be colored by property values and to the
+        geometry type, either `TECHNOLOGICAL` or `SECTORIZED`.
+
+        Parameters
+        ----------
+        property : PropertyType | None
+            The `PropertyType` according to which regions should be colored;
+            if `None`, a default color must be used.
+        geometry : GeometryType
+            The `GeometryType` indicating whether regions are built from the
+            technological or the sectorized geometry.
+        """
+        # Display the cell's technological geometry in the SALOME viewer
+        self.cell.show(property, geometry)
+        # Verify an entry ID has been associated to the cell's face
+        self.assertIsNotNone(self.cell.face_entry_id)
+        # Verify the regions corresponding to the geometry have been built
+        self.assertTrue(len(self.cell.regions) > 0)
+        if geometry == GeometryType.TECHNOLOGICAL:
+            self.assertEqual(len(self.cell.regions),
+                             len(self.cell.tech_geom_props.keys()))
+            for region in self.cell.regions:
+                found = False
+                for tr in self.cell.tech_geom_props:
+                    if are_same_shapes(region.face, tr, ShapeType.FACE):
+                        found = True
+                        break
+                self.assertTrue(found)
+        elif geometry == GeometryType.SECTORIZED:
+            for region in self.cell.regions:
+                found = False
+                for tr in extract_sub_shapes(self.cell.sectorized_face,
+                                             ShapeType.FACE):
+                    if are_same_shapes(region.face, tr, ShapeType.FACE):
+                        found = True
+                        break
+                self.assertTrue(found)
+        # Verify if regions have the same default color or the ones having
+        # the same property value share the same color
+        if property is None:
+            default_color = (167, 167, 167)
+            self.assertTrue(
+                all(region.color == default_color
+                    for region in self.cell.regions)
+            )
+        else:
+            prop_val_vs_color = {}
+            for region in self.cell.regions:
+                value = region.properties[property]
+                if value in prop_val_vs_color:
+                    self.assertEqual(region.color, prop_val_vs_color[value])
+                else:
+                    prop_val_vs_color[value] = region.color
+        # Verify the regions have been displayed by checking their entry ID
+        # has been defined so that they are children of the cell's face
+        self.assertTrue(
+            all(
+                region.face_entry_id and region.face_entry_id.startswith(
+                    self.cell.face_entry_id + ':')
+                for region in self.cell.regions)
+        )
 
     def __build_cell_ref_vectors(self) -> List[Any]:
         """

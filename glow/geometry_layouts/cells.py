@@ -1238,11 +1238,11 @@ class Cell(ABC):
                 # Set the region color in the viewer
                 set_color_face(region.face, region.color)
                 # Add the cell region to the study
-                region_id = add_to_study_in_father(
+                region.face_entry_id = add_to_study_in_father(
                     self.face, region.face, region.name)
                 # Display the region in the current view, if needed
                 if update_view:
-                    display_shape(region_id)
+                    display_shape(region.face_entry_id)
         except:
             # Show only the whole cell face before raising the caught exception
             display_shape(self.face_entry_id)
