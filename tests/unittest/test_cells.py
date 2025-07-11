@@ -694,6 +694,8 @@ class TestCell(ABC, unittest.TestCase):
                     self.cell.face_entry_id + ':')
                 for region in self.cell.regions)
         )
+        # Verify the attribute indicating the displayed geometry
+        self.assertEqual(self.cell.displayed_geom, geometry)
 
     def __build_cell_ref_vectors(self) -> List[Any]:
         """
