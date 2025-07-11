@@ -389,6 +389,37 @@ class TestCell(ABC, unittest.TestCase):
                 self.cell.rotation, rotation_0 + math.radians(rot_angle))
         )
 
+    def test_set_properties(self) -> None:
+        """
+        Method that tests the implementation of the method `set_properties`
+        of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Add a circle
+        self.cell.add_circle(0.2)
+        # Check the regions of the cell's technological geometry do not have
+        # any property associated
+        for region in self.cell.tech_geom_props:
+            self.assertEqual(self.cell.tech_geom_props[region], {})
+
+        # Assign the MATERIAL property to the cell's regions
+        materials = {PropertyType.MATERIAL: ['MAT1', 'MAT2']}
+        self.cell.set_properties(materials)
+
+        # Verify the correct assignment of the materials to the regions
+        # according to their distance from the cell's center
+        regions = sorted(
+            extract_sub_shapes(self.cell.face, ShapeType.FACE),
+            key=lambda subface: get_min_distance(self.cell.figure.o, subface)
+        )
+        for i, (r1, r2) in enumerate(zip(regions, self.cell.tech_geom_props)):
+            if are_same_shapes(r1, r2, ShapeType.FACE):
+                self.assertEqual(
+                    self.cell.tech_geom_props[r2][PropertyType.MATERIAL],
+                    materials[PropertyType.MATERIAL][i]
+                )
+
     def test_translate(self) -> None:
         """
         Method that tests the implementation of the method `translate`
