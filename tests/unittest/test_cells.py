@@ -164,6 +164,7 @@ class TestCell(ABC, unittest.TestCase):
         self.surf: Surface | None = None
         self.cell: Cell | None = None
         self.o = make_vertex((0.0, 0.0, 0.0))
+        self.sect_opts = ([], [])
 
     def test_initialize_geometry(self) -> None:
         """
@@ -229,6 +230,62 @@ class TestCell(ABC, unittest.TestCase):
                             ShapeType.FACE)
         )
 
+    def test_get_centered_circles(self) -> None:
+        """
+        Method that tests the implementation of the method
+        `get_centered_circles` of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Configure the cell
+        self.cell.add_circle(0.1)
+        self.cell.add_circle(0.1, (0.1, 0.0, 0.0))
+        self.cell.add_circle(0.1, (-0.1, 0.0, 0.0))
+        self.cell.add_circle(0.1, (0.0, 0.1, 0.0))
+        self.cell.add_circle(0.1, (0.0, -0.1, 0.0))
+        self.cell.add_circle(0.2)
+        self.cell.add_circle(0.3)
+
+        # Retrieve the cell-centered circles only
+        centered_circles = self.cell.get_centered_circles()
+        # Verify only the cell-centered 'Circle' objects have been retrieved
+        self.assertEqual(len(centered_circles), 3)
+        for cc in centered_circles:
+            self.assertTrue(cc.radius in [0.1, 0.2, 0.3])
+            self.assertTrue(
+                get_min_distance(cc.o, self.cell.figure.o) < 1e-5
+            )
+
+    def test_get_regions_info(self) -> None:
+        """
+        Method that tests the implementation of the method `get_regions_info`
+        of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Verify an exception is raised when calling the method without
+        # selecting any region
+        with self.assertRaises(RuntimeError):
+            self.cell.get_regions_info()
+        # Test the inner implementation by verifying an exception is raised
+        # when providing a region not beloging to the cell
+        with self.assertRaises(RuntimeError):
+            self.cell.add_circle(0.1)
+            self.cell._Cell__build_regions()
+            self.cell._Cell__get_region_info(self.cell.figure.face)
+        region_face = make_face([make_circle(self.o, None, 0.1)])
+        # Check the message returns the name of the region and the associated
+        # properties, if any are assigned
+        self.__assess_get_regions_info(region_face,
+                                       "No associated properties.")
+        # Test the result message when a property is set
+        self.cell.set_region_property(
+            PropertyType.MATERIAL, "MAT", region_face)
+        self.cell._Cell__build_regions()
+        # Check the correct assignment
+        self.__assess_get_regions_info(
+            region_face, f"{PropertyType.MATERIAL.name}: MAT")
+
     def test_initialize_cell(self) -> None:
         """
         Method that tests the implementation of the private method
@@ -278,7 +335,7 @@ class TestCell(ABC, unittest.TestCase):
             self.cell.add_circle(0.1)
 
         # Test the circle addition when a sectorization is present
-        self.cell.sectorize([4, 1], [0]*2)
+        self.cell.sectorize(self.sect_opts[0][0:2], self.sect_opts[1][0:2])
         self.__assess_add_circle(
             None, 0.2, len(self.cell.inner_circles))
 
@@ -317,7 +374,7 @@ class TestCell(ABC, unittest.TestCase):
         # Test the circle removal when a sectorization is present
         self.cell.add_circle(radius)
         self.cell.add_circle(radius, position)
-        self.cell.sectorize([4, 1], [0]*2)
+        self.cell.sectorize(self.sect_opts[0][0:2], self.sect_opts[1][0:2])
         self.__assess_remove_circle(
             None, radius, len(self.cell.inner_circles))
         self.__assess_remove_circle(
@@ -327,6 +384,21 @@ class TestCell(ABC, unittest.TestCase):
             are_same_shapes(
                 self.cell.face, self.cell.figure.face, ShapeType.FACE)
         )
+
+    def test_restore(self) -> None:
+        """
+        Method that tests the implementation of the method `restore` of
+        the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Add a circle
+        self.cell.add_circle(0.2)
+        # Restore the cell
+        self.cell.restore()
+        # Assess the correct restore happened
+        self.__assess_cell_face_initialization()
+        self.__assess_cell_dict_initialization()
 
     def test_rotate(self) -> None:
         """
@@ -420,6 +492,38 @@ class TestCell(ABC, unittest.TestCase):
                     materials[PropertyType.MATERIAL][i]
                 )
 
+    def test_set_region_property(self) -> None:
+        """
+        Method that tests the implementation of the method
+        `set_region_property` of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        property_value = (PropertyType.MATERIAL, "MAT")
+        # Verify an exception is raised when calling the method without
+        # selecting any region or providing a non-existent one
+        with self.assertRaises(RuntimeError):
+            self.cell.set_region_property(*property_value)
+        with self.assertRaises(RuntimeError):
+            self.cell.add_circle(0.1)
+            self.cell.set_region_property(*property_value,
+                                          self.cell.figure.face)
+
+        # Call the method providing the region to update
+        region_face = make_face([make_circle(self.o, None, 0.1)])
+        self.cell.set_region_property(*property_value, region_face)
+        # Check the correct assignment
+        for region in self.cell.tech_geom_props:
+            if are_same_shapes(region, region_face, ShapeType.FACE):
+                self.assertTrue(
+                    PropertyType.MATERIAL in self.cell.tech_geom_props[region]
+                )
+                self.assertEqual(
+                    self.cell.tech_geom_props[region][PropertyType.MATERIAL],
+                    property_value[1]
+                )
+                break
+
     def test_show(self) -> None:
         """
         Method that tests the implementation of the method `show` of the
@@ -431,8 +535,7 @@ class TestCell(ABC, unittest.TestCase):
         self.cell.add_circle(0.1)
         self.cell.add_circle(0.2)
         # Apply the sectorization
-        sect_opts = ([1, 4, 8], [0, 0, 22.5])
-        self.cell.sectorize(*sect_opts)
+        self.cell.sectorize(*self.sect_opts)
         # Check the cell's face has not been displayed yet
         self.assertIsNone(self.cell.face_entry_id)
 
@@ -507,6 +610,107 @@ class TestCell(ABC, unittest.TestCase):
                     distance)
             )
 
+    def test_update_geometry(self) -> None:
+        """
+        Method that tests the implementation of the method `update_geometry`
+        of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Verify an exception is raised when calling the method without
+        # selecting any region
+        with self.assertRaises(RuntimeError):
+            self.cell.update_geometry()
+
+    def test_update_geometry_from_face(self) -> None:
+        """
+        Method that tests the implementation of the method
+        `update_geometry_from_face` of the `Cell` class.
+        """
+        # Check the cell istantiation
+        self.__check_cell_setup()
+        # Configure the cell
+        self.cell.add_circle(0.1)
+        self.cell.add_circle(0.3)
+        self.cell.set_properties(
+            {PropertyType.MATERIAL: ['MAT1', 'MAT2', 'MAT1']})
+        # Build the face to update the cell's sectorized one with
+        face = make_partition(
+            [self.cell.face],
+            [make_circle(self.o, None, 0.15),
+             make_circle(self.o, None, 0.2),
+             make_circle(self.o, None, 0.25)] + [
+                make_edge(self.o, v) for v in self.cell.figure.vertices],
+            ShapeType.FACE)
+        # The cell's sectorized face should be None at this point
+        self.assertIsNone(self.cell.sectorized_face)
+        self.cell.update_geometry_from_face(GeometryType.SECTORIZED, face)
+        # Verify the cell's sectorized face has been updated
+        self.assertIsNotNone(self.cell.sectorized_face)
+        for e1 in extract_sub_shapes(self.cell.sectorized_face,
+                                     ShapeType.EDGE):
+            found = False
+            for e2 in extract_sub_shapes(face, ShapeType.EDGE):
+                if are_same_shapes(e1, e2, ShapeType.EDGE):
+                    found = True
+                    break
+            self.assertTrue(found)
+        # Restore the cell geometry layout
+        self.cell.restore()
+        self.cell.add_circle(0.1)
+        self.cell.add_circle(0.3)
+        self.cell.set_properties(
+            {PropertyType.MATERIAL: ['MAT1', 'MAT2', 'MAT1']})
+        self.cell.sectorize(*self.sect_opts)
+
+        # Update the cell's technological geometry with the same face
+        face = make_partition(
+            [self.cell.face],
+            [make_circle(self.o, None, 0.15),
+             make_circle(self.o, None, 0.2),
+             make_circle(self.o, None, 0.25)],
+            ShapeType.FACE)
+        self.cell.update_geometry_from_face(GeometryType.TECHNOLOGICAL, face)
+        for e1 in extract_sub_shapes(self.cell.face, ShapeType.EDGE):
+            found = False
+            for e2 in extract_sub_shapes(face, ShapeType.EDGE):
+                if are_same_shapes(e1, e2, ShapeType.EDGE):
+                    found = True
+                    break
+            self.assertTrue(found)
+        face = make_partition(
+            [self.cell.sectorized_face] + [face], [], ShapeType.FACE)
+        for e1 in extract_sub_shapes(self.cell.sectorized_face,
+                                     ShapeType.EDGE):
+            found = False
+            for e2 in extract_sub_shapes(face, ShapeType.EDGE):
+                if are_same_shapes(e1, e2, ShapeType.EDGE):
+                    found = True
+                    break
+            self.assertTrue(found)
+
+        # Check the dictionaries of properties and sectorization options have
+        # updated
+        for f in extract_sub_shapes(self.cell.face, ShapeType.FACE):
+            found = False
+            for region in self.cell.tech_geom_props:
+                if are_same_shapes(f, region, ShapeType.FACE):
+                    found = True
+                    self.assertTrue(
+                        self.cell.tech_geom_props[region][
+                            PropertyType.MATERIAL])
+                    break
+            self.assertTrue(found)
+        for f in self.cell._Cell__extract_cell_centered_faces():
+            found = False
+            for region in self.cell.tech_geom_sect_opts:
+                if are_same_shapes(f, region, ShapeType.FACE):
+                    found = True
+                    self.assertTrue(
+                        self.cell.tech_geom_sect_opts[region])
+                    break
+            self.assertTrue(found)
+
     def __assess_add_circle(
             self,
             pos: Tuple[float, float, float] | None,
@@ -574,6 +778,27 @@ class TestCell(ABC, unittest.TestCase):
         )
         self.assertTrue(len(self.cell.inner_circles) == 0)
         self.assertIsNone(self.cell.sectorized_face)
+
+    def __assess_get_regions_info(
+            self, region_face: Any, str_to_find: str) -> None:
+        """
+        Method that assesses whether the right message is shown when
+        displaying information about a specified region of the cell.
+
+        Parameters
+        ----------
+        region_face : Any
+            The cell's region to retrieve information from.
+        str_to_find: str
+            The informative string to find for in the one being produced.
+        """
+        # Retrieve the informative message about a region
+        mssg = self.cell._Cell__get_region_info(region_face)
+        for region in self.cell.regions:
+            if are_same_shapes(region.face, region_face, ShapeType.FACE):
+                self.assertTrue(region.name in mssg)
+                self.assertTrue(str_to_find in mssg)
+                return
 
     def __assess_remove_circle(
             self,
@@ -792,9 +1017,7 @@ class TestCell(ABC, unittest.TestCase):
             `False` otherwise.
         """
         for f in cell_dict:
-            if are_same_shapes(face, f, ShapeType.FACE) and (
-                get_basic_properties(face) == get_basic_properties(f)
-            ):
+            if are_same_shapes(face, f, ShapeType.FACE):
                 return True
         else:
             return False
@@ -825,6 +1048,9 @@ class TestRectCell(TestCell):
         cartesian-type cell.
     cell : RectCell
         The `Cell` subclass that describes a cartesian-type cell.
+    sect_opts : Tuple[List[int], List[float]]
+        Providing the sectorization options as the number of sectors and the
+        starting angle for each cell-centered region.
     """
     def setUp(self):
         # Setup the common geometric elements
@@ -841,6 +1067,8 @@ class TestRectCell(TestCell):
             height_x_width=(self.surf.ly, self.surf.lx),
             name=self.name
         )
+        self.sect_opts: Tuple[List[int], List[float]] = (
+            [1, 4, 8], [0, 0, 22.5])
 
     def test_initialize_specific_cell(self) -> None:
         """
@@ -905,7 +1133,8 @@ class TestRectCell(TestCell):
 
         # Verify the sectorization happened successfully
         self.assertIsNotNone(self.cell.sectorized_face)
-        n_zones = sum([4, 8]) + (4 if self.cell.is_windmill_applied else 0)
+        n_zones = sum(sect_opts[0]) + (
+            4 if self.cell.is_windmill_applied else 0)
         self.assertEqual(
             len(
                 extract_sub_shapes(self.cell.sectorized_face,
@@ -933,10 +1162,10 @@ class TestRectCell(TestCell):
             math.radians(22.5))) / math.cos(math.pi/4)
         for e in sect_edges:
             if math.isclose(e, radius):
-                self.assertEqual(sect_edges[e], 4)
+                self.assertEqual(sect_edges[e], sect_opts[0][0])
                 continue
             elif math.isclose(e, l_outer):
-                self.assertEqual(sect_edges[e], 8)
+                self.assertEqual(sect_edges[e], sect_opts[0][1])
                 continue
             if self.cell.is_windmill_applied:
                 if math.isclose(e, l_wndml):
