@@ -42,8 +42,10 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
     if get_shape_type(shape1) != get_shape_type(shape2):
         raise RuntimeError("Shapes not compatible")
     # Check whether the two shapes has same perimeter, area and volume
-    if get_basic_properties(shape1) != get_basic_properties(shape2):
-        return False
+    for bp1, bp2 in zip(get_basic_properties(shape1),
+                        get_basic_properties(shape2)):
+        if not math.isclose(bp1, bp2, abs_tol=1e-6):
+            return False
     # Perform a cut operation
     cut = make_cut(shape1, shape2)
     # If they are the same shape, the cut result must be a compound that

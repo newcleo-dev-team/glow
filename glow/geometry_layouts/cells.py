@@ -1894,8 +1894,8 @@ class HexCell(Cell):
                   dimensions
         """
         if radius > self.apothem:
-            raise ValueError("The circle cannot be added to the cell as its "
-                             "dimensions exceedes the one of the cell")
+            raise RuntimeError("The circle cannot be added to the cell as "
+                               "its dimensions exceedes the one of the cell")
 
     def sectorize(
         self, sectors_no: List[int], angles: List[float], **kwargs) -> None:

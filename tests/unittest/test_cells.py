@@ -8,9 +8,9 @@ import math
 from typing import Any, Dict, Tuple, Union
 import unittest
 
-from glow.generator.support import GeometryType, PropertyType
-from glow.geometry_layouts.cells import Cell, RectCell, Region
-from glow.geometry_layouts.geometries import Rectangle, Surface
+from glow.generator.support import CellType, GeometryType, PropertyType
+from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
+from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
 
@@ -1051,20 +1051,26 @@ class TestRectCell(TestCell):
     sect_opts : Tuple[List[int], List[float]]
         Providing the sectorization options as the number of sectors and the
         starting angle for each cell-centered region.
+    height : float
+        The height of the cartesian cell.
+    width : float
+        The width of the cartesian cell.
     """
     def setUp(self):
         # Setup the common geometric elements
         super().setUp()
         # Setup the specific attributes for testing the `Surface` subclass
         self.name = "Cartesian Cell"
+        self.height = 1.0
+        self.width = 1.0
         self.surf: Rectangle = Rectangle(
             center=get_point_coordinates(self.o),
-            height=1.0,
-            width=1.0
+            height=self.height,
+            width=self.width
         )
         self.cell: RectCell = RectCell(
             center=get_point_coordinates(self.o),
-            height_x_width=(self.surf.ly, self.surf.lx),
+            height_x_width=(self.height, self.width),
             name=self.name
         )
         self.sect_opts: Tuple[List[int], List[float]] = (
@@ -1089,6 +1095,16 @@ class TestRectCell(TestCell):
             self.cell._check_radius_vs_cell_dim(1.0)
         # Test the check passes with a valid radius
         self.cell._check_radius_vs_cell_dim(0.1)
+
+    def test_init(self) -> None:
+        """
+        Method that tests the correct initialization of the `RectCell` class.
+        """
+        self.assertEqual(self.cell.height, self.height)
+        self.assertEqual(self.cell.width, self.width)
+        self.assertEqual(self.cell.figure.lx, self.width)
+        self.assertEqual(self.cell.figure.ly, self.height)
+        self.assertEqual(self.cell.cell_type, CellType.RECT)
 
     def test_sectorize(self) -> None:
         """
@@ -1156,7 +1172,7 @@ class TestRectCell(TestCell):
                 sect_edges[length] = 1
 
         # Assess the correct number of sectorization edges for the central
-        # area, the outer one and the windimill, if applied
+        # area, the outer one and the windmill, if applied
         l_outer = self.cell.figure.lx / math.cos(math.radians(22.5)) - radius
         l_wndml = (self.cell.figure.ly - self.cell.figure.lx / math.sin(
             math.radians(22.5))) / math.cos(math.pi/4)
@@ -1171,6 +1187,152 @@ class TestRectCell(TestCell):
                 if math.isclose(e, l_wndml):
                     self.assertEqual(sect_edges[e], 4)
                     continue
+
+
+class TestHexCell(TestCell):
+    """
+    Test case for verifying the geometric operations and visualization
+    capabilities of the `HexCell` class.
+
+    This test suite provides common setup and a set of tests to ensure that
+    implementations of `HexCell` correctly handle the operations performed
+    on a hexagonal cell, based on a `Hexagon` surface.
+    Tests dealing with the cell's operations are declared in the `TestCell`
+    class this class inherits from. They are run here, as this class declares
+    the `cell` attribute.
+
+    In addition, there are tests specific for a hexagonal-type cell.
+
+    Attributes
+    ----------
+    In addition to the attributes declared in the `TestCell` superclass,
+    there are the following ones:
+
+    name : str
+        The name of the cell when displayed in the SALOME viewer.
+    surf : Hexagon
+        The `Surface` subclass providing the characteristic shape for a
+        hexagonal-type cell.
+    cell : HexCell
+        The `Cell` subclass that describes a hexagonal-type cell.
+    sect_opts : Tuple[List[int], List[float]]
+        Providing the sectorization options as the number of sectors and the
+        starting angle for each cell-centered region.
+    edge_length : float
+        The length of the hexagon's edge.
+    apothem : float
+        The length of the hexagon's apothem.
+    """
+    def setUp(self):
+        # Setup the common geometric elements
+        super().setUp()
+        # Setup the specific attributes for testing the `Surface` subclass
+        self.name = "Hexagonal Cell"
+        self.edge_length = 1.0
+        self.apothem = self.edge_length * math.sin(math.pi/3)
+        self.surf: Hexagon = Hexagon(
+            center=get_point_coordinates(self.o),
+            edge_length=1.0
+        )
+        self.cell: HexCell = HexCell(
+            center=get_point_coordinates(self.o),
+            edge_length=1.0,
+            name=self.name
+        )
+        self.sect_opts: Tuple[List[int], List[float]] = (
+            [1, 6, 6], [0, 0, 0])
+
+    def test_check_radius_vs_cell_dim(self) -> None:
+        """
+        Method for testing if a circle can be added to the cell by verifying
+        that the circle's radius does not exceed the cell's dimensions.
+        """
+        # Test the exception is raised when the radius is not valid
+        with self.assertRaises(RuntimeError):
+            self.cell._check_radius_vs_cell_dim(1.0)
+        # Test the check passes with a valid radius
+        self.cell._check_radius_vs_cell_dim(0.1)
+
+    def test_init(self) -> None:
+        """
+        Method that tests the correct initialization of the `HexCell` class.
+        """
+        self.assertEqual(self.cell.edge_length, self.edge_length)
+        self.assertEqual(self.cell.apothem, self.apothem)
+        self.assertEqual(self.cell.figure.lx, self.edge_length)
+        self.assertEqual(self.cell.figure.ly, self.apothem)
+        self.assertEqual(self.cell.cell_type, CellType.HEX)
+
+    def test_sectorize(self) -> None:
+        """
+        Method that tests the implementation of the method `sectorize`
+        of the `HexCell` class.
+        """
+        # Add a circle to the cell
+        radius = 0.2
+        self.cell.add_circle(radius)
+        # Test an exception is raised when passing an incorrect number of
+        # sectorization options or the combination of sectors-angle is not
+        # admitted
+        with self.assertRaises(ValueError):
+            self.cell.sectorize([6], [0])
+        with self.assertRaises(ValueError):
+            self.cell.sectorize([4, 5], [0, 10])
+        # Verify the cell's sectorized face is not present
+        self.assertIsNone(self.cell.sectorized_face)
+
+        # Apply the sectorization and verify it
+        self.__assess_sectorization(
+            radius, (self.sect_opts[0][:2], self.sect_opts[1][:2]))
+
+    def __assess_sectorization(self, radius, sect_opts: Tuple[List]) -> None:
+        """
+        Method that applies the sectorization to the instance of the
+        `HexCell` class and verifies it has been applied correctly.
+
+        Parameters
+        ----------
+        radius : float
+            The radius of the only circle added to the cell.
+        sect_opts : Tuple[List]
+            A tuple containing two lists, the first indicating the number
+            of sectors for each zone, the second the starting angle for
+            the sectorization in each zone.
+        """
+        self.cell.sectorize(sect_opts[0], sect_opts[1])
+
+        # Verify the sectorization happened successfully
+        self.assertIsNotNone(self.cell.sectorized_face)
+        n_zones = sum(sect_opts[0])
+        self.assertEqual(
+            len(
+                extract_sub_shapes(self.cell.sectorized_face,
+                                   ShapeType.FACE)),
+            n_zones
+        )
+        edges = extract_sub_shapes(self.cell.sectorized_face, ShapeType.EDGE)
+        sect_edges = {}
+        for e in edges:
+            if str(get_kind_of_shape(e)[0]) != "SEGMENT":
+                continue
+            length = round(get_basic_properties(e)[0], 6)
+            if math.isclose(length, self.cell.figure.lx):
+                continue
+            if length in sect_edges:
+                sect_edges[length] += 1
+            else:
+                sect_edges[length] = 1
+
+        # Assess the correct number of sectorization edges for the central
+        # area and the outer one
+        l_outer = self.cell.figure.lx - radius
+        for e in sect_edges:
+            if math.isclose(e, radius):
+                self.assertEqual(sect_edges[e], sect_opts[0][0])
+                continue
+            elif math.isclose(e, l_outer):
+                self.assertEqual(sect_edges[e], sect_opts[0][1])
+                continue
 
 
 if __name__ == "__main__":
