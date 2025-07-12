@@ -11,8 +11,8 @@ from typing import Any, Dict, List, Self, Tuple, Union
 
 from glow.geometry_layouts.geometries import GenericSurface, Surface, Circle, \
     Rectangle, Hexagon
-from glow.geometry_layouts.utility import build_compound_borders, \
-    update_relative_pos
+from glow.geometry_layouts.utility import are_same_shapes, \
+    build_compound_borders, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
@@ -515,7 +515,7 @@ class Cell(ABC):
                 # entry region VS properties in the support dictionary
                 if is_point_inside_shape(pnt, zone):
                     # print("Assigning value", values)
-                    support_dict[region] = values
+                    support_dict[region] = deepcopy(values)
                     break
         # Update the given dictionary
         regions_dict.clear()
@@ -1321,35 +1321,81 @@ class Cell(ABC):
         study.
         """
         # Extract the geometrical object currently selected in the current
-        # SALOME study
+        # SALOME study, if any
+        shape = self.__retrieve_selected_object(
+            "Please, select a single region whose data to show.")
+        # Get the region that corresponds to the given shape and print the
+        # corresponding data
+        print(self.__get_region_info(shape))
+
+    def __retrieve_selected_object(self, error_msg: str) -> Any:
+        """
+        Method that retrieves the geometrical object currently selected in
+        the SALOME study. If more than one or none is selected, an exception
+        with the given message is raised.
+
+        Parameters
+        ----------
+        error_msg : str
+            The error message to display when the incorrect number of shapes
+            is selected.
+        """
         shape = get_selected_object()
         if not shape:
-            raise RuntimeError("Please, select a single region whose data to "
-                               "show.")
+            raise RuntimeError(error_msg)
+        return shape
+
+    def __get_region_info(self, shape: Any) -> str:
+        """
+        Method that, given the shape, retrieves the name of the corresponding
+        `Region` object and the values of its associated properties.
+
+        Parameters
+        ----------
+        shape : Any
+            The geometrical shape to retrieve info about.
+        """
         # Get the region that corresponds to the given shape
         for region in self.regions:
-            if get_min_distance(region.inner_point, shape) < 1e-5:
-                # Print info about the region name and its properties
-                print(f"{region.name}:")
+            if are_same_shapes(region.face, shape, ShapeType.FACE):
+                # Build the info about the region name and its properties
                 if not region.properties:
-                    print("   No associated properties.")
-                    return
+                    return region.name + "\n   No associated properties."
                 for prop_type, value in region.properties.items():
-                    print(f"   {prop_type.name}: {value}")
+                    return region.name + f"\n   {prop_type.name}: {value}"
+        else:
+            raise RuntimeError("The indicated region could be found among "
+                               "the cell's ones.")
 
     def set_region_property(
-            self, property_type: PropertyType, value: str) -> None:
+            self,
+            property_type: PropertyType,
+            value: str,
+            region: Any | None = None) -> None:
         """
         Method that allows to set a value of a given type of property for
-        the cell region which is currently selected in the SALOME study.
+        the cell region, passed as input, or the one currently selected
+        in the SALOME study, if none is provided as input.
 
         Parameters
         ----------
         property_type : PropertyType
             The value of the 'PropertyType' enumeration indicating which
             type of property to assign to the selected region
-        value         : str
+        value : str
             The value of the property type to assign to the selected region
+        region : Any | None = None
+            The cell's region of the technological geometry whose property
+            to change. When not provided, the region currently selected is
+            considered.
+
+        Raises
+        ------
+        RuntimeError
+            - If the displayed geometry is not the `TECHNOLOGICAL` one.
+            - When no region, or more than one, is selected.
+            - If the indicated region cannot be found among the ones stored
+              in the properties dictionary.
         """
         # Check which cell geometry type is currently shown; if different
         # from the TECHNOLOGICAL one, raise an exception
@@ -1359,17 +1405,50 @@ class Cell(ABC):
                 "geometry. To set cell regions properties, show the '"
                 "TECHNOLOGICAL' geometry first.")
         # Extract the geometrical object currently selected in the current
-        # SALOME study
-        shape = get_selected_object()
-        if not shape:
-            raise RuntimeError("Please, select a single region to assign "
-                               "a property to.")
-        # Get the region that corresponds to the given shape
+        # SALOME study, if no one is provided as input
+        if region is None:
+            region = self.__retrieve_selected_object(
+                "Please, select a single region to assign a property to.")
+        # Get the region that corresponds to the given shape and set the
+        # value for the indicated property
+        self.__set_region_property(region, property_type, value)
+
+    def __set_region_property(
+            self,
+            shape: Any,
+            property_type: PropertyType,
+            value: str) -> None:
+        """
+        Method that looks for the given region in the dictionary of cell's
+        regions vs properties and sets the value for the indicated property
+        type.
+
+        Parameters
+        ----------
+        shape : Any
+            The cell's region of the technological geometry whose property
+            to change.
+        property_type : PropertyType
+            Indicating the type of property the value associated to the
+            region needs to be changed.
+        value : str
+            The value of the property type to set.
+
+        Raises
+        ------
+        RuntimeError
+            If no region can be found among the ones stored in the properties
+            dictionary.
+        """
         for region in self.tech_geom_props:
-            if get_min_distance(make_vertex_inside_face(region), shape) < 1e-5:
-                # Either update or create an entry to the region dictionary
+            if are_same_shapes(region, shape, ShapeType.FACE):
+                # Either update or create an entry in the region dictionary
                 # of properties
-                self.tech_geom_props[region] = {property_type: value}
+                self.tech_geom_props[region][property_type] = value
+                return
+        else:
+            raise RuntimeError("No region could be found among the ones "
+                               "stored in the properties dictionary.")
 
     def update_geometry(self) -> None:
         """
@@ -1409,11 +1488,13 @@ class Cell(ABC):
                 # Store the cell's dictionaries
                 props = deepcopy(self.tech_geom_props)
                 sec_opts = deepcopy(self.tech_geom_sect_opts)
+                sect_face = deepcopy(self.sectorized_face)
                 # Re-initialize the cell geometry and its dictionaries
                 self.__initialize_cell()
                 # Update the cell face with the face built on the given shape
                 # borders
                 self.face = make_face(build_compound_borders(shape))
+                self.sectorized_face = sect_face
                 # Update the cell face with the edges found in the given shape
                 self.__update_cell_with_edges(shape)
                 # Re-build the cell's dictionaries
