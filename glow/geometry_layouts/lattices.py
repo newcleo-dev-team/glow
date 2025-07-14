@@ -8,7 +8,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Set, Tuple, Union
 
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, \
+from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, \
     build_hexagon
 from glow.geometry_layouts.utility import build_compound_borders, \
     translate_wrt_reference, update_relative_pos
@@ -97,20 +97,20 @@ class Lattice():
     @property
     def cells_rot(self) -> float | None:
         """
-        Get or set the common rotation angle of the cells belonging to the
-        main pattern of cells in the lattice.
+        Get or set the common rotation angle, in degrees, of the cells
+        belonging to the main pattern of cells in the lattice.
 
         Parameters
         ----------
         cells_rot : float
-            The rotation angle of the cells belonging to the main pattern
-            of cells in the lattice.
+            The rotation angle, in degrees, of the cells belonging to the
+            main pattern of cells in the lattice.
 
         Returns
         -------
         float | None
-            The rotation angle of the cells belonging to the main pattern
-            of cells.
+            The rotation angle, in degrees, of the cells belonging to the
+            main pattern of cells.
         """
         return self.__cells_rot
 
@@ -518,8 +518,9 @@ class Lattice():
             case CellType.RECT:
                 if no_cells > 1:
                     # Case of a lattice made of cartesian cells: this case is
-                    # characterised by specular reflection on each side
-                    self.__type_geo = LatticeGeometryType.RECTANGLE_SYM
+                    # characterised by an isotropic geometry type with VOID
+                    # BCs.
+                    self.__type_geo = LatticeGeometryType.ISOTROPIC
                 else:
                     # Only one cartesian cell is present: this case is
                     # characterised by an cartesian geometry type with

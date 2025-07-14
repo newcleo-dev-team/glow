@@ -9,6 +9,7 @@ from typing import List
 
 from glow.generator.support import *
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell
+from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, build_hexagon
 from glow.geometry_layouts.lattices import Lattice
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
@@ -38,6 +39,8 @@ class TestLattice(unittest.TestCase):
     lattice : Lattice
         The `Lattice` object to test, made either by cartesian or hexagonal
         cells.
+    box_layers : List[float]
+        List storing the thickness for each layer the lattice's box is made of
     """
     def setUp(self) -> None:
         """
@@ -51,6 +54,7 @@ class TestLattice(unittest.TestCase):
         rect_cell = RectCell(name="Cartesian Cell")
         self.hex_cells: List[HexCell] = self.__set_up_hex_cells(hex_cell)
         self.rect_cells: List[RectCell] = self.__set_up_rect_cells(rect_cell)
+        self.box_layers: List[float] = [0.075, 0.075]
 
     def test_init(self) -> None:
         """
@@ -73,6 +77,49 @@ class TestLattice(unittest.TestCase):
         self.rect_cells = self.__set_up_rect_cells(self.rect_cells[0], True)
         self.lattice = Lattice(self.rect_cells)
         self.__assess_lattice_init(self.rect_cells, [], 1)
+
+    def test_build_lattice_box(self) -> None:
+        """
+        Method that tests the correct implementation of the method
+        `build_lattice_box` of the `Lattice` class.
+        """
+        # Instantiate the lattice with the hexagonal cells
+        self.lattice = Lattice(self.hex_cells)
+        # Build the comparison figure
+        box_face = self.__build_hex_box()
+        # Build the lattice box
+        self.lattice.build_lattice_box(self.box_layers)
+        # Verify the correctness of the box surface
+        self.assertTrue(
+            are_same_shapes(self.lattice.lattice_box.face,
+                            box_face,
+                            ShapeType.COMPOUND)
+        )
+        # Instantiate the lattice with the cartesian cells
+        self.lattice = Lattice(self.rect_cells)
+        # Build the comparison figure
+        box_face = self.__build_rect_box()
+        # Build the lattice box
+        self.lattice.build_lattice_box(self.box_layers)
+        # Verify the correctness of the box surface
+        self.assertTrue(
+            are_same_shapes(self.lattice.lattice_box.face,
+                            box_face,
+                            ShapeType.COMPOUND)
+        )
+        # Instantiate the lattice with the cartesian cells (even cells number)
+        self.lattice = Lattice(
+            self.__set_up_rect_cells(self.rect_cells[0], True))
+        # Build the comparison figure
+        box_face = self.__build_rect_box()
+        # Build the lattice box
+        self.lattice.build_lattice_box(self.box_layers)
+        # Verify the correctness of the box surface
+        self.assertTrue(
+            are_same_shapes(self.lattice.lattice_box.face,
+                            box_face,
+                            ShapeType.COMPOUND)
+        )
 
     def __assess_lattice_init(
             self,
@@ -148,6 +195,60 @@ class TestLattice(unittest.TestCase):
         else:
             self.assertIsNone(self.lattice.lattice_box)
 
+    def __build_hex_box(self) -> Any:
+        """
+        Method that builds a face object made by several encapsulated
+        hexagon surfaces in number equal to the box layers.
+
+        Returns
+        -------
+        Any
+            A face object made by assembling several hexagons together.
+        """
+        box_surfaces: List[Hexagon] = []
+        box_apothem = self.hex_cells[0].edge_length * (
+            2 + math.sin(math.pi/6))
+        if self.box_layers[0] > 0:
+            box_layers = [0.0] + self.box_layers
+        for thick in box_layers:
+            box_apothem += thick
+            box_surfaces.append(
+                build_hexagon(
+                    box_apothem,
+                    get_point_coordinates(self.lattice.lattice_center)))
+        # Perform a 'partition' operation to assemble the lattice box
+        return make_partition(
+            [hex.face for hex in box_surfaces], [], ShapeType.FACE)
+
+    def __build_rect_box(self) -> Any:
+        """
+        Method that builds a face object made by several encapsulated
+        rectangle surfaces in number equal to the box layers.
+
+        Returns
+        -------
+        Any
+            A face object made by assembling several rectangles together.
+        """
+        # Declare the starting dimensions of the box
+        x_min, x_max, y_min, y_max = get_bounding_box(
+            make_compound([cell.face for cell in self.lattice.lattice_cells]))
+        height = y_max - y_min
+        width = x_max - x_min
+        box_surfaces: List[Rectangle] = []
+        if self.box_layers[0] > 0:
+            box_layers = [0.0] + self.box_layers
+        # Build a rectangle for each layer
+        for thick in box_layers:
+            height += 2*thick
+            width += 2*thick
+            box_surfaces.append(
+                Rectangle(get_point_coordinates(self.lattice.lattice_center),
+                          height,
+                          width))
+        # Perform a 'partition' operation to assemble the lattice box
+        return make_partition(
+            [rect.face for rect in box_surfaces], [], ShapeType.FACE)
 
     def __set_up_hex_cells(self, hex_cell: HexCell) -> List[HexCell]:
         """
@@ -165,8 +266,8 @@ class TestLattice(unittest.TestCase):
             A list of hexagonal cells with a central one surrounded by six
             cells.
         """
-        dx = 2*hex_cell.apothem*math.sin(math.radians(60))
-        dy = 2*hex_cell.apothem*math.cos(math.radians(60))
+        dx = hex_cell.apothem
+        dy = 3/2*hex_cell.edge_length
         hex_cell.rotate(90.0)
         return [
             hex_cell,
@@ -174,8 +275,8 @@ class TestLattice(unittest.TestCase):
             hex_cell.translate((-dx, dy, 0)),
             hex_cell.translate((-dx, -dy, 0)),
             hex_cell.translate((dx, -dy, 0)),
-            hex_cell.translate((0, 2*dy, 0)),
-            hex_cell.translate((0, -2*dy, 0))
+            hex_cell.translate((2*dx, 0, 0)),
+            hex_cell.translate((-2*dx, 0, 0))
         ]
 
     def __set_up_rect_cells(self,

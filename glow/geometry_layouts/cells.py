@@ -2001,7 +2001,7 @@ class GenericCell(Cell):
         # Call the superclass constructor
         super().__init__(GenericSurface(self.face), get_shape_name(self.face))
 
-    def _check_radius_vs_cell_dim(self):
+    def _check_radius_vs_cell_dim(self, radius: float):
         """
         Method for assessing if the circle, whose radius is given as input,
         can be added to the cell. No implementation is needed for this method

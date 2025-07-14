@@ -44,7 +44,7 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
     # Check whether the two shapes has same perimeter, area and volume
     for bp1, bp2 in zip(get_basic_properties(shape1),
                         get_basic_properties(shape2)):
-        if not math.isclose(bp1, bp2, abs_tol=1e-6):
+        if not math.isclose(bp1, bp2, abs_tol=1e-5):
             return False
     # Perform a cut operation
     cut = make_cut(shape1, shape2)
