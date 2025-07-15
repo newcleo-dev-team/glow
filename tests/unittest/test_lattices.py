@@ -278,6 +278,52 @@ class TestLattice(unittest.TestCase):
                             ShapeType.COMPOUND)
         )
 
+    def test_build_regions(self) -> None:
+        """
+        Method that tests the implementation of the method `build_regions`
+        of the `Lattice` class.
+        """
+        # Instantiate the lattice without any cell, then add hexagonal cells
+        self.lattice = Lattice()
+        cell = self.hex_cells[0]
+        self.lattice.add_cell(cell, ())
+        self.lattice.add_ring_of_cells(cell, 1)
+        # Verify no regions are present after adding the cells
+        self.assertEqual(len(self.lattice.regions), 0)
+        # Build the regions, using either the cells' technological geometry
+        # or the sectorized one and verify the regions construction
+        self.lattice.build_regions(GeometryType.TECHNOLOGICAL)
+        self.__assess_build_regions(GeometryType.TECHNOLOGICAL)
+        self.lattice.build_regions(GeometryType.SECTORIZED)
+        self.__assess_build_regions(GeometryType.SECTORIZED)
+        self.assertFalse(self.lattice.is_update_needed)
+
+    def test_show(self) -> None:
+        """
+        Method that tests the implementation of the method `show` of the
+        `Lattice` class.
+        """
+        # Instantiate the lattice with a list of hexagonal cells
+        for cell in self.hex_cells:
+            cell.sectorize([6], [0])
+        self.lattice = Lattice(self.hex_cells)
+        # Check the cell's face has not been displayed yet
+        self.assertIsNone(self.lattice.lattice_entry_id)
+        # Verify lattice's regions are correctly shown
+        self.__assess_show(None, GeometryType.TECHNOLOGICAL)
+        self.__assess_show(None, GeometryType.SECTORIZED)
+        # Verify an exception is raised when trying to show regions according
+        # to a property type without assigning values to regions
+        with self.assertRaises(RuntimeError):
+            self.__assess_show(PropertyType.MATERIAL,
+                               GeometryType.TECHNOLOGICAL)
+        # Apply values for the PropertyType.MATERIAL to cells' regions
+        for cell in self.lattice.lattice_cells:
+            cell.set_properties({PropertyType.MATERIAL: ['MAT1']})
+        # Verify lattice's regions are shown according to the property values
+        self.__assess_show(PropertyType.MATERIAL, GeometryType.TECHNOLOGICAL)
+        self.__assess_show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
+
     def __assess_add_cell(
             self,
             cell: Cell,
@@ -582,6 +628,100 @@ class TestLattice(unittest.TestCase):
                 make_face(
                     build_compound_borders(self.lattice.lattice_box.face)),
                 ShapeType.VERTEX))
+
+    def __assess_show(
+            self,
+            property: PropertyType | None,
+            geometry: GeometryType) -> None:
+        """
+        Method that assesses the correct display of lattice's regions
+        according to whether regions should be colored by property values
+        and to the geometry type, either `TECHNOLOGICAL` or `SECTORIZED`.
+
+        Parameters
+        ----------
+        property : PropertyType | None
+            The `PropertyType` according to which regions should be colored;
+            if `None`, a default color must be used.
+        geometry : GeometryType
+            The `GeometryType` indicating whether regions are built from the
+            technological or the sectorized geometry.
+        """
+        # Display the cell's technological geometry in the SALOME viewer
+        self.lattice.show(property, geometry)
+        # Verify an entry ID has been associated to the lattice's face
+        self.assertIsNotNone(self.lattice.lattice_entry_id)
+        # Verify the regions corresponding to the geometry have been built
+        self.assertTrue(len(self.lattice.regions) > 0)
+        self.__assess_build_regions(geometry)
+        # Verify if regions have the same default color or the ones having
+        # the same property value share the same color
+        if property is None:
+            default_color = (167, 167, 167)
+            self.assertTrue(
+                all(region.color == default_color
+                    for region in self.lattice.regions)
+            )
+        else:
+            prop_val_vs_color = {}
+            for region in self.lattice.regions:
+                value = region.properties[property]
+                if value in prop_val_vs_color:
+                    self.assertEqual(region.color, prop_val_vs_color[value])
+                else:
+                    prop_val_vs_color[value] = region.color
+        # Verify the regions have been displayed by checking their entry ID
+        # has been defined so that they are children of the lattice's face
+        self.assertTrue(
+            all(
+                region.face_entry_id and region.face_entry_id.startswith(
+                    self.lattice.lattice_entry_id + ':')
+                for region in self.lattice.regions),
+            f"{[region.face_entry_id for region in self.lattice.regions]}"
+        )
+        # Verify the attribute indicating the displayed geometry
+        self.assertEqual(self.lattice.displayed_geom, geometry)
+
+    def __assess_build_regions(self, geometry: GeometryType) -> None:
+        """
+        Method that assesses that the correct regions have been built
+        according to the given geometry.
+
+        Parameters
+        ----------
+        geometry : GeometryType
+            The type of geometry of the cells to build regions from.
+        """
+        if geometry == GeometryType.TECHNOLOGICAL:
+            self.assertEqual(
+                len(self.lattice.regions),
+                sum(len(cell.tech_geom_props.keys())
+                    for cell in self.lattice.lattice_cells)
+            )
+            for region in self.lattice.regions:
+                found = False
+                for cell in self.lattice.lattice_cells:
+                    for tr in cell.tech_geom_props:
+                        if are_same_shapes(region.face, tr, ShapeType.FACE):
+                            found = True
+                            break
+                    else:
+                        continue
+                    self.assertTrue(found)
+                    break
+        elif geometry == GeometryType.SECTORIZED:
+            for region in self.lattice.regions:
+                found = False
+                for cell in self.lattice.lattice_cells:
+                    for tr in extract_sub_shapes(
+                        cell.sectorized_face, ShapeType.FACE):
+                        if are_same_shapes(region.face, tr, ShapeType.FACE):
+                            found = True
+                            break
+                    else:
+                        continue
+                    self.assertTrue(found)
+                    break
 
     def __assess_symmetry(
             self, sym_type: SymmetryType, vertices: List[Any]) -> None:

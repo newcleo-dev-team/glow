@@ -1180,14 +1180,14 @@ class Lattice():
                 # Set the region color in the viewer
                 set_color_face(region.face, region.color)
                 # Add the lattice region to the study
-                id = add_to_study_in_father(
+                region.face_entry_id = add_to_study_in_father(
                     self.lattice_cmpd, region.face, region.name)
-                if not id:
+                if not region.face_entry_id:
                     raise RuntimeError(
                         f"Problem arose when adding the region {region.name}"
                         "to the SALOME study")
                 # Display the region in the current view
-                display_shape(id)
+                display_shape(region.face_entry_id)
         except:
             # Show only the whole lattice before raising the caught exception
             display_shape(self.lattice_entry_id)
