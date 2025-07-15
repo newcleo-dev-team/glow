@@ -2,6 +2,7 @@
 Module containing unittest classes to assess that the classes and functions
 of the `glow.geometry_layouts.lattice` module have a valid implementation.
 """
+from copy import deepcopy
 import math
 import unittest
 
@@ -78,6 +79,105 @@ class TestLattice(unittest.TestCase):
         self.lattice = Lattice(self.rect_cells)
         self.__assess_lattice_init(self.rect_cells, [], 1)
 
+    def test_add_cell(self) -> None:
+        """
+        Method that tests the correct implementation of the method
+        `add_cell` of the `Lattice` class.
+        """
+        # Instantiate the lattice without any cell
+        self.lattice = Lattice()
+        # Add an hexagonal cell
+        cell = self.hex_cells[0]
+        position = ()
+        self.__assess_add_cell(
+            cell, position, LatticeGeometryType.HEXAGON_TRAN)
+        position = (2*cell.apothem, 0.0, 0.0)
+        self.__assess_add_cell(
+            cell, position, LatticeGeometryType.ISOTROPIC, 1, 2)
+        # Verify correct exception handling
+        self.__assess_add_cell(self.rect_cells[0], position)
+        rotated_cell = deepcopy(cell)
+        rotated_cell.rotate(90)
+        self.__assess_add_cell(rotated_cell, position)
+
+    def test_add_ring_of_cells(self) -> None:
+        """
+        Method that tests the correct implementation of the method
+        `add_ring_of_cells` of the `Lattice` class.
+        """
+        # Instantiate the lattice with only a central hexagonal cell
+        cell = self.hex_cells[0]
+        self.lattice = Lattice([cell])
+        # Add 1 ring of cells
+        self.__assess_add_ring_of_cells(
+            cell,
+            ring_no=1,
+            cells_no=6,
+            ring_dist=[(6, 2*cell.figure.ly)])
+        self.__assess_add_ring_of_cells(
+            cell,
+            ring_no=2,
+            cells_no=12,
+            ring_dist=[
+                (6, 2*cell.figure.ly),
+                (6, 4*cell.figure.ly),
+                (6, 3*cell.figure.lx)
+            ])
+
+    def test_add_rings_of_cells(self) -> None:
+        """
+        Method that tests the correct implementation of the method
+        `add_rings_of_cells` of the `Lattice` class.
+        """
+        # Instantiate the lattice with only a central hexagonal cell
+        cell = self.hex_cells[0]
+        self.lattice = Lattice([cell])
+        # Add 2 rings of cells at once
+        self.__assess_add_rings_of_cells(
+            cell,
+            ring_no=2,
+            cells_no=18,
+            ring_dist=[
+                (6, 2*cell.figure.ly),
+                (6, 4*cell.figure.ly),
+                (6, 3*cell.figure.lx)
+            ]
+        )
+        # Test a cell-centered lattice with cartesian-type cells
+        cell = self.rect_cells[0]
+        self.lattice = Lattice([cell])
+        self.__assess_add_rings_of_cells(
+            cell,
+            ring_no=2,
+            cells_no=24,
+            ring_dist=[
+                (4, cell.figure.ly),
+                (4, math.sqrt(cell.figure.lx*cell.figure.lx +
+                              cell.figure.ly*cell.figure.ly)),
+                (4, 2*cell.figure.lx),
+                (4, math.sqrt(4*cell.figure.lx*cell.figure.lx +
+                              4*cell.figure.ly*cell.figure.ly)),
+                (8, math.sqrt(4*cell.figure.lx*cell.figure.lx +
+                              cell.figure.ly*cell.figure.ly))
+            ]
+        )
+        # Test a lattice without any central cell
+        cell = self.rect_cells[0]
+        self.lattice = Lattice([])
+        self.__assess_add_rings_of_cells(
+            cell,
+            ring_no=2,
+            cells_no=16,
+            ring_dist=[
+                (4, math.sqrt(1/4*cell.figure.lx*cell.figure.lx +
+                              1/4*cell.figure.ly*cell.figure.ly)),
+                (4, math.sqrt(9/4*cell.figure.lx*cell.figure.lx +
+                              9/4*cell.figure.ly*cell.figure.ly)),
+                (8, math.sqrt(9/4*cell.figure.lx*cell.figure.lx +
+                              1/4*cell.figure.ly*cell.figure.ly))
+            ]
+        )
+
     def test_build_lattice_box(self) -> None:
         """
         Method that tests the correct implementation of the method
@@ -120,6 +220,255 @@ class TestLattice(unittest.TestCase):
                             box_face,
                             ShapeType.COMPOUND)
         )
+
+    def __assess_add_cell(
+            self,
+            cell: Cell,
+            position: Tuple[float, float, float],
+            type_geo: LatticeGeometryType = LatticeGeometryType.ISOTROPIC,
+            ring_no: int = 0,
+            cells_no: int = 1
+        ) -> None:
+        """
+        Method that assesses the correct addition of a `Cell` object to the
+        `Lattice` instance.
+
+        Parameters
+        ----------
+        cell : Cell
+            The cell to be added to the lattice.
+        position : Tuple[float, float, float]
+            The XYZ coordinates of the point where the cell is added to the
+            lattice.
+        type_geo : LatticeGeometryType = LatticeGeometryType.ISOTROPIC
+            The lattice's type of geometry.
+        ring_no : int = 0
+            The number of lattice's rings.
+        cells_no : int = 1
+            The number of lattice's cells.
+        """
+        # Verify exceptions are raised when trying to add an invalid cell
+        if (self.lattice.cells_type is not None and cell.cell_type !=
+            self.lattice.cells_type):
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_cell(cell, position)
+            return
+        if (self.lattice.cells_rot is not None and
+            math.degrees(cell.rotation) != self.lattice.cells_rot):
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_cell(cell, position)
+            return
+        # Add the valid cell to the lattice
+        self.lattice.add_cell(cell, position)
+        if not position:
+            position = (0.0, 0.0, 0.0)
+        self.assertEqual(self.lattice.cells_type, cell.cell_type)
+        self.assertTrue(
+            math.isclose(self.lattice.cells_rot, math.degrees(cell.rotation))
+        )
+        # Check the cell has been added in the correct position
+        self.assertEqual(len(self.lattice.lattice_cells), cells_no)
+        self.assertEqual(len(self.lattice.layers[cells_no]), 1)
+        self.assertTrue(
+            are_same_shapes(self.lattice.lattice_cells[0].face,
+                            cell.face,
+                            ShapeType.FACE)
+        )
+        self.assertTrue(
+            get_min_distance(self.lattice.lattice_cells[cells_no-1].figure.o,
+                             make_vertex(position)) < 1e-5
+        )
+        self.assertTrue(self.lattice.is_update_needed)
+        self.assertEqual(self.lattice.type_geo, type_geo)
+        self.assertEqual(self.lattice.rings_no, ring_no)
+
+    def __assess_add_ring_of_cells(
+            self,
+            cell: Cell,
+            type_geo: LatticeGeometryType = LatticeGeometryType.ISOTROPIC,
+            ring_no: int = 1,
+            cells_no: int = 1,
+            ring_dist: List[Tuple[int, float]] = []
+        ) -> None:
+        """
+        Method that assesses the correct addition of a ring of `Cell` objects
+        to the `Lattice` instance.
+
+        Parameters
+        ----------
+        cell : Cell
+            The cell to be added to the lattice.
+        type_geo : LatticeGeometryType = LatticeGeometryType.ISOTROPIC
+            The lattice's type of geometry.
+        ring_no : int = 1
+            The number of lattice's rings.
+        cells_no : int = 1
+            The number of lattice's cells.
+        ring_dist : List[Tuple[int, float]] = []
+            Collecting the number of cells placed at a specific distance
+            from the lattice center with the distance values themselves.
+        """
+        # Verify exceptions are raised when trying to add an invalid cell
+        if (self.lattice.cells_type is not None and cell.cell_type !=
+            self.lattice.cells_type):
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_ring_of_cells(cell, ring_no)
+            return
+        if (self.lattice.cells_rot is not None and
+            math.degrees(cell.rotation) != self.lattice.cells_rot):
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_ring_of_cells(cell, ring_no)
+            return
+        if ring_no == 0:
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_ring_of_cells(cell, ring_no)
+            return
+        # Store initial data
+        n0 = len(self.lattice.lattice_cells)
+        i0 = 1 if len(self.lattice.lattice_cells) > 0 else 0
+        # Add a valid ring of cells to the lattice
+        self.lattice.add_ring_of_cells(cell, ring_no)
+        # Verify the correct addition of cells
+        self.assertEqual(self.lattice.cells_type, cell.cell_type)
+        self.assertTrue(
+            math.isclose(self.lattice.cells_rot, math.degrees(cell.rotation))
+        )
+        # Check the cells have been added in the correct positions
+        self.assertEqual(len(self.lattice.lattice_cells) - n0, cells_no)
+        self.assertEqual(len(self.lattice.layers[-1]), cells_no)
+        self.assertTrue(
+            all(
+                are_same_shapes(
+                    self.lattice.lattice_cells[i].face,
+                    cell.translate(
+                        get_point_coordinates(
+                            self.lattice.lattice_cells[i].figure.o)).face,
+                    ShapeType.COMPOUND
+                ) for i in range(n0, len(self.lattice.lattice_cells))
+            )
+        )
+        self.assertTrue(self.lattice.is_update_needed)
+        self.assertEqual(self.lattice.type_geo, type_geo)
+        self.assertEqual(self.lattice.rings_no, ring_no)
+        # Verify that the correct number of cells is placed at the right
+        # distance from the lattice center
+        self.__assess_cells_distances(i0, ring_dist)
+
+    def __assess_add_rings_of_cells(
+            self,
+            cell: Cell,
+            type_geo: LatticeGeometryType = LatticeGeometryType.ISOTROPIC,
+            ring_no: int = 1,
+            cells_no: int = 1,
+            ring_dist: List[Tuple[int, float]] = []
+        ) -> None:
+        """
+        Method that assesses the correct addition of several rings of `Cell`
+        objects to the `Lattice` instance.
+
+        Parameters
+        ----------
+        cell : Cell
+            The cell to be added to the lattice.
+        type_geo : LatticeGeometryType = LatticeGeometryType.ISOTROPIC
+            The lattice's type of geometry.
+        ring_no : int = 1
+            The number of lattice's rings to add.
+        cells_no : int = 1
+            The number of lattice's cells.
+        ring_dist : List[Tuple[int, float]] = []
+            Collecting the number of cells placed at a specific distance
+            from the lattice center with the distance value itself.
+        """
+        # Verify exceptions are raised when trying to add an invalid cell
+        if (self.lattice.cells_type is not None and cell.cell_type !=
+            self.lattice.cells_type):
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_rings_of_cells(cell, ring_no)
+            return
+        if (self.lattice.cells_rot is not None and
+            math.degrees(cell.rotation) != self.lattice.cells_rot):
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_rings_of_cells(cell, ring_no)
+            return
+        if ring_no == 0:
+            with self.assertRaises(RuntimeError):
+                self.lattice.add_rings_of_cells(cell, ring_no)
+            return
+        # Store initial data
+        n0 = len(self.lattice.lattice_cells)
+        ring_0 = self.lattice.rings_no
+        i0 = 1 if len(self.lattice.lattice_cells) > 0 else 0
+        # Add a valid ring of cells to the lattice
+        self.lattice.add_rings_of_cells(cell, ring_no)
+        # Verify the correct addition of cells
+        self.assertEqual(self.lattice.cells_type, cell.cell_type)
+        self.assertTrue(
+            math.isclose(self.lattice.cells_rot, math.degrees(cell.rotation))
+        )
+        # Check the cells have been added in the correct positions
+        self.assertEqual(len(self.lattice.lattice_cells) - n0, cells_no)
+        self.assertEqual(len(self.lattice.layers[-1]), cells_no)
+        self.assertTrue(
+            all(
+                are_same_shapes(
+                    self.lattice.lattice_cells[i].face,
+                    cell.translate(
+                        get_point_coordinates(
+                            self.lattice.lattice_cells[i].figure.o)).face,
+                    ShapeType.COMPOUND
+                ) for i in range(n0, len(self.lattice.lattice_cells))
+            )
+        )
+        self.assertTrue(self.lattice.is_update_needed)
+        self.assertEqual(self.lattice.type_geo, type_geo)
+        self.assertEqual(self.lattice.rings_no - ring_0, ring_no)
+        # Verify that the correct number of cells is placed at the right
+        # distance from the lattice center
+        self.__assess_cells_distances(i0, ring_dist)
+
+    def __assess_cells_distances(
+            self,
+            i0: int,
+            ring_dist: List[Tuple[int, float]] = []) -> None:
+        """
+        Method that checks whether the cells have been added to the lattice
+        correctly. This is done by grouping all the cells sharing the same
+        distance from the lattice center and comparing the result with the
+        given metric.
+
+        Parameters
+        ----------
+        i0 : int
+            Index indicating the starting element in the list of cells.
+        ring_dist : List[Tuple[int, float]] = []
+            Collecting the number of cells at a specific distance from the
+            lattice center and the distance values themselves.
+        """
+        # Collect the distances and count the number of cells for each
+        # distance
+        distances = [
+            round(
+                get_min_distance(
+                    cell.figure.o,
+                    self.lattice.lattice_center),
+                6) for cell in self.lattice.lattice_cells[i0:]
+        ]
+        unique_values = set(distances)
+        result = []
+        for value in unique_values:
+            count = sum(
+                1 for d in distances if math.isclose(d, value, abs_tol=1e-5))
+            result.append((count, value))
+        # Sort both collections in ascending order by the distance value
+        result.sort(key=lambda d: d[1])
+        ring_dist.sort(key=lambda d: d[1])
+        # Check there is the correct number of cells for each distance
+        for t1, t2 in zip(ring_dist, result):
+            self.assertTrue(
+                t1[0] == t2[0] and math.isclose(t1[1], t2[1], abs_tol=1e-5),
+                f"{ring_dist}, {result}"
+            )
 
     def __assess_lattice_init(
             self,

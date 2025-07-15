@@ -619,7 +619,7 @@ class Lattice():
         # Move the cell in the given position, if necessary and re-evaluate
         # the number of cells rings in the lattice
         print("Adding the cell to position", position)
-        if position or not all(math.isclose(x, 0) for x in position):
+        if position and not all(math.isclose(x, 0.0) for x in position):
             cell = cell.translate(position)
             self.__evaluate_no_rings(position)
 
