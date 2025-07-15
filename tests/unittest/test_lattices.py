@@ -12,7 +12,7 @@ from glow.generator.support import *
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell
 from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, build_hexagon
 from glow.geometry_layouts.lattices import Lattice
-from glow.geometry_layouts.utility import are_same_shapes
+from glow.geometry_layouts.utility import are_same_shapes, build_compound_borders
 from glow.interface.geom_interface import *
 
 
@@ -177,6 +177,63 @@ class TestLattice(unittest.TestCase):
                               1/4*cell.figure.ly*cell.figure.ly))
             ]
         )
+
+    def test_apply_symmetry(self) -> None:
+        """
+        Method that tests the correct implementation of the method
+        `apply_symmetry` of the `Lattice` class.
+        """
+        # Instantiate the lattice with a list of hexagonal cells
+        self.lattice = Lattice(self.hex_cells)
+        # Verify the lattice compound has been assembled
+        self.assertTrue(
+            are_same_shapes(self.lattice.lattice_cmpd,
+                            make_compound([c.face for c in self.hex_cells]),
+                            ShapeType.COMPOUND)
+        )
+        # Verify an exception is raised when applying a symmetry to the
+        # lattice of hexagonal cells without enclosing it in a box
+        with self.assertRaises(AssertionError):
+            self.lattice.apply_symmetry(SymmetryType.SIXTH)
+        # Enclose the lattice in a box
+        self.lattice.build_lattice_box([0.075])
+        # Build the vertices of the shape of the symmetry
+        symm_vs_vertices = {
+            SymmetryType.SIXTH: [
+                self.lattice.lattice_center,
+                make_vertex((-self.lattice.lx/2, -self.lattice.ly, 0.0)),
+                make_vertex((self.lattice.lx/2, -self.lattice.ly, 0.0))],
+            SymmetryType.THIRD: [
+                self.lattice.lattice_center,
+                make_vertex((-self.lattice.lx/2, -self.lattice.ly, 0.0)),
+                make_vertex((self.lattice.lx/2, -self.lattice.ly, 0.0)),
+                make_vertex((self.lattice.lx, 0.0, 0.0))],
+            SymmetryType.TWELFTH: [
+                self.lattice.lattice_center,
+                make_vertex((self.lattice.lx, 0.0, 0.0)),
+                make_vertex((3/4*self.lattice.lx,
+                             self.lattice.lx*math.sqrt(3)/4,
+                             0.0))
+            ]
+        }
+        # Verify the correctness of the symmetry application
+        self.__assess_symmetry(SymmetryType.SIXTH,
+                               symm_vs_vertices[SymmetryType.SIXTH])
+        self.__assess_symmetry(SymmetryType.THIRD,
+                               symm_vs_vertices[SymmetryType.THIRD])
+        self.__assess_symmetry(SymmetryType.TWELFTH,
+                               symm_vs_vertices[SymmetryType.TWELFTH])
+        self.__assess_symmetry(
+            SymmetryType.FULL,
+            extract_sub_shapes(
+                make_face(
+                    build_compound_borders(self.lattice.lattice_box.face)),
+                ShapeType.VERTEX))
+
+        # Test the application of symmetries for a cartesian lattice with
+        # and without a central cell
+        self.__assess_rect_symmetry()
+        self.__assess_rect_symmetry(True)
 
     def test_build_lattice_box(self) -> None:
         """
@@ -469,6 +526,89 @@ class TestLattice(unittest.TestCase):
                 t1[0] == t2[0] and math.isclose(t1[1], t2[1], abs_tol=1e-5),
                 f"{ring_dist}, {result}"
             )
+
+    def __assess_rect_symmetry(self, is_even: bool = False) -> None:
+        """
+        Method that assesses the correct application of all the symmetries
+        available for a lattice made by cartesian cells, with and without
+        a central cell.
+
+        Parameters
+        ----------
+        is_even : bool = False
+            Flag indicating whether the cartesian lattice to test has an
+            even number of cells (no central cell).
+        """
+        # Instantiate the lattice with a list of cartesian cells
+        cells = self.__set_up_rect_cells(self.rect_cells[0], is_even)
+        self.lattice = Lattice(cells)
+        # Verify the lattice compound has been assembled
+        self.assertTrue(
+            are_same_shapes(
+                self.lattice.lattice_cmpd,
+                make_compound([c.face for c in cells]),
+                ShapeType.COMPOUND
+            )
+        )
+        # Enclose the lattice in a box
+        self.lattice.build_lattice_box([0.075])
+        # Build the vertices of the shape of the symmetry
+        symm_vs_vertices = {
+            SymmetryType.HALF: [
+                make_vertex((0.0, -self.lattice.ly, 0.0)),
+                make_vertex((self.lattice.lx, -self.lattice.ly, 0.0)),
+                make_vertex((self.lattice.lx, self.lattice.ly, 0.0)),
+                make_vertex((0.0, self.lattice.ly, 0.0))],
+            SymmetryType.QUARTER: [
+                self.lattice.lattice_center,
+                make_vertex((self.lattice.lx, 0.0, 0.0)),
+                make_vertex((self.lattice.lx, self.lattice.ly, 0.0)),
+                make_vertex((0.0, self.lattice.ly, 0.0))],
+            SymmetryType.EIGHTH: [
+                self.lattice.lattice_center,
+                make_vertex((self.lattice.lx, 0.0, 0.0)),
+                make_vertex((self.lattice.lx, self.lattice.ly, 0.0))]
+        }
+        # Verify the correctness of the symmetry application
+        self.__assess_symmetry(SymmetryType.HALF,
+                               symm_vs_vertices[SymmetryType.HALF])
+        self.__assess_symmetry(SymmetryType.QUARTER,
+                               symm_vs_vertices[SymmetryType.QUARTER])
+        self.__assess_symmetry(SymmetryType.EIGHTH,
+                               symm_vs_vertices[SymmetryType.EIGHTH])
+        self.__assess_symmetry(
+            SymmetryType.FULL,
+            extract_sub_shapes(
+                make_face(
+                    build_compound_borders(self.lattice.lattice_box.face)),
+                ShapeType.VERTEX))
+
+    def __assess_symmetry(
+            self, sym_type: SymmetryType, vertices: List[Any]) -> None:
+        """
+        Method that assesses the correct application of the given symmetry
+        to the lattice.
+
+        Parameters
+        ----------
+        sym_type : SymmetryType
+            The type of symmetry to verify.
+        vertices : List[Any]
+            The list of vertices identifying the shape of the symmetry.
+        """
+        # Build the edges identifying the shape of the symmetry
+        edges = [make_edge(vertices[i], vertices[(i+1) % len(vertices)])
+                    for i in range(len(vertices))]
+        # Apply the symmetry
+        self.lattice.apply_symmetry(sym_type)
+        # Verify the correct symmetry application
+        self.assertTrue(
+            are_same_shapes(
+                make_face(build_compound_borders(self.lattice.lattice_symm)),
+                make_face(edges),
+                ShapeType.FACE
+            )
+        )
 
     def __assess_lattice_init(
             self,

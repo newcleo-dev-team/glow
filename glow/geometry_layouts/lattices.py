@@ -394,7 +394,9 @@ class Lattice():
         if self.symmetry_type != SymmetryType.FULL:
             self.apply_symmetry(self.symmetry_type)
         # Update the 'lx' characteristic dimension of the lattice
-        self.lx = self.lattice_box.figure.lx
+        x_min, x_max, y_min, y_max = get_bounding_box(self.lattice_cmpd)
+        self.lx = (x_max - x_min) / 2
+        self.ly = (y_max - y_min) / 2
         # Set the need to update the lattice geometry
         self.is_update_needed = True
 
@@ -693,6 +695,7 @@ class Lattice():
                                           len(self.lattice_cells))
             # Update the lattice in the current SALOME study
             self.show()
+            self.lattice_symm = self.lattice_cmpd
             return
 
         # Assemble all the lattice layers to build the lattice compounds
@@ -788,7 +791,7 @@ class Lattice():
         if not self.lattice_box:
             raise AssertionError(
                 "The hexagonal lattice is not included within a box: the "
-                f"requested '{symmetry}'symmetry operation cannot be "
+                f"requested '{symmetry}' symmetry operation cannot be "
                 "applied.")
         match symmetry:
             case SymmetryType.THIRD:
