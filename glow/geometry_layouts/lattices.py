@@ -7,10 +7,12 @@ import math
 from copy import deepcopy
 from typing import Any, Dict, List, Set, Tuple, Union
 
-from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
+from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region, \
+    get_region_info
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, \
     build_hexagon
-from glow.geometry_layouts.utility import build_compound_borders, \
+from glow.geometry_layouts.utility import are_same_shapes, \
+    build_compound_borders, retrieve_selected_object, \
     translate_wrt_reference, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, \
@@ -1755,7 +1757,7 @@ class Lattice():
                       'PropertyType' enumeration, can be provided
         """
         if not properties:
-            raise Exception("No properties have been provided")
+            raise RuntimeError("No properties have been provided")
         # Check if the number of box regions coincides with the number of
         # property elements for all the given property types: for hexagonal
         # lattices it is needed to consider also the area between the cells
@@ -1770,7 +1772,7 @@ class Lattice():
                           f"of box regions ({no_regions}) and that of the " +\
                           f"properties with type '{type.name}' (no. " +\
                           f"{len(values)})"
-                raise AssertionError(message)
+                raise RuntimeError(message)
 
         # Clear any previously set entry in the dictionary associating the
         # regions to the properties, as this method sets the properties for
@@ -1872,20 +1874,11 @@ class Lattice():
         """
         # Extract the geometrical objects the given ID corresponds to in the
         # current SALOME study
-        shape = get_selected_object()
-        if not shape:
-            raise Exception("Please, select a single region whose data to "
-                            "show.")
-        # Get the region that corresponds to the given shape
-        for region in self.regions:
-            if get_min_distance(region.inner_point, shape) < 1e-5:
-                # Print info about the region name and its properties
-                print(f"{region.name}:")
-                if not region.properties:
-                    print("   No associated properties.")
-                    return
-                for prop_type, value in region.properties.items():
-                    print(f"   {prop_type.name}: {value}")
+        shape = retrieve_selected_object(
+            "Please, select a single region whose data to show.")
+        # Get the region that corresponds to the given shape and print the
+        # corresponding data
+        print(get_region_info(shape, self.regions))
 
     def update_geometry(self, geo_type: GeometryType) -> None:
         """
@@ -2103,7 +2096,10 @@ class Lattice():
         self.show(geometry_type_to_show=GeometryType.SECTORIZED)
 
     def set_region_property(
-            self, property_type: PropertyType, value: str) -> None:
+            self,
+            property_type: PropertyType,
+            value: str,
+            region: Any | None = None) -> None:
         """
         Method that allows to set the value of the given type of property for
         the lattice region which is currently selected in the SALOME study.
@@ -2118,6 +2114,10 @@ class Lattice():
             type of property to modify for the selected region
         value : str
             The value of the property type to assign to the selected region
+        region : Any | None = None
+            The lattice's region of the technological geometry whose property
+            to change. When not provided, the region currently selected is
+            considered.
         """
         # Check which cell geometry type is currently shown; if different
         # from the TECHNOLOGICAL one, raise an exception
@@ -2127,14 +2127,32 @@ class Lattice():
                 "geometry. To set lattice regions properties, show the '"
                 "TECHNOLOGICAL' geometry first.")
         # Extract the geometrical object currently selected in the current
-        # SALOME study
-        shape = get_selected_object()
-        if not shape:
-            raise RuntimeError("Please, select a single region to assign "
-                               "a property to.")
+        # SALOME study, if no one is provided as input
+        if region is None:
+            region = retrieve_selected_object(
+                "Please, select a single region to assign a property to.")
 
-        # Point for idendifying the shape in the geometry
-        point = make_vertex_inside_face(shape)
+        # Get the list of cells, eventually cut by the lattice box
+        cells = self.__get_cells_and_box()
+        # Get the region that corresponds to the given shape and set the
+        # value for the indicated property
+        self.__set_region_property(region, cells, property_type, value)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
+
+    def __get_cells_and_box(self) -> List[Cell]:
+        """
+        Method that provides a copy of the list of `Cell` objects comprising
+        all the cells in the lattice including the box, if present.
+        The `Cell` object for the lattice box is cut by removing all the area
+        occupied by the cells.
+
+        Returns
+        -------
+        List[Cell]
+            A list of `Cell` objects made by the lattice cells and the box
+            cell, if any.
+        """
         # Get the compound corresponding to the technological geometry of the
         # cells and the currently applied symmetry
         cmpd = self.__get_compound_from_type(GeometryType.TECHNOLOGICAL,
@@ -2150,9 +2168,43 @@ class Lattice():
             lattice_box.face = make_compound(
                 self.__extract_box_subfaces(cmpd, GeometryType.TECHNOLOGICAL))
             cells.append(lattice_box)
-        # Add all the lattice cells
-        cells.extend(self.lattice_cells)
+        # Add all the lattice cells traversing the layers in reverse order
+        cells.extend([cell for layer in self.layers[::-1] for cell in layer])
+        return cells
 
+    def __set_region_property(
+            self,
+            shape: Any,
+            cells: List[Cell],
+            property_type: PropertyType,
+            value: str) -> None:
+        """
+        Method that looks for the given region in the dictionary of cells'
+        regions vs properties and sets the value for the indicated property
+        type.
+
+        Parameters
+        ----------
+        shape : Any
+            The lattice's region of the technological geometry whose property
+            to change.
+        cells : List[Cell]
+            The list of `Cell` objects made by all the lattice's cells and
+            the box.
+        property_type : PropertyType
+            Indicating the type of property the value associated to the
+            region needs to be changed.
+        value : str
+            The value of the property type to set.
+
+        Raises
+        ------
+        RuntimeError
+            If no region can be found among the ones stored in the properties
+            dictionary for each of the analysed cells.
+        """
+        # Point for idendifying the shape in the geometry
+        point = make_vertex_inside_face(shape)
         # Get the region that corresponds to the given shape
         for i, cell in enumerate(cells):
             # Continue with another cell if the shape is not contained within
@@ -2161,31 +2213,25 @@ class Lattice():
             if (not is_point_inside_shape(point, cell.face)):
                 continue
             # Search for the region among the faces stored in the cell
-            # dictionary of regions VS properties
-            for region in cell.tech_geom_props:
-                if (is_point_inside_shape(point, region)):
-                    cell.tech_geom_props[region][property_type] = value
-                    break
-            else:
-                continue
-            # Update the cell properties of the lattice box, if it has
-            # been modified (first position in the list of cells)
-            if i == 0:
+            # dictionary of regions VS properties (box case, if any)
+            if i == 0 and self.lattice_box is not None:
                 for zone in self.lattice_box.tech_geom_props:
-                    if is_point_inside_shape(point, zone):
+                    if (is_point_inside_shape(point, zone)):
                         self.lattice_box.tech_geom_props[zone][
                             property_type] = value
-                        break
-            break
+                        return
+                else:
+                    continue
+            # Search for the region among the cells (lattice's cells)
+            for region in cell.tech_geom_props:
+                if (is_point_inside_shape(point, region) and
+                    are_same_shapes(shape, region, ShapeType.FACE)):
+                    cell.tech_geom_props[region][property_type] = value
+                    return
         # Raise an exception if no region has been found
         else:
             raise RuntimeError(
-                "No cell region could be found for the selected shape.")
-
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-        # Update the lattice in the SALOME viewer
-        self.show(property_type)
+                "No lattice region could be found for the selected shape.")
 
     def restore_cells(self,
                       cells: List[Cell],

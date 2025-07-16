@@ -9,7 +9,7 @@ import unittest
 from typing import List
 
 from glow.generator.support import *
-from glow.geometry_layouts.cells import Cell, HexCell, RectCell
+from glow.geometry_layouts.cells import Cell, HexCell, RectCell, get_region_info
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, build_hexagon
 from glow.geometry_layouts.lattices import Lattice
 from glow.geometry_layouts.utility import are_same_shapes, \
@@ -80,6 +80,18 @@ class TestLattice(unittest.TestCase):
         self.rect_cells = self.__set_up_rect_cells(self.rect_cells[0], True)
         self.lattice = Lattice(self.rect_cells)
         self.__assess_lattice_init(self.rect_cells, [], 1)
+
+        # Tests the instantiation of a lattice with hexagonal cells and the
+        # thicknesses of its box layers
+        self.lattice = Lattice(self.hex_cells, boxes_thick=self.box_layers)
+        # Build the comparison figure
+        box_face = self.__build_hex_box()
+        # Verify the correctness of the box surface
+        self.assertTrue(
+            are_same_shapes(self.lattice.lattice_box.face,
+                            box_face,
+                            ShapeType.COMPOUND)
+        )
 
     def test_add_cell(self) -> None:
         """
@@ -300,6 +312,41 @@ class TestLattice(unittest.TestCase):
         self.__assess_build_regions(GeometryType.SECTORIZED)
         self.assertFalse(self.lattice.is_update_needed)
 
+    def test_get_regions_info(self) -> None:
+        """
+        Method that tests the implementation of the method `get_regions_info`
+        of the `Lattice` class.
+        """
+        # Instantiate the lattice with a list of hexagonal cells and
+        # a box and build the regions
+        self.lattice = Lattice(self.hex_cells)
+        self.lattice.build_regions()
+
+        # Verify an exception is raised when calling the method without
+        # selecting any region
+        with self.assertRaises(RuntimeError):
+            self.lattice.get_regions_info()
+        # Test the inner implementation by verifying an exception is raised
+        # when providing a region not beloging to the lattice
+        with self.assertRaises(RuntimeError):
+            get_region_info(make_face([make_circle(self.o, None, 0.1)]),
+                            self.lattice.regions)
+        region_face = self.hex_cells[0].face
+        # Check the message returns the name of the region and the associated
+        # properties, if any are assigned
+        self.__assess_get_regions_info(region_face,
+                                       "No associated properties.")
+
+        # Apply values for the PropertyType.MATERIAL to lattice's regions
+        for layer in self.lattice.layers:
+            for cell in layer:
+                cell.set_properties({PropertyType.MATERIAL: ['MAT']})
+        # Rebuilt the regions to apply the modifications
+        self.lattice.build_regions()
+        # Check the correct assignment
+        self.__assess_get_regions_info(
+            region_face, f"{PropertyType.MATERIAL.name}: MAT")
+
     def test_rotate(self) -> None:
         """
         Method that tests the implementation of the method `rotate` of the
@@ -333,6 +380,90 @@ class TestLattice(unittest.TestCase):
             math.isclose(
                 self.lattice.cells_rot, rotation_0 + rot_angle)
         )
+
+    def test_set_lattice_box_properties(self) -> None:
+        """
+        Method that tests the implementation of the method
+        `set_lattice_box_properties` of the `Lattice` class.
+        """
+        # Instantiate the lattice with a list of hexagonal cells and
+        # a box
+        self.lattice = Lattice(self.hex_cells, boxes_thick=self.box_layers)
+
+        # Verify exceptions are raised when incorrectly setting the box
+        # properties (no properties or number of elements not matching
+        # the box regions)
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_lattice_box_properties({})
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_lattice_box_properties(
+                {PropertyType.MATERIAL: ['MAT']})
+
+        # Assign the MATERIAL property to the regions of the box
+        materials = {PropertyType.MATERIAL: ['MAT1', 'MAT2', 'MAT3']}
+        self.lattice.set_lattice_box_properties(materials)
+        # Verify the correct assignment of the materials to the regions
+        # according to their distance from the lattice's center
+        regions = sorted(
+            extract_sub_shapes(self.lattice.lattice_box.face, ShapeType.FACE),
+            key=lambda subface: get_min_distance(self.lattice.lattice_center,
+                                                 subface)
+        )
+        for i, (r1, r2) in enumerate(
+                zip(regions, self.lattice.lattice_box.tech_geom_props)):
+            if are_same_shapes(r1, r2, ShapeType.FACE):
+                self.assertEqual(
+                    self.lattice.lattice_box.tech_geom_props[r2][
+                        PropertyType.MATERIAL],
+                    materials[PropertyType.MATERIAL][i]
+                )
+
+    def test_set_region_property(self) -> None:
+        """
+        Method that tests the implementation of the method
+        `set_region_property` of the `Lattice` class.
+        """
+        # Instantiate the lattice with a list of hexagonal cells
+        self.lattice = Lattice(self.hex_cells)
+        property_value = (PropertyType.MATERIAL, "MAT")
+        # Verify an exception is raised when calling the method without
+        # selecting any region, with providing a non-existent one or when
+        # the `SECTORIZED` geometry is displayed
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_region_property(*property_value)
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_region_property(
+                *property_value,
+                make_face([make_circle(self.o, None, 0.1)])
+            )
+        with self.assertRaises(RuntimeError):
+            # Mock the displayed geometry is the sectorized one
+            self.lattice.displayed_geom = GeometryType.SECTORIZED
+            self.lattice.set_region_property(*property_value)
+
+        # Call the method providing the region to update
+        self.lattice.displayed_geom = GeometryType.TECHNOLOGICAL
+        region_face = extract_sub_shapes(
+            make_compound([self.lattice.lattice_cells[-1].face]),
+            ShapeType.FACE)[0]
+        region_pnt = make_vertex_inside_face(region_face)
+        self.lattice.set_region_property(*property_value, region_face)
+        # Check the correct assignment
+        for layer in self.lattice.layers:
+            for cell in layer:
+                if not is_point_inside_shape(region_pnt, cell.face):
+                    continue
+                for region in cell.tech_geom_props:
+                    if are_same_shapes(region, region_face, ShapeType.FACE):
+                        self.assertTrue(
+                            property_value[0] in cell.tech_geom_props[region]
+                        )
+                        self.assertEqual(
+                            cell.tech_geom_props[region][property_value[0]],
+                            property_value[1]
+                        )
+                        break
+        self.assertTrue(self.lattice.is_update_needed)
 
     def test_show(self) -> None:
         """
@@ -832,6 +963,27 @@ class TestLattice(unittest.TestCase):
                         continue
                     self.assertTrue(found)
                     break
+
+    def __assess_get_regions_info(
+            self, region_face: Any, str_to_find: str) -> None:
+        """
+        Method that assesses whether the right message is shown when
+        displaying information about a specified region of the lattice.
+
+        Parameters
+        ----------
+        region_face : Any
+            The lattice's region to retrieve information from.
+        str_to_find: str
+            The informative string to find for in the one being produced.
+        """
+        # Retrieve the informative message about a region
+        mssg = get_region_info(region_face, self.lattice.regions)
+        for region in self.lattice.regions:
+            if are_same_shapes(region.face, region_face, ShapeType.FACE):
+                self.assertTrue(region.name in mssg)
+                self.assertTrue(str_to_find in mssg)
+                return
 
     def __assess_symmetry(
             self, sym_type: SymmetryType, vertices: List[Any]) -> None:

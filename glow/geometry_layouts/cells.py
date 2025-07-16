@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Self, Tuple, Union
 from glow.geometry_layouts.geometries import GenericSurface, Surface, Circle, \
     Rectangle, Hexagon
 from glow.geometry_layouts.utility import are_same_shapes, \
-    build_compound_borders, update_relative_pos
+    build_compound_borders, retrieve_selected_object, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
@@ -1322,50 +1322,11 @@ class Cell(ABC):
         """
         # Extract the geometrical object currently selected in the current
         # SALOME study, if any
-        shape = self.__retrieve_selected_object(
+        shape = retrieve_selected_object(
             "Please, select a single region whose data to show.")
         # Get the region that corresponds to the given shape and print the
         # corresponding data
-        print(self.__get_region_info(shape))
-
-    def __retrieve_selected_object(self, error_msg: str) -> Any:
-        """
-        Method that retrieves the geometrical object currently selected in
-        the SALOME study. If more than one or none is selected, an exception
-        with the given message is raised.
-
-        Parameters
-        ----------
-        error_msg : str
-            The error message to display when the incorrect number of shapes
-            is selected.
-        """
-        shape = get_selected_object()
-        if not shape:
-            raise RuntimeError(error_msg)
-        return shape
-
-    def __get_region_info(self, shape: Any) -> str:
-        """
-        Method that, given the shape, retrieves the name of the corresponding
-        `Region` object and the values of its associated properties.
-
-        Parameters
-        ----------
-        shape : Any
-            The geometrical shape to retrieve info about.
-        """
-        # Get the region that corresponds to the given shape
-        for region in self.regions:
-            if are_same_shapes(region.face, shape, ShapeType.FACE):
-                # Build the info about the region name and its properties
-                if not region.properties:
-                    return region.name + "\n   No associated properties."
-                for prop_type, value in region.properties.items():
-                    return region.name + f"\n   {prop_type.name}: {value}"
-        else:
-            raise RuntimeError("The indicated region could be found among "
-                               "the cell's ones.")
+        print(get_region_info(shape, self.regions))
 
     def set_region_property(
             self,
@@ -1407,7 +1368,7 @@ class Cell(ABC):
         # Extract the geometrical object currently selected in the current
         # SALOME study, if no one is provided as input
         if region is None:
-            region = self.__retrieve_selected_object(
+            region = retrieve_selected_object(
                 "Please, select a single region to assign a property to.")
         # Get the region that corresponds to the given shape and set the
         # value for the indicated property
@@ -2040,6 +2001,44 @@ class GenericCell(Cell):
             Additional parameters for the sectorization.
         """
         return super().sectorize(sectors_no, angles, **kwargs)
+
+
+def get_region_info(shape: Any, regions: List[Region]) -> str:
+    """
+    Function that, given the shape, retrieves the name of the corresponding
+    `Region` object and the values of its associated properties, if any is
+    present.
+
+    Parameters
+    ----------
+    shape : Any
+        The geometrical shape to retrieve info about.
+    regions : List[Region]
+        A list of `Region` object to search the shape among.
+
+    Returns
+    -------
+    str
+        A descriptive string indicating the name of the found region and
+        its associated properties.
+
+    Raises
+    ------
+    RuntimeError
+        If the provided shape does not have any corresponding `Region`
+        object.
+    """
+    # Get the region that corresponds to the given shape
+    for region in regions:
+        if are_same_shapes(region.face, shape, ShapeType.FACE):
+            # Build the info about the region name and its properties
+            if not region.properties:
+                return region.name + "\n   No associated properties."
+            for prop_type, value in region.properties.items():
+                return region.name + f"\n   {prop_type.name}: {value}"
+    else:
+        raise RuntimeError("The indicated region could be found among "
+                            "the cell's ones.")
 
 
 if __name__ == "__main__":

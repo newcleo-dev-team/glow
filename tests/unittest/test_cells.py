@@ -9,10 +9,12 @@ from typing import Any, Dict, Tuple, Union
 import unittest
 
 from glow.generator.support import CellType, GeometryType, PropertyType
-from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
+from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region, \
+    get_region_info
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
+from support_funcs import build_cell_ref_vectors
 
 
 class TestRegion(unittest.TestCase):
@@ -151,6 +153,11 @@ class TestCell(ABC, unittest.TestCase):
         tests acting on its subclasses.
     o : Any
         A vertex object positioned at the origin of the XYZ space.
+    surf : Surface
+        The `Surface` object providing the characteristic shape for a cell.
+    sect_opts : Tuple[List[int], List[float]]
+        Providing the sectorization options as the number of sectors and the
+        starting angle for each cell-centered region.
     """
     def setUp(self) -> None:
         """
@@ -272,7 +279,7 @@ class TestCell(ABC, unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.cell.add_circle(0.1)
             self.cell._Cell__build_regions()
-            self.cell._Cell__get_region_info(self.cell.figure.face)
+            get_region_info(self.cell.figure.face, self.cell.regions)
         region_face = make_face([make_circle(self.o, None, 0.1)])
         # Check the message returns the name of the region and the associated
         # properties, if any are assigned
@@ -412,9 +419,9 @@ class TestCell(ABC, unittest.TestCase):
         rot_angle = 90.0
         # Build reference vectors for each cell's face object before and
         # after the rotation
-        ref_vectors1 = self.__build_cell_ref_vectors()
+        ref_vectors1 = build_cell_ref_vectors(self.cell)
         self.cell.rotate(rot_angle)
-        ref_vectors2 = self.__build_cell_ref_vectors()
+        ref_vectors2 = build_cell_ref_vectors(self.cell)
         # Check the correct rotation happened by assessing that the angle
         # between the reference vectors is the rotation angle
         for v1, v2 in zip(ref_vectors1, ref_vectors2):
@@ -444,9 +451,9 @@ class TestCell(ABC, unittest.TestCase):
             self.o, make_vertex((center[0], center[1], 1)))
         # Build reference vectors for each cell's face object before and
         # after the rotation
-        ref_vectors1 = self.__build_cell_ref_vectors()
+        ref_vectors1 = build_cell_ref_vectors(self.cell)
         self.cell.rotate_from_axis(rot_angle, rot_axis)
-        ref_vectors2 = self.__build_cell_ref_vectors()
+        ref_vectors2 = build_cell_ref_vectors(self.cell)
         # Check the correct rotation happened by assessing that the angle
         # between the reference vectors is the rotation angle
         for v1, v2 in zip(ref_vectors1, ref_vectors2):
@@ -516,10 +523,10 @@ class TestCell(ABC, unittest.TestCase):
         for region in self.cell.tech_geom_props:
             if are_same_shapes(region, region_face, ShapeType.FACE):
                 self.assertTrue(
-                    PropertyType.MATERIAL in self.cell.tech_geom_props[region]
+                    property_value[0] in self.cell.tech_geom_props[region]
                 )
                 self.assertEqual(
-                    self.cell.tech_geom_props[region][PropertyType.MATERIAL],
+                    self.cell.tech_geom_props[region][property_value[0]],
                     property_value[1]
                 )
                 break
@@ -539,8 +546,6 @@ class TestCell(ABC, unittest.TestCase):
         # Check the cell's face has not been displayed yet
         self.assertIsNone(self.cell.face_entry_id)
 
-        # Display the cell's technological geometry in the SALOME viewer
-        self.cell.show()
         # Verify cell's regions are correctly shown
         self.__assess_show(None, GeometryType.TECHNOLOGICAL)
         self.__assess_show(None, GeometryType.SECTORIZED)
@@ -793,7 +798,7 @@ class TestCell(ABC, unittest.TestCase):
             The informative string to find for in the one being produced.
         """
         # Retrieve the informative message about a region
-        mssg = self.cell._Cell__get_region_info(region_face)
+        mssg = get_region_info(region_face, self.cell.regions)
         for region in self.cell.regions:
             if are_same_shapes(region.face, region_face, ShapeType.FACE):
                 self.assertTrue(region.name in mssg)
@@ -921,36 +926,6 @@ class TestCell(ABC, unittest.TestCase):
         )
         # Verify the attribute indicating the displayed geometry
         self.assertEqual(self.cell.displayed_geom, geometry)
-
-    def __build_cell_ref_vectors(self) -> List[Any]:
-        """
-        Method that builds a list of vector objects on the first edge of
-        each of the face objects belonging to a `Cell` instance, i.e. the
-        whole cell's face and the faces stored in the dictionaries of
-        properties and sectorization options.
-
-        Returns
-        -------
-        List[Any]
-            A list of vectors built of the first edge of the faces in the
-            cell.
-        """
-        # List all the face objects comprising the cell's face and those
-        # stored in the cell's dictionaries
-        faces = [self.cell.face] + list(self.cell.tech_geom_props.keys())
-        if self.cell.sectorized_face:
-            faces += list(self.cell.tech_geom_sect_opts.keys())
-        # Store the edge '0' for each face
-        edges = [extract_sub_shapes(f, ShapeType.EDGE)[0] for f in faces]
-        # Append the edge '0' for the cell's 'Surface' and reference circle
-        edges.append(self.cell.figure.borders[0])
-        edges.append(self.cell.figure.out_circle)
-        # Build reference vectors for each edge
-        return [
-            make_vector_from_points(
-                self.cell.figure.o,
-                make_vertex_on_curve(e, 0.0)) for e in edges
-        ]
 
     def __check_cell_setup(self) -> None:
         """

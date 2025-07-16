@@ -8,7 +8,7 @@ from typing import Any, List, Tuple
 from glow.interface.geom_interface import ShapeType, \
   extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
   get_basic_properties, get_closed_free_boundary, get_inertia_matrix, \
-  get_point_coordinates, get_shape_type, make_cdg, make_cut, make_face, \
+  get_point_coordinates, get_selected_object, get_shape_type, make_cdg, make_cut, make_face, \
   make_fuse, make_translation, make_vector_from_points, make_vertex
 
 
@@ -270,3 +270,21 @@ def check_shape_expected_types(shape: Any,
         raise RuntimeError(
             f"The GEOM object has a non-valid '{type}' type: any of the "
             f"'{expected_types}' objects are expected.")
+
+
+def retrieve_selected_object(error_msg: str) -> Any:
+    """
+    Function that retrieves the geometrical object currently selected in
+    the SALOME study. If more than one or none is selected, an exception
+    with the given message is raised.
+
+    Parameters
+    ----------
+    error_msg : str
+        The error message to display when the incorrect number of shapes
+        is selected.
+    """
+    shape = get_selected_object()
+    if not shape:
+        raise RuntimeError(error_msg)
+    return shape
