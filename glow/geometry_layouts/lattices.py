@@ -60,7 +60,7 @@ class Lattice():
     """
     # Admitted values for the rotation angle (in degrees) of the cells in
     # the lattice
-    VALID_CELLS_ANGLES: List[float] = [0.0, 90.0]
+    VALID_CELLS_ANGLES: List[float] = [0.0, 90.0, 180.0, 270.0, 360.0]
 
     def __init__(self,
                  cells: List[Cell] = [],
@@ -626,9 +626,9 @@ class Lattice():
             self.__evaluate_no_rings(position)
 
         # Add the cell to the given layer
-        self.layers[layer_indx].append(cell)
+        self.layers[layer_indx].append(deepcopy(cell))
         # Add the cell to the list of lattice cells
-        self.lattice_cells.append(cell)
+        self.lattice_cells.append(deepcopy(cell))
         # Re-evaluate the types of the geometry and BCs
         self.__configure_lattice_type(self.cells_type,
                                       len(self.lattice_cells))
@@ -1392,7 +1392,7 @@ class Lattice():
             use for building the lattice regions.
         """
         # Get the cells by assembling all the lattice layers
-        self.lattice_cells = self.__assemble_layers()
+        self.lattice_cells = deepcopy(self.__assemble_layers())
         self.__update_lattice_compounds(self.lattice_cells, geo_type)
         # Get the lattice compound object, given the geometry type and the
         # current applied symmetry
@@ -1960,7 +1960,6 @@ class Lattice():
         """
         # Return immediately if the rotation angle is 0.0
         if math.isclose(angle, 0.0):
-            # FIXME put into log
             print("No rotation is performed as the given angle is 0.0°")
             return
         # Convert the rotation angle in radians
@@ -1972,13 +1971,18 @@ class Lattice():
             self.lattice_center, make_vertex((x, y, 1)))
         # Rotate the lattice compound
         self.lattice_cmpd = make_rotation(self.lattice_cmpd, z_axis, rotation)
-        # Rotate each cell of the lattice
-        for cell in self.lattice_cells:
-            cell.rotate_from_axis(angle, z_axis)
-        # Rotate each cell of each layer
+        # Update the list of lattice cells based on the rotated ones
+        self.lattice_cells = [
+            cell for cell in self.__rotate_cells(
+                self.lattice_cells, angle, z_axis)]
+        # Loop through all the layers to rotate the cells
+        rotated_layers: List[List[Cell]] = []
         for layer in self.layers:
-            for cell in layer:
-                cell.rotate_from_axis(angle, z_axis)
+            rotated_layers.append(
+                self.__rotate_cells(layer, angle, z_axis))
+        # Update the data structure holding the rotated cells for each layer
+        self.layers = [
+            [cell for cell in layer] for layer in rotated_layers]
         # Rotate the lattice box, if any
         if self.lattice_box:
             self.lattice_box.rotate_from_axis(angle, z_axis)
@@ -1987,11 +1991,42 @@ class Lattice():
         if self.symmetry_type != SymmetryType.FULL:
             self.lattice_symm = make_rotation(
                 self.lattice_symm, z_axis, rotation)
+        # Update the rotation angle of the main pattern of cells
+        self.__cells_rot = self.__evaluate_cells_rotation(self.lattice_cells)
 
         # Set the need to update the lattice geometry
         self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study
         self.show()
+
+    def __rotate_cells(self,
+                       cells: List[Cell],
+                       angle: float,
+                       axis: Any) -> List[Cell]:
+        """
+        Method that applies the rotation operation to all the cells of the
+        given list of `Cell` objects. It returns a list of the rotated
+        cells.
+
+        Parameters
+        ----------
+        cells : List[Cell]
+            List of `Cell` objects to rotate
+        angle : float
+            The rotation angle in degrees
+        axis : Any
+            The vector object being the rotation axis
+
+        Returns
+        -------
+        List[Cell]
+            The list of rotated cells.
+        """
+        rotated_cells = []
+        for cell in cells:
+            cell.rotate_from_axis(angle, axis)
+            rotated_cells.append(deepcopy(cell))
+        return rotated_cells
 
     def sectorize(self, sect_indexes: Tuple[int, int]) -> None:
         """

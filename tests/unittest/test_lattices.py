@@ -10,10 +10,12 @@ from typing import List
 
 from glow.generator.support import *
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, build_hexagon
+from glow.geometry_layouts.geometries import Hexagon, Rectangle, build_hexagon
 from glow.geometry_layouts.lattices import Lattice
-from glow.geometry_layouts.utility import are_same_shapes, build_compound_borders
+from glow.geometry_layouts.utility import are_same_shapes, \
+    build_compound_borders
 from glow.interface.geom_interface import *
+from support_funcs import build_lattice_ref_vectors
 
 
 class TestLattice(unittest.TestCase):
@@ -97,7 +99,7 @@ class TestLattice(unittest.TestCase):
         # Verify correct exception handling
         self.__assess_add_cell(self.rect_cells[0], position)
         rotated_cell = deepcopy(cell)
-        rotated_cell.rotate(90)
+        rotated_cell.rotate(30)
         self.__assess_add_cell(rotated_cell, position)
 
     def test_add_ring_of_cells(self) -> None:
@@ -298,6 +300,40 @@ class TestLattice(unittest.TestCase):
         self.__assess_build_regions(GeometryType.SECTORIZED)
         self.assertFalse(self.lattice.is_update_needed)
 
+    def test_rotate(self) -> None:
+        """
+        Method that tests the implementation of the method `rotate` of the
+        `Lattice` class.
+        """
+        # Instantiate the lattice with a list of hexagonal cells
+        for cell in self.hex_cells:
+            cell.sectorize([6], [0])
+        self.lattice = Lattice(self.hex_cells)
+        self.lattice.build_lattice_box([0.075])
+        self.lattice.apply_symmetry(SymmetryType.SIXTH)
+        # Store the initial rotation angle
+        rotation_0 = self.lattice.cells_rot
+        rot_angle = 90.0
+        # Build reference vectors for each lattice element before and
+        # after the rotation
+        ref_vectors1 = build_lattice_ref_vectors(self.lattice)
+        self.lattice.rotate(rot_angle)
+        ref_vectors2 = build_lattice_ref_vectors(self.lattice)
+        # Check the correct rotation happened by assessing that the angle
+        # between the reference vectors is the rotation angle
+        for v1, v2 in zip(ref_vectors1, ref_vectors2):
+            self.assertTrue(
+                math.isclose(
+                    get_angle_between_shapes(v1, v2),
+                    rot_angle),
+                f"{get_angle_between_shapes(v1, v2)}, {rot_angle}"
+            )
+        # Check the 'rotation' attribute has updated
+        self.assertTrue(
+            math.isclose(
+                self.lattice.cells_rot, rotation_0 + rot_angle)
+        )
+
     def test_show(self) -> None:
         """
         Method that tests the implementation of the method `show` of the
@@ -318,11 +354,85 @@ class TestLattice(unittest.TestCase):
             self.__assess_show(PropertyType.MATERIAL,
                                GeometryType.TECHNOLOGICAL)
         # Apply values for the PropertyType.MATERIAL to cells' regions
-        for cell in self.lattice.lattice_cells:
-            cell.set_properties({PropertyType.MATERIAL: ['MAT1']})
+        for layer in self.lattice.layers:
+            for cell in layer:
+                cell.set_properties({PropertyType.MATERIAL: ['MAT1']})
         # Verify lattice's regions are shown according to the property values
         self.__assess_show(PropertyType.MATERIAL, GeometryType.TECHNOLOGICAL)
         self.__assess_show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
+
+    def test_translate(self) -> None:
+        """
+        Method that tests the implementation of the method `translate` of the
+        `Lattice` class.
+        """
+        # Instantiate the lattice with a list of hexagonal cells
+        for cell in self.hex_cells:
+            cell.sectorize([6], [0])
+        self.lattice = Lattice(self.hex_cells)
+        self.lattice.build_lattice_box([0.075])
+        self.lattice.apply_symmetry(SymmetryType.SIXTH)
+        # Store the elements for assessing the correct translation
+        new_cntr = (10.0, 10.0, 0.0)
+        new_cntr_vrtx = make_vertex(new_cntr)
+        cdg_pre = self.lattice.lattice_center
+        distance = get_min_distance(self.lattice.lattice_center,
+                                    new_cntr_vrtx)
+        lattice_org = deepcopy(self.lattice)
+
+        # Translate the lattice
+        self.lattice.translate(new_cntr)
+        # Check the correct translation happened
+        self.assertTrue(
+            are_same_shapes(
+                self.lattice.lattice_center, new_cntr_vrtx, ShapeType.VERTEX)
+        )
+        self.assertTrue(
+            math.isclose(
+                get_min_distance(
+                    make_cdg(lattice_org.lattice_cmpd),
+                    make_cdg(self.lattice.lattice_cmpd)),
+                distance)
+        )
+        self.assertTrue(
+            math.isclose(
+                get_min_distance(
+                    make_cdg(lattice_org.lattice_box.face),
+                    make_cdg(self.lattice.lattice_box.face)),
+                distance)
+        )
+        self.assertTrue(
+            math.isclose(
+                get_min_distance(
+                    make_cdg(lattice_org.lattice_symm),
+                    make_cdg(self.lattice.lattice_symm)),
+                distance)
+        )
+        self.assertTrue(
+            math.isclose(
+                get_min_distance(cdg_pre, self.lattice.lattice_center),
+                distance)
+        )
+        for c1, c2 in zip(lattice_org.lattice_cells,
+                          self.lattice.lattice_cells):
+            self.assertTrue(
+                math.isclose(
+                    get_min_distance(c1.figure.o, c2.figure.o), distance)
+            )
+            self.assertTrue(
+                math.isclose(
+                    get_min_distance(
+                        make_cdg(c1.sectorized_face),
+                        make_cdg(c2.sectorized_face)),
+                    distance)
+            )
+        for lyr1, lyr2 in zip(lattice_org.layers, self.lattice.layers):
+            for c1, c2 in zip(lyr1, lyr2):
+                self.assertTrue(
+                    math.isclose(
+                        get_min_distance(c1.figure.o, c2.figure.o), distance)
+                )
+        self.assertFalse(self.lattice.is_update_needed)
 
     def __assess_add_cell(
             self,
