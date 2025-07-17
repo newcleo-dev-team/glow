@@ -15,7 +15,7 @@ from glow.geometry_layouts.utility import are_same_shapes, \
     build_compound_borders, retrieve_selected_object, update_relative_pos
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
-    get_kind_of_shape, get_min_distance, get_object_from_id, \
+    get_bounding_box, get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
     get_shape_type, is_point_inside_shape, make_cdg, make_compound, make_cut, \
     make_face, make_line, make_partition, make_rotation, make_translation, \
@@ -1550,10 +1550,19 @@ class Cell(ABC):
             The geometric object to update the cell with
         """
         # Loop through all the edge objects of the cell to identify
-        # the presence of any added edges
+        # the presence of any added edges, excluding the ones of the
+        # borders of the shape
         arcs_data = []
         edges_to_add = []
-        for edge in extract_sub_shapes(shape, ShapeType.EDGE):
+        borders = build_compound_borders(shape)
+        edges_to_check = []
+        for e in extract_sub_shapes(shape, ShapeType.EDGE):
+            for b in borders:
+                if are_same_shapes(e, b, ShapeType.EDGE):
+                    break
+            else:
+                edges_to_check.append(e)
+        for edge in edges_to_check:
             # Get the information of the given edge object
             data = get_kind_of_shape(edge)
             if str(data[0]) == 'CIRCLE':
@@ -1968,7 +1977,12 @@ class GenericCell(Cell):
         can be added to the cell. No implementation is needed for this method
         as the cell surface is generic.
         """
-        return
+        # Get the min-max dimensions of the cell
+        x_min, x_max, y_min, y_max = get_bounding_box(self.face)
+        if radius > (x_max - x_min)/2 and radius > (y_max - y_min)/2:
+            raise RuntimeError(
+                "The circle cannot be added to the cell as its dimensions "
+                "exceede those of the cell.")
 
     def _initialize_specific_cell(self):
         """
@@ -1979,8 +1993,7 @@ class GenericCell(Cell):
 
     def sectorize(self,
                   sectors_no: List[int],
-                  angles: List[float],
-                  **kwargs) -> None:
+                  angles: List[float]) -> None:
         """
         Method that subdivides the cell into sectors. Given the number of
         sectors for each cell zone and the values of the angles to start
@@ -1997,10 +2010,8 @@ class GenericCell(Cell):
         angles      : List[float]
             List of angles (in degree) the sectorization should start from
             for each cell zone coming from the technological geometry
-        kwargs      : Any
-            Additional parameters for the sectorization.
         """
-        return super().sectorize(sectors_no, angles, **kwargs)
+        self._sectorize_cell(sectors_no, angles, False)
 
 
 def check_cell_circle_are_cut(cell: Cell) -> bool:

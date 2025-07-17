@@ -11,11 +11,13 @@ from typing import List
 from glow.generator.support import *
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, get_region_info
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, build_hexagon
-from glow.geometry_layouts.lattices import Lattice
+from glow.geometry_layouts.lattices import Lattice, get_changed_cells, \
+    get_compound_from_geometry
 from glow.geometry_layouts.utility import are_same_shapes, \
     build_compound_borders
 from glow.interface.geom_interface import *
-from support_funcs import build_lattice_ref_vectors
+from support_funcs import build_lattice_ref_vectors, set_up_hex_cells, \
+    set_up_rect_cells
 
 
 class TestLattice(unittest.TestCase):
@@ -55,8 +57,8 @@ class TestLattice(unittest.TestCase):
         self.o = make_vertex((0.0, 0.0, 0.0))
         hex_cell = HexCell(name="Hexagonal Cell")
         rect_cell = RectCell(name="Cartesian Cell")
-        self.hex_cells: List[HexCell] = self.__set_up_hex_cells(hex_cell)
-        self.rect_cells: List[RectCell] = self.__set_up_rect_cells(rect_cell)
+        self.hex_cells: List[HexCell] = set_up_hex_cells(hex_cell)
+        self.rect_cells: List[RectCell] = set_up_rect_cells(rect_cell)
         self.box_layers: List[float] = [0.075, 0.075]
 
     def test_init(self) -> None:
@@ -73,11 +75,11 @@ class TestLattice(unittest.TestCase):
         self.lattice = Lattice(self.hex_cells)
         self.__assess_lattice_init(self.hex_cells, [], 1)
         # Cartesian case (odd number of cells)
-        self.rect_cells = self.__set_up_rect_cells(self.rect_cells[0])
+        self.rect_cells = set_up_rect_cells(self.rect_cells[0])
         self.lattice = Lattice(self.rect_cells)
         self.__assess_lattice_init(self.rect_cells, [], 1)
         # Cartesian case (even number of cells)
-        self.rect_cells = self.__set_up_rect_cells(self.rect_cells[0], True)
+        self.rect_cells = set_up_rect_cells(self.rect_cells[0], True)
         self.lattice = Lattice(self.rect_cells)
         self.__assess_lattice_init(self.rect_cells, [], 1)
 
@@ -280,7 +282,7 @@ class TestLattice(unittest.TestCase):
         )
         # Instantiate the lattice with the cartesian cells (even cells number)
         self.lattice = Lattice(
-            self.__set_up_rect_cells(self.rect_cells[0], True))
+            set_up_rect_cells(self.rect_cells[0], True))
         # Build the comparison figure
         box_face = self.__build_rect_box()
         # Build the lattice box
@@ -945,7 +947,7 @@ class TestLattice(unittest.TestCase):
             even number of cells (no central cell).
         """
         # Instantiate the lattice with a list of cartesian cells
-        cells = self.__set_up_rect_cells(self.rect_cells[0], is_even)
+        cells = set_up_rect_cells(self.rect_cells[0], is_even)
         self.lattice = Lattice(cells)
         # Verify the lattice compound has been assembled
         self.assertTrue(
@@ -1259,94 +1261,99 @@ class TestLattice(unittest.TestCase):
         return make_partition(
             [rect.face for rect in box_surfaces], [], ShapeType.FACE)
 
-    def __set_up_hex_cells(self, hex_cell: HexCell) -> List[HexCell]:
+
+class TestLatticesFunctions(unittest.TestCase):
+    """
+    Test case for verifying the correct implementation of the functions
+    declared in the `lattices.py` module.
+
+    Attributes
+    ----------
+    cells : List[Cell]
+        A list of `Cell` objects the lattice is made of.
+    lattice : Lattice
+        The `Lattice` object to test, made either by cartesian or hexagonal
+        cells.
+    """
+    def setUp(self):
         """
-        Method that builds a list of hexagonal cells with a central cell
-        surrounded by six other cells.
-
-        Parameters
-        ----------
-        hex_cell : HexCell
-            The `HexCell` object representing an hexagonal cell.
-
-        Returns
-        -------
-        List[HexCell]
-            A list of hexagonal cells with a central one surrounded by six
-            cells.
+        Method that sets up the test environment for the functions declared
+        in the `lattices.py` module.
+        It initializes the attributes common to all the tests.
         """
-        dx = hex_cell.apothem
-        dy = 3/2*hex_cell.edge_length
-        hex_cell.rotate(90.0)
-        return [
-            hex_cell,
-            hex_cell.translate((dx, dy, 0)),
-            hex_cell.translate((-dx, dy, 0)),
-            hex_cell.translate((-dx, -dy, 0)),
-            hex_cell.translate((dx, -dy, 0)),
-            hex_cell.translate((2*dx, 0, 0)),
-            hex_cell.translate((-2*dx, 0, 0))
-        ]
+        # Declare an hexagonal cell with a circular region and a sectorization
+        cell = HexCell()
+        cell.add_circle(0.25)
+        cell.sectorize([1, 6], [0, 0])
+        # Initialize the attributes
+        self.cells: List[Cell] = set_up_hex_cells(cell)
+        self.lattice: Lattice = Lattice(self.cells)
 
-    def __set_up_rect_cells(self,
-                            rect_cell: RectCell,
-                            is_even: bool = False) -> List[RectCell]:
+    def test_get_compound_from_geometry(self) -> None:
         """
-        Method that builds a list of cartesian cells. Depending on the
-        boolean flag `is_even`, the resulting list is made by a central
-        cell surrounded by eight other cells, if `False`, or by cells
-        without any central one replicating a pattern with an even number
-        of cells.
-
-        Parameters
-        ----------
-        rect_cell : RectCell
-            The `RectCell` object representing a cartesian cell.
-        is_even : bool
-            Boolean flag indicating the kind of pattern of cells (either with
-            an odd or even number of cells).
-
-        Returns
-        -------
-        List[RectCell]
-            A list of cartesian cells with a specific pattern.
+        Method that tests the implementation of the function
+        `get_compound_from_geometry` declared in the `lattices.py`
+        module.
         """
-        dx = rect_cell.width
-        dy = rect_cell.height
-        if is_even:
-            dx /= 2
-            dy /= 2
-            return [
-                rect_cell.translate((dx, dy, 0)),
-                rect_cell.translate((-dx, dy, 0)),
-                rect_cell.translate((-dx, -dy, 0)),
-                rect_cell.translate((dx, -dy, 0)),
-                rect_cell.translate((2*dx, 0, 0)),
-                rect_cell.translate((2*dx, dy, 0)),
-                rect_cell.translate((2*dx, 2*dy, 0)),
-                rect_cell.translate((dx, 2*dy, 0)),
-                rect_cell.translate((-dx, 2*dy, 0)),
-                rect_cell.translate((-2*dx, 2*dy, 0)),
-                rect_cell.translate((-2*dx, dy, 0)),
-                rect_cell.translate((-2*dx, 0, 0)),
-                rect_cell.translate((-2*dx, -dy, 0)),
-                rect_cell.translate((-2*dx, -2*dy, 0)),
-                rect_cell.translate((-dx, -2*dy, 0)),
-                rect_cell.translate((dx, -2*dy, 0)),
-                rect_cell.translate((2*dx, -2*dy, 0)),
-                rect_cell.translate((2*dx, -dy, 0)),
-            ]
-        return [
-            rect_cell,
-            rect_cell.translate((dx, 0, 0)),
-            rect_cell.translate((dx, dy, 0)),
-            rect_cell.translate((0, dy, 0)),
-            rect_cell.translate((-dx, dy, 0)),
-            rect_cell.translate((-dx, 0, 0)),
-            rect_cell.translate((-dx, -dy, 0)),
-            rect_cell.translate((0, -dy, 0)),
-            rect_cell.translate((dx, -dy, 0))
-        ]
+        # Extract and verify the correct compound is returned depending on
+        # the type of geometry
+        cmpd = get_compound_from_geometry(GeometryType.TECHNOLOGICAL,
+                                          self.lattice.lattice_cells)
+        no_edges = 7
+        self.assertEqual(
+            len(extract_sub_shapes(cmpd, ShapeType.EDGE)),
+            no_edges*len(self.lattice.lattice_cells)
+        )
+        self.assertEqual(
+            get_basic_properties(cmpd)[1],
+            len(self.lattice.lattice_cells) * get_basic_properties(
+                self.lattice.lattice_cells[0].face)[1]
+        )
+        cmpd = get_compound_from_geometry(GeometryType.SECTORIZED,
+                                          self.lattice.lattice_cells)
+        no_edges = 18
+        self.assertEqual(
+            len(extract_sub_shapes(cmpd, ShapeType.EDGE)),
+            no_edges*len(self.lattice.lattice_cells)
+        )
+        self.assertEqual(
+            get_basic_properties(cmpd)[1],
+            len(self.lattice.lattice_cells) * get_basic_properties(
+                self.lattice.lattice_cells[0].face)[1]
+        )
+
+    def test_get_changed_cells(self) -> None:
+        """
+        Method that tests the implementation of the function
+        `get_changed_cells` declared in the `lattices.py`
+        module.
+        """
+        # Set up a cartesian cell with circles and properties
+        rect_cell = RectCell()
+        radii = [0.2, 0.3, 0.4]
+        for r in radii:
+            rect_cell.add_circle(r)
+        # Instantiate the lattice without any cell
+        self.lattice = Lattice()
+        self.lattice.add_rings_of_cells(rect_cell, 2)
+        # Add a cell so that it overlaps the four in the upper-right section
+        self.lattice.add_cell(rect_cell, (1.0, 1.0, 0.0))
+        self.lattice.build_regions()
+
+        # Get the cells whose geometry layout has changed
+        changed_cells = get_changed_cells(self.lattice)
+        # Verify the correct cells are returned
+        self.assertEqual(len(changed_cells), 4)
+        indices = ["3", "10", "11", "12"]
+        for cell in changed_cells:
+            self.assertFalse(
+                are_same_shapes(cell.face, rect_cell.face, ShapeType.COMPOUND)
+            )
+            for indx in indices:
+                self.assertTrue(indx in cell.name)
+                # Remove the index as already checked
+                indices.pop(indices.index(indx))
+                break
 
 
 if __name__ == "__main__":

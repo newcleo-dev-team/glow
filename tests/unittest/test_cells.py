@@ -9,9 +9,10 @@ from typing import Any, Dict, Tuple, Union
 import unittest
 
 from glow.generator.support import CellType, GeometryType, PropertyType
-from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region, \
-    get_region_info
-from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface
+from glow.geometry_layouts.cells import Cell, GenericCell, HexCell, RectCell, \
+    Region, check_cell_circle_are_cut, get_region_info
+from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
+    Rectangle, Surface
 from glow.geometry_layouts.utility import are_same_shapes
 from glow.interface.geom_interface import *
 from support_funcs import build_cell_ref_vectors
@@ -997,6 +998,7 @@ class TestCell(ABC, unittest.TestCase):
         else:
             return False
 
+
 class TestRectCell(TestCell):
     """
     Test case for verifying the geometric operations and visualization
@@ -1309,6 +1311,160 @@ class TestHexCell(TestCell):
                 self.assertEqual(sect_edges[e], sect_opts[0][1])
                 continue
 
+
+class TestGenericCell(TestCell):
+    """
+    Test case for verifying the geometric operations and visualization
+    capabilities of the `GenericCell` class.
+
+    This test suite provides common setup and a set of tests to ensure that
+    implementations of `GenericCell` correctly handle the operations performed
+    on a cell based on a generic shape.
+    Tests dealing with the cell's operations are declared in the `TestCell`
+    class this class inherits from. They are run here, as this class declares
+    the `cell` attribute.
+
+    In addition, there are tests specific for a generic-type cell.
+
+    Attributes
+    ----------
+    In addition to the attributes declared in the `TestCell` superclass,
+    there are the following ones:
+
+    name : str
+        The name of the cell when displayed in the SALOME viewer.
+    surf : GenericSurface
+        The `GenericSurface` subclass providing the information about the
+        generic shape for the cell.
+    cell : GenericCell
+        The `Cell` subclass that describes a generic-type cell.
+    """
+    def setUp(self) -> None:
+        """
+        Method that sets up the test environment for the methods of the
+        `GenericCell` class.
+        """
+        # Setup the common geometric elements
+        super().setUp()
+        # Setup the specific attributes for testing the `Surface` subclass
+        self.name = "Generic Cell"
+        self.surf: GenericSurface = GenericSurface(
+            face=make_face(make_circle(self.o, None, 0.5))
+        )
+        self.cell: GenericCell = GenericCell(
+            shape=self.surf.face
+        )
+        self.sect_opts: Tuple[List[int], List[float]] = (
+            [1, 1, 1], [0, 0, 0])
+
+    def test_init(self) -> None:
+        """
+        Method that tests the correct initialization of the `GenericCell`
+        class.
+        """
+        self.assertTrue(
+            are_same_shapes(self.cell.face, self.surf.face, ShapeType.FACE)
+        )
+        self.assertEqual(self.cell.figure.lx, self.surf.lx)
+        self.assertEqual(self.cell.figure.ly, self.surf.ly)
+        self.assertEqual(self.cell.cell_type, None)
+
+
+class TestCellsFunctions(unittest.TestCase):
+    """
+    Test case for verifying the correct implementation of the functions
+    declared in the `cells.py` module.
+
+    Attributes
+    ----------
+    cell : Cell
+        A `Cell` objects to test.
+    """
+    def setUp(self):
+        """
+        Method that sets up the test environment for the functions declared
+        in the `cells.py` module.
+        It initializes the attributes common to all the tests.
+        """
+        # Initialize the cell with some circular regions
+        self.cell: RectCell = RectCell()
+        radii = [0.2, 0.3, 0.4]
+        for r in radii:
+            self.cell.add_circle(r)
+
+    def test_check_cell_circle_are_cut(self) -> None:
+        """
+         Method that tests the implementation of the function
+        `check_cell_circle_are_cut` declared in the `cells.py`
+        module.
+        """
+        # Store the cell's face
+        org_face = self.cell.face
+        # Cut the cell's geometry layout and update it
+        cutting_fig = Rectangle((0.5, 0.5, 0.0)).face
+        cut_cell = make_cut(self.cell.face, cutting_fig)
+        self.cell.update_geometry_from_face(GeometryType.TECHNOLOGICAL,
+                                            cut_cell)
+        # Verify the returned value is True
+        self.assertTrue(check_cell_circle_are_cut(self.cell))
+
+        # Cut the original cell's face so that the circular regions are not
+        # cut
+        cut_cell = make_cut(org_face, Rectangle((0.95, 0.0, 0.0)).face)
+        self.cell.update_geometry_from_face(GeometryType.TECHNOLOGICAL,
+                                            cut_cell)
+        # Verify the returned value is False
+        self.assertFalse(check_cell_circle_are_cut(self.cell))
+
+    def test_get_region_info(self) -> None:
+        """
+         Method that tests the implementation of the function
+        `get_region_info` declared in the `cells.py` module.
+        """
+        # Build the cell's regions
+        self.cell._Cell__build_regions()
+        # Verify an exception is raised when providing a region not
+        # beloging to the cell
+        with self.assertRaises(RuntimeError):
+            get_region_info(
+                make_face(
+                    [make_circle(make_vertex((0.0, 0.0, 0.0)), None, 0.1)]),
+                self.cell.regions)
+        region_face = extract_sorted_sub_shapes(self.cell.face,
+                                                ShapeType.FACE)[0]
+        # Check the message returns the name of the region and the associated
+        # properties, if any are assigned
+        self.__assess_get_region_info(
+            region_face, "No associated properties.")
+        # Apply values for the PropertyType.MATERIAL to the cells's regions
+        self.cell.set_properties(
+            {PropertyType.MATERIAL: ['MAT1', 'MAT2', 'MAT3', 'MAT4']})
+        # Rebuild the cell's regions to apply the properties modification
+        self.cell._Cell__build_regions()
+        # Check the correct assignment
+        self.__assess_get_region_info(
+            region_face, f"{PropertyType.MATERIAL.name}: MAT1")
+
+    def __assess_get_region_info(
+            self, region_face: Any, str_to_find: str) -> None:
+        """
+        Method that assesses whether the right message is shown when
+        displaying information about a specified region of the cell.
+
+        Parameters
+        ----------
+        region_face : Any
+            The cell's region to retrieve information from.
+        str_to_find: str
+            The informative string to find for in the one being produced.
+        """
+        # Retrieve the informative message about a region
+        mssg = get_region_info(region_face, self.cell.regions)
+        for region in self.cell.regions:
+            if are_same_shapes(region.face, region_face, ShapeType.FACE):
+                self.assertTrue(region.name in mssg)
+                self.assertTrue(str_to_find in mssg, region)
+                return
 
 if __name__ == "__main__":
     unittest.main()

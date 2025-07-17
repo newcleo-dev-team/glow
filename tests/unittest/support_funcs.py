@@ -3,7 +3,7 @@ Module declaring functions to support the execution of the unit tests.
 """
 from typing import Any, List, Tuple
 
-from glow.geometry_layouts.cells import Cell
+from glow.geometry_layouts.cells import Cell, HexCell, RectCell
 from glow.geometry_layouts.geometries import Surface
 from glow.geometry_layouts.lattices import Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, make_circle, make_edge, \
@@ -134,4 +134,92 @@ def build_lattice_ref_vectors(lattice: Lattice) -> List[Any]:
         make_vector_from_points(
             lattice.lattice_center,
             make_vertex_on_curve(e, 0.0)) for e in edges
+    ]
+
+def set_up_hex_cells(hex_cell: HexCell) -> List[HexCell]:
+    """
+    Function that builds a list of hexagonal cells with a central cell
+    surrounded by six other cells.
+
+    Parameters
+    ----------
+    hex_cell : HexCell
+        The `HexCell` object representing an hexagonal cell.
+
+    Returns
+    -------
+    List[HexCell]
+        A list of hexagonal cells with a central one surrounded by six
+        cells.
+    """
+    dx = hex_cell.apothem
+    dy = 3/2*hex_cell.edge_length
+    hex_cell.rotate(90.0)
+    return [
+        hex_cell,
+        hex_cell.translate((dx, dy, 0)),
+        hex_cell.translate((-dx, dy, 0)),
+        hex_cell.translate((-dx, -dy, 0)),
+        hex_cell.translate((dx, -dy, 0)),
+        hex_cell.translate((2*dx, 0, 0)),
+        hex_cell.translate((-2*dx, 0, 0))
+    ]
+
+def set_up_rect_cells(rect_cell: RectCell,
+                      is_even: bool = False) -> List[RectCell]:
+    """
+    Function that builds a list of cartesian cells. Depending on the
+    boolean flag `is_even`, the resulting list is made by a central
+    cell surrounded by eight other cells, if `False`, or by cells
+    without any central one replicating a pattern with an even number
+    of cells.
+
+    Parameters
+    ----------
+    rect_cell : RectCell
+        The `RectCell` object representing a cartesian cell.
+    is_even : bool
+        Boolean flag indicating the kind of pattern of cells (either with
+        an odd or even number of cells).
+
+    Returns
+    -------
+    List[RectCell]
+        A list of cartesian cells with a specific pattern.
+    """
+    dx = rect_cell.width
+    dy = rect_cell.height
+    if is_even:
+        dx /= 2
+        dy /= 2
+        return [
+            rect_cell.translate((dx, dy, 0)),
+            rect_cell.translate((-dx, dy, 0)),
+            rect_cell.translate((-dx, -dy, 0)),
+            rect_cell.translate((dx, -dy, 0)),
+            rect_cell.translate((2*dx, 0, 0)),
+            rect_cell.translate((2*dx, dy, 0)),
+            rect_cell.translate((2*dx, 2*dy, 0)),
+            rect_cell.translate((dx, 2*dy, 0)),
+            rect_cell.translate((-dx, 2*dy, 0)),
+            rect_cell.translate((-2*dx, 2*dy, 0)),
+            rect_cell.translate((-2*dx, dy, 0)),
+            rect_cell.translate((-2*dx, 0, 0)),
+            rect_cell.translate((-2*dx, -dy, 0)),
+            rect_cell.translate((-2*dx, -2*dy, 0)),
+            rect_cell.translate((-dx, -2*dy, 0)),
+            rect_cell.translate((dx, -2*dy, 0)),
+            rect_cell.translate((2*dx, -2*dy, 0)),
+            rect_cell.translate((2*dx, -dy, 0)),
+        ]
+    return [
+        rect_cell,
+        rect_cell.translate((dx, 0, 0)),
+        rect_cell.translate((dx, dy, 0)),
+        rect_cell.translate((0, dy, 0)),
+        rect_cell.translate((-dx, dy, 0)),
+        rect_cell.translate((-dx, 0, 0)),
+        rect_cell.translate((-dx, -dy, 0)),
+        rect_cell.translate((0, -dy, 0)),
+        rect_cell.translate((dx, -dy, 0))
     ]
