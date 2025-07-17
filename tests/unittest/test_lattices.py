@@ -347,6 +347,55 @@ class TestLattice(unittest.TestCase):
         self.__assess_get_regions_info(
             region_face, f"{PropertyType.MATERIAL.name}: MAT")
 
+    def test_restore_cells(self) -> None:
+        """
+        Method that tests the implementation of the method `restore_cells`
+        of the `Lattice` class.
+        """
+        # Set up a cartesian cell with circles and properties
+        rect_cell = self.rect_cells[0]
+        radii = [0.2, 0.3, 0.4]
+        properties = {PropertyType.MATERIAL: ['MAT1', 'MAT2', 'MAT3', 'MAT4']}
+        for r in radii:
+            rect_cell.add_circle(r)
+        rect_cell.set_properties(properties)
+        # Instantiate the lattice without any cell
+        self.lattice = Lattice()
+        self.lattice.add_rings_of_cells(rect_cell, 2)
+        # Add a cell so that it overlaps the four in the upper-right section
+        self.lattice.add_cell(rect_cell, (1.0, 1.0, 0.0))
+        self.lattice.build_regions()
+
+        # Restore only the cells cut by the overlapping one
+        cut_cells = [
+            self.lattice.lattice_cells[3],
+            self.lattice.lattice_cells[10],
+            self.lattice.lattice_cells[11],
+            self.lattice.lattice_cells[12],
+        ]
+        self.lattice.restore_cells(cut_cells, {PropertyType.MATERIAL: 'MAT1'})
+        # Verify the cut cells have been restored
+        self.__assess_cells_state(
+            cut_cells, 0, {PropertyType.MATERIAL: ['MAT1']})
+        # Verify no restore is performed if the cells have not been cut
+        no_cut_cells = [self.lattice.lattice_cells[1],
+                        self.lattice.lattice_cells[2]]
+        self.lattice.restore_cells(
+            no_cut_cells,
+            {PropertyType.MATERIAL: 'MAT1'}
+        )
+        self.__assess_cells_state(no_cut_cells, 3, properties)
+        # Verify cells not cut are restored, as indicated explicitly
+        self.lattice.restore_cells(
+            no_cut_cells,
+            {PropertyType.MATERIAL: 'MAT1'},
+            False
+        )
+        self.__assess_cells_state(
+            no_cut_cells, 0, {PropertyType.MATERIAL: ['MAT1']})
+        # Verify the lattice needs to be updated
+        self.assertTrue(self.lattice.is_update_needed)
+
     def test_rotate(self) -> None:
         """
         Method that tests the implementation of the method `rotate` of the
@@ -464,6 +513,51 @@ class TestLattice(unittest.TestCase):
                         )
                         break
         self.assertTrue(self.lattice.is_update_needed)
+
+    def test_set_type_geo(self) -> None:
+        """
+        Method that tests the implementation of the method `set_type_geo`
+        of the `Lattice` class.
+        """
+        # Instantiate the lattice with cartesian cells
+        self.lattice = Lattice(self.rect_cells)
+        # Verify exceptions are raised if trying to set an invalid 'type_geo'
+        # TRAN when the lattice is not enclosed in a box, any other type
+        # indicating a symmetry when no symmetry is applied
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_type_geo(LatticeGeometryType.RECTANGLE_TRAN)
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_type_geo(LatticeGeometryType.RECTANGLE_SYM)
+        # Apply a symmetry
+        self.lattice.apply_symmetry(SymmetryType.EIGHTH)
+        typ_geo = self.lattice.type_geo
+        new_type_geo = LatticeGeometryType.SYMMETRIES_TWO
+        self.lattice.set_type_geo(new_type_geo)
+        # Verify the type_geo has changed
+        self.assertTrue(
+            typ_geo != self.lattice.type_geo and
+            self.lattice.type_geo == new_type_geo
+        )
+        # Instantiate the lattice with hexagonal cells
+        self.lattice = Lattice(self.hex_cells)
+        # Verify exceptions are raised if trying to set an invalid 'type_geo'
+        # TRAN when the lattice is not enclosed in a box, any other type
+        # indicating a symmetry when no symmetry is applied
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_type_geo(LatticeGeometryType.HEXAGON_TRAN)
+        with self.assertRaises(RuntimeError):
+            self.lattice.set_type_geo(LatticeGeometryType.R120)
+        # Apply a symmetry
+        self.lattice.build_lattice_box(self.box_layers)
+        self.lattice.apply_symmetry(SymmetryType.SIXTH)
+        typ_geo = self.lattice.type_geo
+        new_type_geo = LatticeGeometryType.RA60
+        self.lattice.set_type_geo(new_type_geo)
+        # Verify the type_geo has changed
+        self.assertTrue(
+            typ_geo != self.lattice.type_geo and
+            self.lattice.type_geo == new_type_geo
+        )
 
     def test_show(self) -> None:
         """
@@ -813,6 +907,30 @@ class TestLattice(unittest.TestCase):
                 t1[0] == t2[0] and math.isclose(t1[1], t2[1], abs_tol=1e-5),
                 f"{ring_dist}, {result}"
             )
+
+    def __assess_cells_state(
+            self,
+            cells: List[Cell],
+            no_circles: int,
+            properties: Dict[PropertyType, List[str]]) -> None:
+        """
+        Method that verifies if all the provided cells have the indicated
+        number of circles and properties.
+
+        Parameters
+        ----------
+        cells : List[Cell]
+            List of `Cell` objects to check.
+        no_circles : int
+            The number of circles all the given cells must have.
+        properties : Dict[PropertyType, List[str]]
+            The dictionary of properties all the given cells must have.
+        """
+        for cell in cells:
+            self.assertEqual(len(cell.inner_circles), no_circles)
+            for properties in cell.tech_geom_props.values():
+                for p, v in properties.items():
+                    self.assertEqual(v, properties[p])
 
     def __assess_rect_symmetry(self, is_even: bool = False) -> None:
         """

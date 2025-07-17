@@ -17,7 +17,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_point_inside_shape, make_cdg, make_compound, \
+    get_shape_type, is_point_inside_shape, make_cdg, make_compound, make_cut, \
     make_face, make_line, make_partition, make_rotation, make_translation, \
     make_vector_from_points, make_vertex, make_vertex_inside_face, \
     make_vertex_on_curve, make_vertex_on_lines_intersection, \
@@ -2001,6 +2001,47 @@ class GenericCell(Cell):
             Additional parameters for the sectorization.
         """
         return super().sectorize(sectors_no, angles, **kwargs)
+
+
+def check_cell_circle_are_cut(cell: Cell) -> bool:
+    """
+    Function that verifies if any of the circular regions of the given `Cell`
+    object have been cut as a result of a modification to the cell's geometry
+    layout.
+    A cut operation between the compound made by the cell's centered circular
+    regions and the current state of the cell's face determines if any
+    circular region has been cut. If the result does not have any face object,
+    it means the circular regions are still a whole.
+
+    Parameters
+    ----------
+    cell : Cell
+        The `Cell` object to check if its circular regions have been cut in
+        the cell's geometry layout.
+
+    Returns
+    -------
+    bool
+        `True`, if the cell's circular regions have been cut, `False`
+        otherwise.
+    """
+    # Go to the next cell if no inner circles are present
+    if not cell.inner_circles:
+        return False
+    # Extract the compound made by the union of the cell-centered
+    # circular regions
+    circ_regions = make_partition(
+        [circle.face for circle in cell.get_centered_circles()],
+        [],
+        ShapeType.FACE)
+    # Cut the compound made from the circular regions with the cell
+    # face. If this operation does not produce any face object, it
+    # means that the circular regions of the cell are not cut.
+    if not extract_sub_shapes(
+        make_compound([make_cut(circ_regions, cell.face)]),
+        ShapeType.FACE):
+        return False
+    return True
 
 
 def get_region_info(shape: Any, regions: List[Region]) -> str:

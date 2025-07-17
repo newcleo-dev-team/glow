@@ -8,7 +8,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Set, Tuple, Union
 
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region, \
-    get_region_info
+    check_cell_circle_are_cut, get_region_info
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, \
     build_hexagon
 from glow.geometry_layouts.utility import are_same_shapes, \
@@ -627,6 +627,8 @@ class Lattice():
             cell = cell.translate(position)
             self.__evaluate_no_rings(position)
 
+        # Set the cell's name by appending a global index
+        cell.name = f"Cell_{len(self.lattice_cells)+1}"
         # Add the cell to the given layer
         self.layers[layer_indx].append(deepcopy(cell))
         # Add the cell to the list of lattice cells
@@ -1303,22 +1305,17 @@ class Lattice():
                                               make_vertex(new_pos))
         # Update the lattice center
         self.lattice_center = make_vertex(new_pos)
-
-        # Translate each cell in the lattice
-        translated_cells = self.__translate_cells(
-            self.lattice_cells, new_pos, pre_center)
-        # Update the list of lattice cells based on the translated ones
-        self.lattice_cells = [cell for cell in translated_cells]
-
         # Translate each cell of each layer in the lattice
         translated_layers: List[List[Cell]] = []
         # Loop through all the layers to translate the cells
-        for i, layer in enumerate(self.layers):
+        for layer in self.layers:
             translated_layers.append(
                 self.__translate_cells(layer, new_pos, pre_center))
         # Update the data structure holding the translated cells for each layer
         self.layers = [
             [cell for cell in layer] for layer in translated_layers]
+        # Update the list of lattice cells
+        self.lattice_cells = [cell for layer in self.layers for cell in layer]
 
         # Translate the lattice compound
         self.lattice_cmpd = make_translation(self.lattice_cmpd, transl_vect)
@@ -1394,7 +1391,7 @@ class Lattice():
             use for building the lattice regions.
         """
         # Get the cells by assembling all the lattice layers
-        self.lattice_cells = deepcopy(self.__assemble_layers())
+        self.lattice_cells = self.__assemble_layers()
         self.__update_lattice_compounds(self.lattice_cells, geo_type)
         # Get the lattice compound object, given the geometry type and the
         # current applied symmetry
@@ -1880,68 +1877,6 @@ class Lattice():
         # corresponding data
         print(get_region_info(shape, self.regions))
 
-    def update_geometry(self, geo_type: GeometryType) -> None:
-        """
-        Method for updating the lattice geometry with the given compound
-        that has been externally manipulated due to some operation (e.g.
-        cut, scaling, etc.).
-        The SALOME ID of the compound is provided, given which the GEOM
-        object is retrieved.
-        A common operation between the stored lattice compound and the
-        new one is performed. Different operations are performed depending
-        on the result:
-
-        - If None, it means that the lattice position has changed. However,
-          if the geometrical properties are different, a warning is raised
-          as the center of the new geometry cannot be univocally determined.
-          In this case, the method `update_geometry_from_center` should be
-          called. If no changes in the geometrical properties are present,
-          the lattice (and all the related attributes) is translated in the
-          new position. A rotation is performed as well, if needed.
-        - If not None, it means that the two compounds shares all the lattice
-          or a part of it. If the geometric properties of the common result
-          and the new compound are different, the same check is performed on
-          the previous and current lattice:
-
-          - If different, nothing can be said about its center: a warning
-            is raised notifying the need to call the method
-            `update_geometry_from_center`.
-          - If equal, the new compound is just placed in a different
-            position: the current one is translated and a rotation is
-            performed as well, if needed.
-
-          If the common result and the new compound are the same, then a
-          rotation is performed, if needed. A comparison on the previous and
-          actual lattice area is performed to check if any symmetry could be
-          applied. In any case, if the areas are different, the lattice
-          compound is simply updated with the new one.
-
-        Parameters
-        ----------
-        geo_type  : GeometryType
-            The lattice type of geometry to update, as value of the
-            'GeometryType' enumeration
-        """
-        # Check if the displayed geometry coincides with the one to modify
-        if geo_type != self.displayed_geom:
-            raise RuntimeError(
-                f"Currently displaying the cell {self.displayed_geom.name} "
-                "geometry: this does not match with the indicated "
-                f"{geo_type.name} geometry type to modify.")
-        # Extract the geometrical object currently selected in the current
-        # SALOME study
-        shape = get_selected_object()
-        if not shape:
-            raise RuntimeError("Please, select a shape to update the cell "
-                               "geometry with.")
-        # Update the lattice compound with the given shape
-        self.lattice_cmpd = shape
-
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-        # Update the lattice in the current SALOME study
-        self.show()
-
     def rotate(self, angle: float = 0.0) -> None:
         """
         Method for rotating the whole lattice by the given angle in degrees.
@@ -1964,10 +1899,6 @@ class Lattice():
             self.lattice_center, make_vertex((x, y, 1)))
         # Rotate the lattice compound
         self.lattice_cmpd = make_rotation(self.lattice_cmpd, z_axis, rotation)
-        # Update the list of lattice cells based on the rotated ones
-        self.lattice_cells = [
-            cell for cell in self.__rotate_cells(
-                self.lattice_cells, angle, z_axis)]
         # Loop through all the layers to rotate the cells
         rotated_layers: List[List[Cell]] = []
         for layer in self.layers:
@@ -1976,6 +1907,8 @@ class Lattice():
         # Update the data structure holding the rotated cells for each layer
         self.layers = [
             [cell for cell in layer] for layer in rotated_layers]
+        # Update the list of lattice cells
+        self.lattice_cells = [cell for layer in self.layers for cell in layer]
         # Rotate the lattice box, if any
         if self.lattice_box:
             self.lattice_box.rotate_from_axis(angle, z_axis)
@@ -2235,49 +2168,50 @@ class Lattice():
 
     def restore_cells(self,
                       cells: List[Cell],
-                      properties: Dict[PropertyType, str]) -> None:
+                      properties: Dict[PropertyType, str],
+                      ignore_not_cut: bool = True) -> None:
         """
         Method that restores the geometry layout of the given cells by
         removing any circular region, while setting properties accordingly
         with the provided dictionary.
         If any cell has no centered circular regions, the restore operation
         is not performed.
-        For the others, this operation is performed only if the compound made
-        of the circular regions is cut by the cell's face.
+        If the `ignore_not_cut` boolean flag is `True`, this operation is
+        performed only if the compound made of the circular regions is cut
+        by the cell's face. Otherwise, if `True`, all the given cells are
+        restored.
 
-        **N.B.** This method should be called after building the lattice
+        Parameters
+        ----------
+        cells: List[Cell]
+            List of shallow copies of the ones in the lattice that should
+            be restored.
+        properties : Dict[PropertyType, str]
+            Providing the values for each type of property to assign to the
+            cells being restored.
+        ignore_not_cut : bool = True
+            Boolean flag indicating whether the cells whose circular regions
+            are not cut should also be restored or not.
+
+        Notes
+        -----
+        This method should be called after building the lattice
         regions by overlapping all the layers of cells, i.e. after calling
         either the `show` or the `build_regions` methods.
         This method has an effect only if the given list of cells contains
         shallow copies of the `Cell` objects included in the present `Lattice`
         instance.
-
-        Parameters
-        ----------
-        properties : Dict[PropertyType, str]
-            Providing the values for each type of property to assign to the
-            cells being restored
         """
-        # Loop through all the given cells
-        for cell in cells:
-            # Go to the next cell if no inner circles are present
-            if not cell.inner_circles:
-                continue
-            # Extract the compound made by the union of the cell-centered
-            # circular regions
-            circ_regions = make_partition(
-                [circle.face for circle in cell.get_centered_circles()],
-                [],
-                ShapeType.FACE)
-            # Cut the compound made from the circular regions with the cell
-            # face. If this operation does not produce any face object, it
-            # means that the circular regions of the cell are not cut, hence
-            # the cell geometry must not be restored.
-            if not extract_sub_shapes(
-                make_compound([make_cut(circ_regions, cell.face)]),
-                ShapeType.FACE):
-                continue
-            # Restore the cell geometry and properties
+        # Filter the cells to be restored
+        if ignore_not_cut:
+            # Loop through all the given cells to get the ones to restore
+            cells_to_restore = [
+                cell for cell in cells if check_cell_circle_are_cut(cell)
+            ]
+        else:
+            cells_to_restore = cells
+        # Restore the geometry and properties of the cells
+        for cell in cells_to_restore:
             cell.restore()
             cell.set_properties({k: [v] for k, v in properties.items()})
 
