@@ -8,12 +8,12 @@ import math
 from typing import Any, Dict, Tuple, Union
 import unittest
 
-from glow.generator.support import CellType, GeometryType, PropertyType
+from glow.support.types import CellType, GeometryType, PropertyType
 from glow.geometry_layouts.cells import Cell, GenericCell, HexCell, RectCell, \
     Region, check_cell_circle_are_cut, get_region_info
 from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
     Rectangle, Surface
-from glow.geometry_layouts.utility import are_same_shapes
+from glow.support.utility import are_same_shapes
 from glow.interface.geom_interface import *
 from support_funcs import build_cell_ref_vectors
 
@@ -1378,7 +1378,7 @@ class TestCellsFunctions(unittest.TestCase):
     Attributes
     ----------
     cell : Cell
-        A `Cell` objects to test.
+        A `Cell` object used for testing the functions.
     """
     def setUp(self):
         """
@@ -1394,7 +1394,7 @@ class TestCellsFunctions(unittest.TestCase):
 
     def test_check_cell_circle_are_cut(self) -> None:
         """
-         Method that tests the implementation of the function
+        Method that tests the implementation of the function
         `check_cell_circle_are_cut` declared in the `cells.py`
         module.
         """
@@ -1418,7 +1418,7 @@ class TestCellsFunctions(unittest.TestCase):
 
     def test_get_region_info(self) -> None:
         """
-         Method that tests the implementation of the function
+        Method that tests the implementation of the function
         `get_region_info` declared in the `cells.py` module.
         """
         # Build the cell's regions

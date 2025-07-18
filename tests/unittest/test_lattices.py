@@ -8,13 +8,12 @@ import unittest
 
 from typing import List
 
-from glow.generator.support import *
+from glow.support.types import *
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, get_region_info
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, build_hexagon
 from glow.geometry_layouts.lattices import Lattice, get_changed_cells, \
     get_compound_from_geometry
-from glow.geometry_layouts.utility import are_same_shapes, \
-    build_compound_borders
+from glow.support.utility import are_same_shapes, build_compound_borders
 from glow.interface.geom_interface import *
 from support_funcs import build_lattice_ref_vectors, set_up_hex_cells, \
     set_up_rect_cells

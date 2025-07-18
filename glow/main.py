@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from glow.generator.support import GeometryType, LatticeGeometryType, PropertyType
+from glow.support.types import GeometryType, PropertyType
 from glow.geometry_layouts.lattices import Lattice
 
 

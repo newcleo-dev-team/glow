@@ -6,8 +6,8 @@ from typing import Any, List, Tuple
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell
 from glow.geometry_layouts.geometries import Surface
 from glow.geometry_layouts.lattices import Lattice
-from glow.interface.geom_interface import ShapeType, extract_sub_shapes, make_circle, make_edge, \
-    make_vector_from_points, make_vertex_on_curve
+from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
+    make_circle, make_edge, make_vector_from_points, make_vertex_on_curve
 
 
 def build_hex_geom_elements(

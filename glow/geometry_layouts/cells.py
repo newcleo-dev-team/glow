@@ -11,8 +11,9 @@ from typing import Any, Dict, List, Self, Tuple, Union
 
 from glow.geometry_layouts.geometries import GenericSurface, Surface, Circle, \
     Rectangle, Hexagon
-from glow.geometry_layouts.utility import are_same_shapes, \
-    build_compound_borders, retrieve_selected_object, update_relative_pos
+from glow.support.utility import are_same_shapes, build_compound_borders, \
+    compute_point_by_reference, generate_unique_random_colors, \
+    retrieve_selected_object
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_bounding_box, get_kind_of_shape, get_min_distance, get_object_from_id, \
@@ -22,8 +23,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     make_vector_from_points, make_vertex, make_vertex_inside_face, \
     make_vertex_on_curve, make_vertex_on_lines_intersection, \
     remove_from_study, set_color_face, update_salome_study
-from glow.generator.support import CellType, GeometryType, PropertyType, \
-    generate_unique_random_colors
+from glow.support.types import CellType, GeometryType, PropertyType
 
 
 @dataclass
@@ -665,7 +665,7 @@ class Cell(ABC):
         for tech_face, prop in cell.tech_geom_props.items():
             # Calculate the region new position so that it keeps its relative
             # position wrt the translated cell center
-            region_to_center = update_relative_pos(
+            region_to_center = compute_point_by_reference(
                 make_cdg(tech_face), self.figure.o, new_pos)
             # Build a translation vector between the region previous CDG and
             # its new position

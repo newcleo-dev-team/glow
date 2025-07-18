@@ -39,7 +39,7 @@ from glow.interface.geom_interface import *
 from glow.geometry_layouts.geometries import Hexagon
 from glow.geometry_layouts.cells import HexCell
 from glow.geometry_layouts.lattices import Lattice
-from glow.generator.support import *
+from glow.support.types import *
 
 # Get the initial time
 start_time = time.time()

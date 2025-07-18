@@ -9,7 +9,7 @@ output TDT file.
 """
 import time
 from glow.geometry_layouts.cells import RectCell
-from glow.generator.support import GeometryType, PropertyType, SymmetryType
+from glow.support.types import GeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.main import analyse_and_generate_tdt
 from glow.interface.geom_interface import *

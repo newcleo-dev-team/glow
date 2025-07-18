@@ -5,7 +5,7 @@ is applied to the cell and the result graphically shown in the SALOME 3D
 viewer.
 """
 from glow.geometry_layouts.cells import RectCell
-from glow.generator.support import GeometryType, PropertyType
+from glow.support.types import GeometryType, PropertyType
 from glow.geometry_layouts.geometries import Circle
 from glow.interface.geom_interface import *
 

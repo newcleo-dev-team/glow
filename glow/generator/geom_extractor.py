@@ -3,19 +3,18 @@ Module containing classes that deals with the extraction of the geometric
 information from the lattice built in SALOME. The functionalities in this
 module serve for preparing all the data for the output TDT file generation.
 """
-
-from copy import deepcopy
 import math
 
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple, Union, Self
+from typing import Any, Dict, List, Tuple, Self
 
-from glow.generator.support import BoundaryType, CellType, GeometryType, \
+from glow.support.types import BoundaryType, CellType, GeometryType, \
     LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
-from glow.geometry_layouts.utility import build_compound_borders, \
+from glow.support.utility import build_compound_borders, \
     get_id_from_name, translate_wrt_reference
-from glow.interface.geom_interface import ShapeType, \
+from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \

@@ -3,8 +3,6 @@ This module contains the classes that support the generation of the output
 TDT file containing the geometry representation for further analysis in
 DRAGON.
 """
-
-
 from dataclasses import dataclass, field
 from enum import Enum
 from io import TextIOWrapper
@@ -12,8 +10,7 @@ import math
 import os
 from pathlib import Path
 from typing import List, Tuple
-from glow.generator.support import BoundaryType, LatticeGeometryType, \
-    SymmetryType
+from glow.support.types import BoundaryType, LatticeGeometryType, SymmetryType
 from glow.generator.geom_extractor import Boundary, Edge, Face
 
 

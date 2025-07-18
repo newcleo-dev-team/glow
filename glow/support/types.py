@@ -3,10 +3,8 @@ Module containing enumeration classes for expressing different types (e.g.
 BCs, geometry, etc.) used throughout the code.
 Utility functions are herein declared as well.
 """
-import random
-
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 
 class BoundaryType(Enum):
@@ -207,28 +205,3 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
     }
 }
 
-
-RGB_COLORS = [(r, g, b) for r in range(0, 256, 10)
-                        for g in range(0, 256, 10)
-                        for b in range(0, 256, 10)]
-
-def generate_unique_random_colors(
-        no_colors: int) -> List[Tuple[int, int, int]]:
-    """
-    Function for generating a specified number of random unique RGB colors.
-
-    Parameters
-    ----------
-    no_colors : int
-                The number of RGB colors to generate
-
-    Returns
-    -------
-    A list of tuples, each providing the 3 integer values identifying an
-    RGB color.
-    """
-    # Declare a seed for the random number generation, so to produce the
-    # same set of colors
-    random.seed(50)
-    # Return 'no_colors'-number of unique colors
-    return random.sample(RGB_COLORS, no_colors)

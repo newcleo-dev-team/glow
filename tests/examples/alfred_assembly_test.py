@@ -20,7 +20,7 @@ import os
 import sys
 from glow.geometry_layouts.cells import HexCell
 from glow.geometry_layouts.lattices import Lattice
-from glow.generator.support import PropertyType
+from glow.support.types import PropertyType
 from glow.main import analyse_and_generate_tdt
 
 # Import the module for measuring the execution time

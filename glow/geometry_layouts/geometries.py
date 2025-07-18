@@ -7,8 +7,8 @@ import math
 from abc import ABC, abstractmethod
 from typing import Any, List, Tuple, Union
 
-from glow.geometry_layouts.utility import check_shape_expected_types, \
-    update_relative_pos
+from glow.support.utility import check_shape_expected_types, \
+    compute_point_by_reference
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, extract_sub_shapes, get_basic_properties, \
     get_bounding_box, get_min_distance, get_point_coordinates, \
@@ -155,7 +155,7 @@ class Surface(ABC):
         # moved center
         for i, _ in enumerate(self.vertices):
             self.vertices[i] = make_vertex(
-                update_relative_pos(self.vertices[i], pre_center, new_pos))
+                compute_point_by_reference(self.vertices[i], pre_center, new_pos))
         # Re-build the borders
         self.borders = self._build_borders()
 

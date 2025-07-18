@@ -8,7 +8,7 @@ from typing import Callable
 import unittest
 import math
 
-from glow.geometry_layouts.utility import are_same_shapes
+from glow.support.utility import are_same_shapes
 from glow.interface.geom_interface import *
 from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
     Rectangle, Surface, Circle, build_hexagon

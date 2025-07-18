@@ -11,21 +11,20 @@ from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region, \
     check_cell_circle_are_cut, get_region_info
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, \
     build_hexagon
-from glow.geometry_layouts.utility import are_same_shapes, \
-    build_compound_borders, retrieve_selected_object, \
-    translate_wrt_reference, update_relative_pos
+from glow.support.utility import are_same_shapes, build_compound_borders, \
+    compute_point_by_reference, generate_unique_random_colors, \
+    retrieve_selected_object, translate_wrt_reference
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_basic_properties, \
     get_bounding_box, get_min_distance, get_object_from_id, \
-    get_point_coordinates, get_selected_object, is_point_inside_shape, \
-    make_cdg, make_common, make_compound, make_cut, make_edge, make_face, \
-    make_partition, make_rotation, make_translation, make_vector_from_points, \
+    get_point_coordinates, is_point_inside_shape, make_cdg, make_common, \
+    make_compound, make_cut, make_edge, make_face, make_partition, \
+    make_rotation, make_translation, make_vector_from_points, \
     make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
     remove_from_study, set_color_face, update_salome_study
-from glow.generator.support import CELL_VS_SYMM_VS_TYP_GEO, GeometryType, \
-    LatticeGeometryType, PropertyType, SymmetryType, CellType, \
-    generate_unique_random_colors
+from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, GeometryType, \
+    LatticeGeometryType, PropertyType, SymmetryType, CellType
 
 
 class Lattice():
@@ -1366,7 +1365,7 @@ class Lattice():
         for cell in cells:
             # Update the cell position relative to the shifted lattice center
             # and apply translation
-            cell_to_center = update_relative_pos(
+            cell_to_center = compute_point_by_reference(
                 cell.figure.o, original_ref_point, ref_coords)
             translated_cells.append(cell.translate(cell_to_center))
         return translated_cells
