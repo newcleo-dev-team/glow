@@ -13,8 +13,9 @@ from glow.interface.geom_interface import ShapeType, \
     make_cut, make_face, make_fuse, make_translation, make_vector_from_points,\
     make_vertex
 
-# List of the RGB color codes taken by varying the corresponding value with
-# steps of 10
+
+# List of the RGB color codes taken by varying each RGB value with steps of 10
+# in the range (0-256)
 RGB_COLORS = [(r, g, b) for r in range(0, 256, 10)
                         for g in range(0, 256, 10)
                         for b in range(0, 256, 10)]
@@ -168,13 +169,25 @@ def generate_unique_random_colors(
     Parameters
     ----------
     no_colors : int
-                The number of RGB colors to generate
+        The number of RGB colors to generate.
 
     Returns
     -------
     A list of tuples, each providing the 3 integer values identifying an
     RGB color.
+
+    Raises
+    ------
+    RuntimeError
+        If requesting more colors than the ones available.
     """
+    # Raise an exception if requesting more than the available number of RGB
+    # codes
+    no_available_colors = len(RGB_COLORS)
+    if no_colors > no_available_colors:
+        raise RuntimeError(
+            f"The requested number ({no_colors}) of RGB color codes exceeds "
+            f"the number of available ones ({no_available_colors}).")
     # Declare a seed for the random number generation, so to produce the
     # same set of colors
     random.seed(50)
