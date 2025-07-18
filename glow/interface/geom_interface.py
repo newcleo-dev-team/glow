@@ -124,7 +124,8 @@ def clear_view() -> None:
     Function that clears out any geometrical shape currently displayed in
     the SALOME 3D viewer.
     """
-    salome.sg.EraseAll()
+    if is_gui_available():
+        salome.sg.EraseAll()
 
 
 def display_shape(entry_id: str) -> None:
@@ -137,7 +138,8 @@ def display_shape(entry_id: str) -> None:
     id  : str
         The entry ID of the shape to display in the SALOME 3D viewer.
     """
-    salome.sg.Display(entry_id)
+    if is_gui_available():
+        salome.sg.Display(entry_id)
 
 
 def extract_sorted_sub_shapes(shape: Any,
@@ -540,6 +542,18 @@ def is_point_inside_shape(point: Any, shape: Any) -> bool:
     """
     return geompy.AreCoordsInside(shape,
                                   list(get_point_coordinates(point)))[0]
+
+def is_gui_available() -> None:
+    """
+    Function that returns a boolean flag indicating whether the SALOME GUI
+    is available when running a script.
+
+    Returns
+    -------
+    bool
+        `True` if the SALOME GUI is available, `False` otherwise.
+    """
+    return salome.sg.hasDesktop()
 
 
 def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
@@ -968,7 +982,7 @@ def update_salome_study() -> None:
     the study.
     """
     # Show everything on the SALOME application
-    if salome.sg.hasDesktop():
+    if is_gui_available():
         # Update the object browser with the objects added to the study
         salome.sg.updateObjBrowser()
         # Set the view to top
