@@ -13,8 +13,9 @@ from glow.support.types import BoundaryType, CellType, GeometryType, \
     LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.support.utility import build_compound_borders, \
-    get_id_from_name, translate_wrt_reference
-from glow.interface.geom_interface import ShapeType, add_to_study, \
+    check_shape_expected_types, get_id_from_name, get_id_from_shape, \
+    translate_wrt_reference
+from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
@@ -65,11 +66,19 @@ class Face():
         the attribute that allows to order instances of this class on the
         basis of the 'no' attribute is set as well.
         """
-        # Extract the face number from the corresponding GEOM name attribute
-        self.no = int(get_shape_name(self.face).split('_')[1])
-        # Build a point within the face
+        # Build a point inside the face
         self.inner_point = get_point_coordinates(
             make_vertex_inside_face(self.face))
+        try:
+            # Check the type of the received face is correct
+            check_shape_expected_types(self.face, [ShapeType.FACE])
+            # Extract the face number from the corresponding GEOM name
+            # attribute
+            self.no = get_id_from_shape(self.face)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Error with 'Face' whose inner point is: {self.inner_point}"
+            ) from e
         # Define the attribute for sorting instances of this class
         self.sort_index = self.no
         # Extract the edges and associate an ID to each
@@ -90,57 +99,59 @@ class Edge():
     """
     Class that provides a data representation for an edge of a face in
     the lattice.
-
-    This object can be used to determine the position of one or two faces
-    relative to an edge.
-    The position is determined either by performing a scalar product of
-    two vectors, or by observing the position of a point relative to a
-    circle.
+    It provides an global index allowing to uniquely identify the edge,
+    and two `Face` attributes, allowing to identify the face on the left
+    and right of the edge.
+    The identification of the left/right faces is performed by building
+    a point on the edge's normal so that it is sligtly on the edge left.
 
     Attributes
     ----------
-    no      : int
-              The edge number extracted from the GEOM edge object name
-              attribute
-    edge    : Any
-              A GEOM object of type EDGE representing an edge
-    data    : Any
-              Characteristic data of the given GEOM edge object depending
-              on its type
-    kind    : str
-              Type of edge; admitted types are: CIRCLE, ARC_CIRCLE, SEGMENT
-    right   : Any
-              The GEOM face object to the right of the current edge
-    left    : Any
-              The GEOM face object to the left of the current edge
+    no : int
+        The edge number extracted from the GEOM edge object name.
+    edge : Any
+        A GEOM object of type EDGE representing an edge
+    data : Any
+        Characteristic data of the given GEOM edge object.
+    kind : str
+        Indicating the type of edge with admitted values being `CIRCLE`,
+        `ARC_CIRCLE`, `SEGMENT`.
+    right : Face | None
+        A `Face` object providing the information for the face to the right
+        of the edge, or `None` if the edge does not have any face on its
+        right.
+    left : Face | None
+        A `Face` object providing the information for the face to the left
+        of the edge, or `None` if the edge does not have any face on its
+        left.
     """
     def __init__(self, edge: Any, *faces: List[Face]):
-        # Get the number of the edge directly from the name attribute of the
-        # corresponding GEOM edge object
-        name = get_shape_name(edge)
-        try:
-            self.no = get_id_from_name(name)
-        except:
-            raise RuntimeError(f"Error for edge: {name}")
-
-        self.edge  = edge
         # Store all the information of the given GEOM edge object
-        self.data  = get_kind_of_shape(edge)
-        # Convert the first piece of information, retrieved from the GEOM edge object,
-        # into string
-        self.kind  = str(self.data[0])
-
-        # Initialize to 'None' both the right and the left GEOM face objects
-        self.right = None
-        self.left  = None
-        # Loop through all the given GEOM face objects associated to the current edge.
-        # This allows to define the faces on the right and those on the left wrt the
-        # edge.
+        self.data: List[Any] = get_kind_of_shape(edge)
+        try:
+            # Check the type of the received edge is correct
+            check_shape_expected_types(edge, [ShapeType.EDGE])
+            # Get the number of the edge directly from the name attribute of
+            # the corresponding GEOM edge object
+            self.no : int = get_id_from_shape(edge)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Error with 'Edge' whose data is: {self.data}") from e
+        # Store the edge object
+        self.edge: Any  = edge
+        # Get the type of edge as a string
+        self.kind: str = str(self.data[0])
+        # Initialize to 'None' both the right and the left 'Face' objects
+        self.right: Face | None = None
+        self.left: Face | None = None
+        # Loop through all the given GEOM face objects associated to the
+        # current edge. This allows to define the faces on the right and
+        # those on the left wrt the edge.
         for f in faces:
             # Add a face connected to the edge
             self.__add_face(f)
-
-        # Check everything is allright
+        # Check that both right and left faces have been assigned, if the
+        # edge is shared by two faces
         if len(faces) > 1 and (not self.right or not self.left):
             raise RuntimeError(
                 f"The edge no. {self.no} have 2 faces (no. "
@@ -170,7 +181,7 @@ class Edge():
             return x1 + r, y1, z1
         # Handle the other edge types by returning the X-Y-Z coordinates of
         # the first point of the edge
-        return self.data[-6:-3]
+        return tuple(self.data[-6:-3])
 
     def __add_face(self, face: Face) -> None:
         """
@@ -357,6 +368,12 @@ class Boundary:
                  type_geo: LatticeGeometryType,
                  lattice_o: Any,
                  dimensions: Tuple[float, float]) -> None:
+        # Check the received border is an edge
+        try:
+            check_shape_expected_types(border, [ShapeType.EDGE])
+        except RuntimeError as e:
+            raise RuntimeError("Error while initializing the 'Border' "
+                               "instance.") from e
         # Initialize instance attributes
         self.type       : BoundaryType
         self.border     : Any = border
@@ -367,14 +384,14 @@ class Boundary:
         # Set the border characteristics in terms of type and border axis
         self.__build_border_characteristics(*dimensions, lattice_o, type_geo)
 
-    def get_bc_type_number(self) -> str:
+    def get_bc_type_number(self) -> int:
         """
         Method that returns the index associated to the BC type in the
         corresponding instance attribute dictionary.
 
         Returns
         -------
-        A string describing the type for the BC this class instance
+        An integer describing the type for the BC this class instance
         refers to.
         """
         return self.type.value
@@ -434,7 +451,9 @@ class Boundary:
                 # Identifying a border characterized by the 'AXIAL_SYMMETRY'
                 # type of BC, which corresponds to the 'REFL' case in DRAGON5
                 self.type = BoundaryType.AXIAL_SYMMETRY
-            case LatticeGeometryType.RA60 | LatticeGeometryType.R120:
+            case (LatticeGeometryType.RA60 |
+                  LatticeGeometryType.R120 |
+                  LatticeGeometryType.ROTATION):
                 # Identifying a border characterized by any of the 'ROTATION'
                 # or 'TRANSLATION' types of BC, which correspond to the 'ROTA'
                 # or 'TRAN' cases respectively in DRAGON5. The position of the
@@ -446,26 +465,26 @@ class Boundary:
             case LatticeGeometryType.RECTANGLE_TRAN:
                 # The BC information for the case of a cartesian geometry
                 # with TRAN BCs follows the axes definition below:
-                #             M=3
-                #        ************
-                #        *          *
-                #    M=2 *          * M=4
-                #        ************
-                #             M=1
+                #              M=3 (0,-ly)
+                #             ************
+                #  M=2 (lx,0) *          * M=4 (-lx,0)
+                #             ************
+                #              M=1 (0,ly)
                 if math.isclose(math.sin(math.radians(self.angle)), 0.0):
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=3 (dx < 0)
                     self.tx = 0.0
-                    self.ty = (dx/abs(dx)) * lx
+                    self.ty = (dx/abs(dx)) * ly
                 elif math.isclose(math.sin(math.radians(self.angle)), 1.0):
                     # The sign of 'dy' discriminates between the M=4 (dy > 0)
                     # and M=2 (dy < 0)
-                    self.tx = -(dy/abs(dy)) * ly
+                    self.tx = -(dy/abs(dy)) * lx
                     self.ty = 0.0
                 else:
                     raise RuntimeError(
                         f"The border has an angle of {self.angle}° which is "
-                        "not admitted")
+                        "not one of the admitted values (0°, 90°) for a "
+                        "cartesian geometry with TRAN as BC.")
                 # Assign the BC type
                 self.type = BoundaryType.TRANSLATION
             case LatticeGeometryType.HEXAGON_TRAN:
@@ -480,8 +499,9 @@ class Boundary:
                 #                    *****
                 #                     M=1 (0, 2ly)
                 if math.isclose(math.sin(math.radians(self.angle)), 1.0):
-                    raise RuntimeError("The case of an hexagonal lattice "
-                        "made by cells rotated by 0° is not handled.")
+                    raise RuntimeError(
+                        "The border refers to a Y-oriented hexagon which "
+                        "is not admitted for tracking.")
                 if abs(dy) < 1e-7:
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=4 (dx < 0)
@@ -506,7 +526,7 @@ class Boundary:
 
     def find_edges_on_border(self,
                              boundaries: Any,
-                             id_vs_edge: Dict[Any, str]) -> None:
+                             id_vs_edge: Dict[str, Any]) -> None:
         """
         Method that finds and associates all the GEOM edges related to the
         lattice border this instance refers to.
@@ -540,9 +560,9 @@ class Boundary:
             else:
                 # Raise an exception if the found sub-shape type is not
                 # 'SEGMENT'
-                raise AssertionError("Only edges of type 'SEGMENT' can be "
-                                     "contained in a lattice border! "
-                                     f"(found {shape_type})")
+                raise RuntimeError(
+                    "Only edges of type 'SEGMENT' can be contained in a "
+                    f"lattice border! (found {shape_type})")
 
 
 class LatticeDataExtractor():

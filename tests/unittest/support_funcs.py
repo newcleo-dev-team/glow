@@ -1,13 +1,452 @@
 """
 Module declaring functions to support the execution of the unit tests.
 """
+from dataclasses import dataclass, field
+from math import degrees, sqrt, atan2
 from typing import Any, List, Tuple
 
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell
 from glow.geometry_layouts.geometries import Surface
 from glow.geometry_layouts.lattices import Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    make_circle, make_edge, make_vector_from_points, make_vertex_on_curve
+    make_circle, make_edge, make_vector_from_points, make_vertex,\
+    make_vertex_on_curve
+from glow.support.types import BoundaryType, CellType, LatticeGeometryType, \
+    SymmetryType
+from glow.support.utility import build_contiguous_edges
+
+
+@dataclass
+class BoundaryData():
+    """
+    Dataclass storing geometric information about the boundaries of a lattice
+    in terms of vertices, contiguous edges, axes, angles and characteristic
+    dimensions of the lattice.
+
+    Attributes
+    ----------
+    vertices : List[Any]
+        List of vertex objects defining the lattice's borders.
+    edges : List[Any]
+        List of edge objects automatically constructed from the vertices.
+    axis : List[Tuple[float, float]]
+        Providing the XY directions representing the axes for each border.
+    angles : List[float]
+        List of angles (in degrees) associated with each axis.
+    dimensions : tuple of float
+        Characteristic dimensions of the lattice.
+    bd_type : List[BoundaryType]
+        Type associated to each lattice's border provided as element of the
+        `BoundaryType` enumeration.
+    """
+    vertices: List[Any]
+    edges: List[Any] = field(init=False)
+    axis: List[Tuple[float, float]]
+    angles: List[float]
+    dimensions: Tuple[float, float]
+    bd_type: List[BoundaryType]
+
+    def __post_init__(self) -> None:
+        """
+        Method run after the dataclass initialization for building the
+        contiguous edges related to the stored vertices.
+        """
+        self.edges = build_contiguous_edges(self.vertices)
+
+
+def build_bd_full_hex(lx: float, ly: float) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing a regular
+    hexagon centered at the origin. The information related to the borders,
+    that is contained in the `BoundaryData` object, derives from the
+    characteristic dimensions of the hexagon.
+    The geometric data of the hexagon is provided in counter-clockwise order
+    starting from its bottom left corner.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the hexagon (i.e. its edge length).
+    ly : float
+        Characteristic Y-dimension of the hexagon (i.e. its apothem length).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the six vertices of the full
+        hexagon, the XY directions of the borders' axes and the corresponding
+        angles (as needed by DRAGON), and the type of boundary, assigned as
+        `TRANSLATION` for all the borders.
+    """
+    return BoundaryData(
+        vertices=[
+            make_vertex((-lx/2, -ly, 0.0)),
+            make_vertex((lx/2, -ly, 0.0)),
+            make_vertex((lx, 0.0, 0.0)),
+            make_vertex((lx/2, ly, 0.0)),
+            make_vertex((-lx/2, ly, 0.0)),
+            make_vertex((-lx, 0.0, 0.0))
+        ],
+        axis=[
+            (0.0, 2*ly),
+            (-3/2*lx, ly),
+            (-3/2*lx, -ly),
+            (0.0, -2*ly),
+            (3/2*lx, -ly),
+            (3/2*lx, ly),
+        ],
+        angles=[0.0, 60.0, 120.0, 0.0, 60.0, 120.0],
+        dimensions=(lx, ly),
+        bd_type=[BoundaryType.TRANSLATION]*6
+    )
+
+
+def build_bd_sixth_hex(
+        lx: float, ly: float, type_geo: LatticeGeometryType) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing a sixth
+    symmetry of a regular hexagon. The information related to the borders of
+    the triangular portion of the hexagon, that is contained in the
+    `BoundaryData` object, derives from the characteristic dimensions of the
+    full hexagon.
+    The geometric data of the triangular shape is provided in
+    counter-clockwise order starting from its bottom left corner that
+    coincides with the XYZ origin.
+    The type of boundary condition assigned to each edge depends on the
+    `type_geo` parameter.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the hexagon (i.e. its edge length).
+    ly : float
+        Characteristic Y-dimension of the hexagon (i.e. its apothem length).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the three vertices of a sixth of
+        a full hexagon, the XY directions of the borders' axes and the
+        corresponding angles (as needed by DRAGON), and the type of boundary,
+        assigned to each border depending on the `type_geo` parameter.
+    """
+    if type_geo in [LatticeGeometryType.SA60,
+                    LatticeGeometryType.SYMMETRIES_TWO]:
+        bd_type = [BoundaryType.AXIAL_SYMMETRY]*3
+    elif type_geo in [LatticeGeometryType.RA60, LatticeGeometryType.ROTATION]:
+        bd_type = [
+            BoundaryType.ROTATION,
+            BoundaryType.TRANSLATION,
+            BoundaryType.ROTATION
+        ]
+    return BoundaryData(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx, 0.0, 0.0)),
+            make_vertex((lx/2, ly, 0.0))
+        ],
+        axis=[(0.0, 0.0), (lx, 0.0), (0.0, 0.0)],
+        angles=[0.0, 120.0, 60.0],
+        dimensions=(lx, ly),
+        bd_type=bd_type
+    )
+
+
+def build_bd_third_hex(lx: float, ly: float) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing a third
+    symmetry of a regular hexagon. The information related to the borders of
+    the quadrilateral portion of the hexagon, that is contained in the
+    `BoundaryData` object, derives from the characteristic dimensions of the
+    full hexagon.
+    The geometric data of the quadrilateral shape is provided in
+    counter-clockwise order starting from its bottom left corner that
+    coincides with the XYZ origin.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the hexagon (i.e. its edge length).
+    ly : float
+        Characteristic Y-dimension of the hexagon (i.e. its apothem length).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the four vertices of a third of
+        a full hexagon, the XY directions of the borders' axes and the
+        corresponding angles (as needed by DRAGON), and the type of boundary,
+        being either `TRANSLATION` or `ROTATION`.
+    """
+    return BoundaryData(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx, 0.0, 0.0)),
+            make_vertex((3/2*lx, ly, 0.0)),
+            make_vertex((lx/2, ly, 0.0))
+        ],
+        axis=[(0.0, 0.0), (lx, 0.0), (lx/2, ly), (0.0, 0.0)],
+        angles=[0.0, 60.0, 0.0, 60.0],
+        dimensions=(lx, ly),
+        bd_type=[
+            BoundaryType.TRANSLATION,
+            BoundaryType.TRANSLATION,
+            BoundaryType.ROTATION,
+            BoundaryType.ROTATION
+        ]
+    )
+
+
+def build_bd_twelfth_hex(lx: float, ly: float) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing a twelfth
+    symmetry of a regular hexagon. The information related to the borders of
+    the triangular portion of the hexagon, that is contained in the
+    `BoundaryData` object, derives from the characteristic dimensions of the
+    full hexagon.
+    The geometric data of the triangular shape is provided in
+    counter-clockwise order starting from its bottom left corner that
+    coincides with the XYZ origin.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the hexagon (i.e. its edge length).
+    ly : float
+        Characteristic Y-dimension of the hexagon (i.e. its apothem length).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the three vertices of a twelfth of
+        a full hexagon, the XY directions of the borders' axes and the
+        corresponding angles (as needed by DRAGON), and the type of boundary,
+        all being `AXIAL_SYMMETRY`.
+    """
+    return BoundaryData(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx, 0.0, 0.0)),
+            make_vertex((sqrt(3)/2*ly, ly/2, 0.0))
+        ],
+        axis=[(0.0, 0.0), (lx, 0.0), (0.0, 0.0)],
+        angles=[0.0, 120.0, 30.0],
+        dimensions=(lx, ly),
+        bd_type=[BoundaryType.AXIAL_SYMMETRY]*6
+    )
+
+
+def build_bd_full_rect(lx: float, ly: float) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing a full
+    rectangle placed so that its bottom left corner coincides with the
+    XYZ space origin.
+    The information related to the borders, that is contained in the
+    `BoundaryData` object, derives from the characteristic dimensions
+    of the rectangle.
+    The geometric data of the rectangle is provided in counter-clockwise
+    order starting from its bottom left corner.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the rectangle (i.e. its width).
+    ly : float
+        Characteristic Y-dimension of the rectangle (i.e. its height).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the four vertices of the rectangle,
+        the XY directions of the borders' axes and the corresponding angles
+        (as needed by DRAGON), and the type of boundary, assigned as
+        `TRANSLATION` for all the borders.
+    """
+    return BoundaryData(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx, 0.0, 0.0)),
+            make_vertex((lx, ly, 0.0)),
+            make_vertex((0.0, ly, 0.0))
+        ],
+        axis=[(0.0, ly), (-lx, 0.0), (0.0, -ly), (lx, 0.0)],
+        angles=[0.0, 90.0, 0.0, 90.0],
+        dimensions=(lx, ly),
+        bd_type=[BoundaryType.TRANSLATION]*4
+    )
+
+
+def build_bd_half_rect(lx: float, ly: float) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing a half
+    symmetry of a rectangle. The vertices are defined so that the shape's
+    bottom left corner coincides with the XYZ space origin.
+    The information related to the borders, that is contained in the
+    `BoundaryData` object, derives from the characteristic dimensions of
+    the rectangle.
+    The geometric data of the rectangular shape is provided in
+    counter-clockwise order starting from its bottom left corner.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the rectangle (i.e. its width).
+    ly : float
+        Characteristic Y-dimension of the rectangle (i.e. its height).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the four vertices of a half of
+        the rectangle, the XY directions of the borders' axes and the
+        corresponding angles (as needed by DRAGON), and the type of boundary,
+        assigned as `AXIAL_SYMMETRY` for all the borders.
+    """
+    return BoundaryData(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx/2, 0.0, 0.0)),
+            make_vertex((lx/2, ly, 0.0)),
+            make_vertex((0.0, ly, 0.0))
+        ],
+        axis=[(0.0, 0.0), (lx/2, 0.0), (0.0, ly), (0.0, 0.0)],
+        angles=[0.0, 90.0, 0.0, 90.0],
+        dimensions=(lx, ly),
+        bd_type=[BoundaryType.AXIAL_SYMMETRY]*4
+    )
+
+
+def build_bd_quarter_rect(lx: float, ly: float) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing a quarter
+    symmetry of a rectangle. The vertices are defined so that the shape's
+    bottom left corner coincides with the XYZ space origin.
+    The information related to the borders, that is contained in the
+    `BoundaryData` object, derives from the characteristic dimensions of
+    the rectangle.
+    The geometric data of the rectangular shape is provided in
+    counter-clockwise order starting from its bottom left corner.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the rectangle (i.e. its width).
+    ly : float
+        Characteristic Y-dimension of the rectangle (i.e. its height).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the four vertices of a quarter of
+        the rectangle, the XY directions of the borders' axes and the
+        corresponding angles (as needed by DRAGON), and the type of boundary,
+        assigned as `AXIAL_SYMMETRY` for all the borders.
+    """
+    return BoundaryData(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx/2, 0.0, 0.0)),
+            make_vertex((lx/2, ly/2, 0.0)),
+            make_vertex((0.0, ly/2, 0.0))
+        ],
+        axis=[(0.0, 0.0), (lx/2, 0.0), (0.0, ly/2), (0.0, 0.0)],
+        angles=[0.0, 90.0, 0.0, 90.0],
+        dimensions=(lx, ly),
+        bd_type=[BoundaryType.AXIAL_SYMMETRY]*4
+    )
+
+
+def build_bd_eighth_rect(lx: float, ly: float) -> BoundaryData:
+    """
+    Function that creates a `BoundaryData` object representing an eighth
+    symmetry of a rectangle. The vertices are defined so that the shape's
+    bottom left corner coincides with the XYZ space origin.
+    The information related to the borders, that is contained in the
+    `BoundaryData` object, derives from the characteristic dimensions of
+    the rectangle.
+    The geometric data of the triangular shape is provided in
+    counter-clockwise order starting from its bottom left corner.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the rectangle (i.e. its width).
+    ly : float
+        Characteristic Y-dimension of the rectangle (i.e. its height).
+
+    Returns
+    -------
+    BoundaryData
+        A `BoundaryData` object built from the three vertices of an eighth of
+        the rectangle, the XY directions of the borders' axes and the
+        corresponding angles (as needed by DRAGON), and the type of boundary,
+        assigned as `AXIAL_SYMMETRY` for all the borders.
+    """
+    return BoundaryData(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx/2, 0.0, 0.0)),
+            make_vertex((lx/2, ly/2, 0.0))
+        ],
+        axis=[(0.0, 0.0), (lx/2, 0.0), (0.0, 0.0)],
+        angles=[0.0, 90.0, degrees(atan2(ly, lx))],
+        dimensions=(lx, ly),
+        bd_type=[BoundaryType.AXIAL_SYMMETRY]*3
+    )
+
+
+def build_boundary_data(
+        dimensions: Tuple[float, float],
+        cell_type: CellType,
+        symm_type: SymmetryType,
+        type_geo: LatticeGeometryType) -> BoundaryData:
+    """
+    Function that constructs a `BoundaryData` object providing the boundary
+    characteristics to use as a reference for test purposes.
+    The instance is built depending on the type of cells, the applied symmetry
+    and the corresponding lattice type of geometry.
+
+
+    Parameters
+    ----------
+    dimensions : Tuple[float, float]
+        The lattice X-Y characteristic dimensions.
+    cell_type : CellType
+        The type of cells in the lattice.
+    symm_type : SymmetryType
+        The type of symmetry applied to the lattice; it drives the selection
+        of the builder function to generate the `BoundaryData` instance.
+    type_geo : LatticeGeometryType
+        The lattice geometry type, used to further specialize the
+        `BoundaryData` instance in the case of a sixth symmetry.
+
+    Returns
+    -------
+    BoundaryData
+        A boundary representation including vertex positions, edges, axis
+        directions, corresponding angles, and associated BC types.
+    """
+    if cell_type == CellType.HEX:
+        match symm_type:
+            case SymmetryType.FULL:
+                return build_bd_full_hex(*dimensions)
+            case SymmetryType.SIXTH:
+                return build_bd_sixth_hex(*dimensions, type_geo)
+            case SymmetryType.THIRD:
+                return build_bd_third_hex(*dimensions)
+            case SymmetryType.TWELFTH:
+                return build_bd_twelfth_hex(*dimensions)
+    else:
+        match symm_type:
+            case SymmetryType.FULL:
+                return build_bd_full_rect(*dimensions)
+            case SymmetryType.HALF:
+                return build_bd_half_rect(*dimensions)
+            case SymmetryType.QUARTER:
+                return build_bd_quarter_rect(*dimensions)
+            case SymmetryType.EIGHTH:
+                return build_bd_eighth_rect(*dimensions)
+
 
 
 def build_hex_geom_elements(
