@@ -1,6 +1,6 @@
 """
 Module containing unittest classes to assess that the functions of the
-`glow.geometry_layouts.utility` module have a valid implementation.
+`glow.support.utility` module have a valid implementation.
 """
 import math
 import unittest
@@ -9,7 +9,7 @@ from glow.geometry_layouts.geometries import Rectangle
 from glow.support.utility import *
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     get_min_distance, make_cdg, make_circle, make_compound, make_face, \
-    make_partition, make_vertex
+    make_partition, make_vertex, set_shape_name
 
 
 class TestUtilityFunctions(unittest.TestCase):
@@ -88,6 +88,39 @@ class TestUtilityFunctions(unittest.TestCase):
                     found = True
                     break
             self.assertTrue(found)
+
+    def test_build_contiguous_edges(self) -> None:
+        """
+        Method that tests the implementation of the function
+        `build_contiguous_edges` declared in the `utility.py` module.
+        """
+        # Build a list of vertices
+        vertices = [
+            make_vertex(coords) for coords in [
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (1.0, 0.5, 0.0)
+            ]
+        ]
+        # Build the contiguous edges
+        edges = build_contiguous_edges(vertices)
+        # Check the first vertex of the first edge coincides with the second
+        # vertex of the last edge
+        self.assertTrue(
+            are_same_shapes(
+                extract_sub_shapes(edges[0], ShapeType.VERTEX)[0],
+                extract_sub_shapes(edges[-1], ShapeType.VERTEX)[1],
+                ShapeType.VERTEX
+            )
+        )
+        # Verify an exception is raised if providing less than 2 vertices or
+        # if two consecutive vertices coincide
+        with self.assertRaises(RuntimeError):
+            _ = build_contiguous_edges(vertices[:2])
+        with self.assertRaises(RuntimeError):
+            # Add the same vertex two times consecutively
+            vertices.insert(1, vertices[0])
+            _ = build_contiguous_edges(vertices[:2])
 
     def test_check_shape_expected_types(self) -> None:
         """
@@ -178,6 +211,26 @@ class TestUtilityFunctions(unittest.TestCase):
         # Verify the ID index can be retrieved
         self.assertEqual(get_id_from_name("Cell_01"), 1)
         self.assertEqual(get_id_from_name("Cell_001"), 1)
+
+    def test_get_id_from_shape(self) -> None:
+        """
+        Method that tests the implementation of the function
+        `get_id_from_shape` declared in the `utility.py` module.
+        """
+        # Verify the exception is raised if providing a shape whose name is
+        # in an incorrect format
+        shape = make_circle(make_vertex(self.center), None, 1.0)
+        set_shape_name(shape, "Cell")
+        with self.assertRaises(RuntimeError):
+            get_id_from_shape(shape)
+        set_shape_name(shape, "Cell1")
+        with self.assertRaises(RuntimeError):
+            get_id_from_shape(shape)
+        # Verify the ID index can be retrieved
+        set_shape_name(shape, "Cell_01")
+        self.assertEqual(get_id_from_shape(shape), 1)
+        set_shape_name(shape, "Cell_001")
+        self.assertEqual(get_id_from_shape(shape), 1)
 
     def test_retrieve_selected_object(self) -> None:
         """

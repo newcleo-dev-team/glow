@@ -8,9 +8,10 @@ from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
-    get_basic_properties, get_closed_free_boundary, get_point_coordinates, \
-    get_selected_object, get_shape_type, is_gui_available, make_cdg, \
-    make_cut, make_face, make_fuse, make_translation, make_vector_from_points,\
+    get_basic_properties, get_closed_free_boundary, get_min_distance, \
+    get_point_coordinates, get_selected_object, get_shape_name, \
+    get_shape_type, is_gui_available, make_cdg, make_cut, make_edge, \
+    make_face, make_fuse, make_translation, make_vector_from_points, \
     make_vertex
 
 
@@ -98,6 +99,38 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
     borders_wire = fuse_edges_in_wire(closed_boundaries[0])
     # Extract the edge objects of the border wire
     return extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE)
+
+
+def build_contiguous_edges(vertices: List[Any]) -> List[Any]:
+    """
+    Function that builds a list of contiguous edge objects each sharing
+    one of the vertices to form a closed path.
+
+    Parameters
+    ----------
+    vertices : List[Any]
+        List of vertex objects representing the start-end points of the
+        contiguous edges.
+
+    Returns
+    -------
+    List[Any]
+        The list of contiguous edge objects.
+    """
+    # Check if the number of vertices is enough to build a closed path
+    if len(vertices) < 3:
+        raise RuntimeError("A closed path requires at least three points.")
+    edges = []
+    # Check the given vertices are contiguous
+    for i in range(len(vertices)):
+        if (math.isclose(get_min_distance(vertices[i],
+                                          vertices[(i+1) % len(vertices)]),
+                         0.0)):
+            raise RuntimeError("It is not possible to build an edge from two "
+                               "consecutive equal vertices.")
+        # Build and return a list of the contiguous edges
+        edges.append(make_edge(vertices[i], vertices[(i+1) % len(vertices)]))
+    return edges
 
 
 def check_shape_expected_types(shape: Any,
@@ -219,6 +252,34 @@ def get_id_from_name(name: str) -> int:
     except:
         raise RuntimeError("No index could be retrieved for the given "
                            f"shape's name '{name}'.")
+
+
+def get_id_from_shape(shape: Any) -> int:
+    """
+    Function that extracts the index of the given shape from its name.
+    The shape's name must have been previously assigned as `<name>_<id>`.
+
+    Parameters
+    ----------
+    shape : Any
+        The generic GEOM shape object to get its ID, if any.
+
+    Raises
+    ------
+    RuntimeError
+        If no name has been assigned to the shape, or no integer index
+        can be extracted from the shape's name.
+
+    Returns
+    -------
+    An integer being the global index associated to the given shape.
+    """
+    # Get the number of the edge directly from the name attribute of the
+    # corresponding GEOM edge object
+    name = get_shape_name(shape)
+    if not name:
+        raise RuntimeError("No name has been assigned to the shape.")
+    return get_id_from_name(name)
 
 
 def retrieve_selected_object(error_msg: str) -> Any:
