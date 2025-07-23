@@ -12,15 +12,14 @@ from typing import Any, Dict, List, Tuple, Self
 from glow.support.types import BoundaryType, CellType, GeometryType, \
     LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
-from glow.support.utility import build_compound_borders, \
-    check_shape_expected_types, get_id_from_name, get_id_from_shape, \
-    translate_wrt_reference
-from glow.interface.geom_interface import ShapeType, \
+from glow.support.utility import build_compound_borders, check_shape_expected_types, \
+    get_id_from_name, get_id_from_shape, translate_wrt_reference
+from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
     make_face, make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
-    set_shape_name
+    set_shape_name, update_salome_study
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -609,6 +608,10 @@ class LatticeDataExtractor():
     }
 
     def __init__(self, lattice: Lattice, geom_type: GeometryType) -> None:
+        # Raise an exception if the lattice does not have any cell
+        if not lattice.lattice_cells:
+            raise RuntimeError("No data extraction can be performed from "
+                               "a lattice without cells.")
         # Initialize the instance attributes
         self.lattice: Lattice = deepcopy(lattice)
         self.borders: List[Any] = []
@@ -863,8 +866,7 @@ class LatticeDataExtractor():
         lower_left = min(coords, key=lambda x: (x[0], x[1], x[2]))
         # Check if the lower-left corner coincides with the XYZ origin; if
         # not, evaluate the new lattice center to fulfill the condition
-        if any(not math.isclose(c, 0.0) for c in lower_left):
-            print("!!! Lower-left corner not in O")
+        if any(not math.isclose(c, 0.0, abs_tol=1e-6) for c in lower_left):
             # Return the coordinates of the new center
             return (0.0 - lower_left[0]), (0.0 - lower_left[1]), 0.0
         # Return the current lattice center
@@ -981,14 +983,26 @@ class LatticeDataExtractor():
         self.borders = build_compound_borders(lattice_cmpd)
         # Handle the lattice translation so that the lower-left corner is in
         # the XYZ space origin; this is valid for specific symmetries and
-        # cells geometries
-        if self.lattice.symmetry_type in self.CASES_FOR_TRANSLATION[
-            self.lattice.cells_type]:
+        # cells geometries or if the lattice center does not coincide with
+        # the XYZ origin
+        symm_condition = (
+            self.lattice.symmetry_type in self.CASES_FOR_TRANSLATION[
+            self.lattice.cells_type]
+        )
+        center_condition = (
+            get_min_distance(
+                self.lattice.lattice_center,
+                make_vertex((0.0, 0.0, 0.0))) > 0.0
+        )
+        if symm_condition or center_condition:
             # Evaluate the new center of the lattice, if it has not been
             # translated yet, and apply the translation to the regions
             # and the lattice compound
+            new_center = (
+                self.__evaluate_lattice_center() if symm_condition
+                    else (0.0, 0.0, 0.0))
             lattice_cmpd = self.__apply_lattice_elements_translation(
-                lattice_cmpd, self.__evaluate_lattice_center())
+                lattice_cmpd, new_center)
             # Re-evaluate the lattice borders
             self.borders = build_compound_borders(lattice_cmpd)
         # Extract the lattice edges from the lattice compound to analyse

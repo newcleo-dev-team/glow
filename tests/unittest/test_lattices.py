@@ -961,19 +961,19 @@ class TestLattice(unittest.TestCase):
         # Build the vertices of the shape of the symmetry
         symm_vs_vertices = {
             SymmetryType.HALF: [
-                make_vertex((0.0, -self.lattice.ly, 0.0)),
-                make_vertex((self.lattice.lx, -self.lattice.ly, 0.0)),
-                make_vertex((self.lattice.lx, self.lattice.ly, 0.0)),
-                make_vertex((0.0, self.lattice.ly, 0.0))],
+                make_vertex((0.0, -self.lattice.ly/2, 0.0)),
+                make_vertex((self.lattice.lx/2, -self.lattice.ly/2, 0.0)),
+                make_vertex((self.lattice.lx/2, self.lattice.ly/2, 0.0)),
+                make_vertex((0.0, self.lattice.ly/2, 0.0))],
             SymmetryType.QUARTER: [
                 self.lattice.lattice_center,
-                make_vertex((self.lattice.lx, 0.0, 0.0)),
-                make_vertex((self.lattice.lx, self.lattice.ly, 0.0)),
-                make_vertex((0.0, self.lattice.ly, 0.0))],
+                make_vertex((self.lattice.lx/2, 0.0, 0.0)),
+                make_vertex((self.lattice.lx/2, self.lattice.ly/2, 0.0)),
+                make_vertex((0.0, self.lattice.ly/2, 0.0))],
             SymmetryType.EIGHTH: [
                 self.lattice.lattice_center,
-                make_vertex((self.lattice.lx, 0.0, 0.0)),
-                make_vertex((self.lattice.lx, self.lattice.ly, 0.0))]
+                make_vertex((self.lattice.lx/2, 0.0, 0.0)),
+                make_vertex((self.lattice.lx/2, self.lattice.ly/2, 0.0))]
         }
         # Verify the correctness of the symmetry application
         self.__assess_symmetry(SymmetryType.HALF,
