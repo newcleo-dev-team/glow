@@ -8,7 +8,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Set, Tuple, Union
 
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, Rectangle, Surface, \
+from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, \
     build_hexagon
 from glow.geometry_layouts.utility import build_compound_borders, \
     translate_wrt_reference, update_relative_pos
@@ -85,7 +85,7 @@ class Lattice():
         self.lx: float = 0.0
         self.ly: float = 0.0
         self.box_layers: List[float] = boxes_thick
-        self.lattice_box: Union[Cell, None] = None
+        self.__lattice_box: Union[Cell, None] = None
         self.lattice_symm: Union[Any, None] = None
         self.regions: List[Region] = []
         self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
@@ -176,6 +176,79 @@ class Lattice():
     @type_geo.setter
     def type_geo(self, type_geo: LatticeGeometryType) -> None:
         self.set_type_geo(type_geo)
+
+    @property
+    def lattice_box(self) -> Cell | None:
+        """
+        Get or set the `Cell` subclass object providing the lattice's box.
+
+        Parameters
+        ----------
+        cell : Cell | None
+            An instance of the `Cell` subclass to set the lattice's box. If
+            `None`, the previous box, if present, is removed.
+
+        Returns
+        -------
+        Cell | None
+            Instance the `Cell` subclass for the lattice's box, or `None` if
+            get, `None` if set.
+
+        Raises
+        ------
+        RuntimeError
+            If the given cell's center does not coincide with the lattice's
+            one.
+        """
+        return self.__lattice_box
+
+    @lattice_box.setter
+    def lattice_box(self, cell: Cell | None) -> None:
+        # Check whether the cell's center coincide with the lattice's one
+        if (cell is not None and
+            get_min_distance(cell.figure.o, self.lattice_center) > 1e-5):
+            raise RuntimeError(
+                "The cell's center having coordinates "
+                f"'{get_point_coordinates(cell.figure.o)}', "
+                "does not coincide with the lattice's one being "
+                f"'{get_point_coordinates(self.lattice_center)}'.")
+        # Shape to update the lattice's characteristic dimensions with
+        if cell is None:
+            shape = make_compound([cell.face for cell in self.lattice_cells])
+            # Set the lattice's box to None
+            self.__lattice_box = None
+        else:
+            # Set the lattice's box
+            self.__lattice_box = cell
+            shape = cell.face
+            # Update the lattice compounds with the box
+            self.__update_lattice_compounds_with_box()
+
+        # Update the characteristic dimensions of the lattice
+        self.__update_lattice_dimensions(shape)
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
+
+    def __update_lattice_dimensions(self, shape: Any) -> None:
+        """
+        Method that updates the lattice's XY characteristic dimensions
+        from the given shape for which its min-max extension is calculated.
+
+        Parameters
+        ----------
+        shape : Any
+            The reference shape for calculating the lattice's characteristic
+            dimensions.
+        """
+        # Get the min-max extension for the given shape
+        x_min, x_max, y_min, y_max = get_bounding_box(shape)
+        # Factor to evaluate the lattice's characteristic dimensions depending
+        # on the cells' type
+        n_type = 1
+        if self.cells_type == CellType.HEX:
+            n_type = 2
+        self.lx = (x_max - x_min) / n_type
+        self.ly = (y_max - y_min) / n_type
 
     def __evaluate_cells_rotation(self, cells: List[Cell]) -> float:
         """
@@ -339,7 +412,7 @@ class Lattice():
         # and return it
         return make_partition(
             [lattice_cmpd] + extract_sub_shapes(
-                get_compound_from_geometry(geo_type, [self.lattice_box]),
+                get_compound_from_geometry(geo_type, [self.__lattice_box]),
                 ShapeType.FACE),
             [],
             ShapeType.FACE)
@@ -383,20 +456,28 @@ class Lattice():
 
         # Build the lattice container according to the cells geometry
         self.__build_lattice_box_type()
-        # Get the box subface closest to the lattice center
-        inner_box = self.__extract_inner_box()
+        # Update the lattice compounds with the box
+        self.__update_lattice_compounds_with_box()
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
+
+    def __update_lattice_compounds_with_box(self) -> None:
+        """
+        Method that updates the lattice's compound object by assembling the
+        cells with the inner area of the box so to take into account for
+        boxes that cut the last ring of cells.
+        In addition, if a symmetry has already been applied, the operation
+        is performed again so to update the compound specific for the
+        symmetry.
+        """
         # Update the lattice compound from the cells' faces and the inner box
         self.lattice_cmpd = self.__assemble_box_with_lattice(
-            inner_box,
+            self.__extract_inner_box(),
             make_compound([cell.face for cell in self.lattice_cells]),
             GeometryType.TECHNOLOGICAL)
         # Re-apply the symmetry operation if any has already been performed
         if self.symmetry_type != SymmetryType.FULL:
             self.apply_symmetry(self.symmetry_type)
-        # Update the 'lx' characteristic dimension of the lattice
-        self.lx = self.lattice_box.figure.lx
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
 
     def __extract_inner_box(self) -> Any:
         """
@@ -411,9 +492,10 @@ class Lattice():
         center.
         """
         # Extract the lattice box faces
-        box_faces = extract_sub_shapes(self.lattice_box.face, ShapeType.FACE)
+        box_faces = extract_sub_shapes(self.__lattice_box.face,
+                                       ShapeType.FACE)
         if not box_faces:
-            box_faces = [self.lattice_box.face]
+            box_faces = [self.__lattice_box.face]
         # Get the inner box face by sorting the faces according to the
         # distance from the lattice center
         return sorted(
@@ -453,7 +535,7 @@ class Lattice():
                 box_face = make_partition(
                     [rect.face for rect in box_surfaces], [], ShapeType.FACE)
                 # Declare a 'Rectangle' instace from the built face
-                self.lattice_box = RectCell(center, (height, width))
+                self.__lattice_box = RectCell(center, (height, width))
             case CellType.HEX:
                 # Calculate the apothem of the hexagon enclosing the lattice
                 # according to the valid rotation angles of the cells (0° or
@@ -471,19 +553,21 @@ class Lattice():
                 box_face = make_partition(
                     [hex.face for hex in box_surfaces], [], ShapeType.FACE)
                 # Declare a 'Hexagon' instace from the built face
-                self.lattice_box = HexCell(center,
-                                           box_apothem/math.cos(math.pi/3))
+                self.__lattice_box = HexCell(center,
+                                           box_apothem/math.sin(math.pi/3))
             case _:
                 raise RuntimeError("Unhandled cell geometry type.")
-        self.lattice_box.update_geometry_from_face(GeometryType.TECHNOLOGICAL,
-                                                   box_face)
+        self.__lattice_box.update_geometry_from_face(
+            GeometryType.TECHNOLOGICAL, box_face)
         # Rotate the box so to enclose the lattice (hexagonal lattice only)
         if self.__cells_rot == 0.0 and self.cells_type == CellType.HEX:
-            self.lattice_box.rotate(90)
+            self.__lattice_box.rotate(90)
+        # Update the characteristic dimensions of the lattice
+        self.__update_lattice_dimensions(self.__lattice_box.face)
 
     def __configure_lattice_type(self,
-                                  cells_type: CellType,
-                                  no_cells: int = 1) -> None:
+                                 cells_type: CellType,
+                                 no_cells: int = 1) -> None:
         """
         Method that allows to configure the type of geometry of the lattice,
         as value of the 'LatticeGeometryType' enumeration, according to the
@@ -784,7 +868,7 @@ class Lattice():
                     The type of symmetry to handle
         """
         # Raise an exception if the lattice is not included within a box
-        if not self.lattice_box:
+        if not self.__lattice_box:
             raise AssertionError(
                 "The hexagonal lattice is not included within a box: the "
                 f"requested '{symmetry}'symmetry operation cannot be "
@@ -824,7 +908,6 @@ class Lattice():
 
     def __build_vertices(self, u_params: List[float]) -> List[Any]:
         """
-        FIXME it can be transformed into a function
         Method that builds a list of vertices on the construction circle of
         the lattice box, with the first element being the lattice center.
         The position of the points along the curve is expressed in terms of
@@ -843,7 +926,7 @@ class Lattice():
         # Initialize the list with the lattice center
         points = [self.lattice_center]
         points += [
-            make_vertex_on_curve(self.lattice_box.figure.out_circle, u)
+            make_vertex_on_curve(self.__lattice_box.figure.out_circle, u)
             for u in u_params]
         # Return the built list of vertex objects
         return points
@@ -1049,10 +1132,10 @@ class Lattice():
         geo_type : GeometryType
             The type of geometry indicating the layout to use for the box cell
         """
-        if not self.box_layers:
+        if not self.box_layers and not self.__lattice_box:
             return
         # If no lattice box has still been build, do it now
-        if not self.lattice_box:
+        if not self.__lattice_box:
             self.build_lattice_box(self.box_layers)
         else:
             # Assemble the lattice with the box subface closest to the lattice
@@ -1317,8 +1400,8 @@ class Lattice():
         # Translate the lattice compound
         self.lattice_cmpd = make_translation(self.lattice_cmpd, transl_vect)
         # Translate the lattice box, if any
-        if self.lattice_box:
-            self.lattice_box = self.lattice_box.translate(new_pos)
+        if self.__lattice_box:
+            self.__lattice_box = self.__lattice_box.translate(new_pos)
         # Translate the lattice compound on which a symmetry operation has
         # been applied, if any
         if self.symmetry_type != SymmetryType.FULL:
@@ -1404,13 +1487,13 @@ class Lattice():
         print("No. cell regions in lattice:", len(self.regions))
         # Handle the construction of 'Region' objects for the lattice box
         # subfaces, if any
-        if self.lattice_box:
+        if self.__lattice_box:
             box_subfaces = self.__extract_box_subfaces(cmpd, geo_type)
             print("No. lattice box subfaces", len(box_subfaces))
             # Add the 'Region' objects for the lattice box subfaces
             self.regions.extend(
                 self.__build_regions_for_subfaces(
-                    len(self.regions), box_subfaces, [self.lattice_box]))
+                    len(self.regions), box_subfaces, [self.__lattice_box]))
             # Update the lattice found subfaces
             subfaces += box_subfaces
 
@@ -1557,7 +1640,7 @@ class Lattice():
         # If any lattice box is present, cut it out from the
         # lattice compound object (the one with only the cells
         # and no box)
-        if self.lattice_box:
+        if self.__lattice_box:
             return make_common(cmpd, self.__extract_inner_box())
         return cmpd
 
@@ -1752,6 +1835,12 @@ class Lattice():
         """
         if not properties:
             raise Exception("No properties have been provided")
+        if not self.box_layers and self.__lattice_box:
+            raise RuntimeError(
+                "The lattice box has been declared by directly assigning the "
+                "cell instance instead of providing its layers. This method "
+                "only works when building the box from the layers by calling "
+                "the method 'build_lattice_box().'")
         # Check if the number of box regions coincides with the number of
         # property elements for all the given property types: for hexagonal
         # lattices it is needed to consider also the area between the cells
@@ -1771,9 +1860,9 @@ class Lattice():
         # Clear any previously set entry in the dictionary associating the
         # regions to the properties, as this method sets the properties for
         # all.
-        self.lattice_box.tech_geom_props.clear()
+        self.__lattice_box.tech_geom_props.clear()
         # Extract the lattice box subfaces
-        box_subfaces = extract_sorted_sub_shapes(self.lattice_box.face,
+        box_subfaces = extract_sorted_sub_shapes(self.__lattice_box.face,
                                                  ShapeType.FACE)
         # Sort the box regions according to their distance from the lattice
         # center and their perimeter in reverse order: this so that the
@@ -1798,7 +1887,7 @@ class Lattice():
                     # Properties for regions between cells and layers
                     prop_types[type] = values[-1]
             # Associate a region with its properties
-            self.lattice_box.tech_geom_props[region] = prop_types
+            self.__lattice_box.tech_geom_props[region] = prop_types
             # Update the index
             indx += 1
 
@@ -1838,7 +1927,7 @@ class Lattice():
         position in the returned list and so on with the others.
         """
         # Get the box geometry layout according to the given geometry type
-        box = get_compound_from_geometry(geom_type, [self.lattice_box])
+        box = get_compound_from_geometry(geom_type, [self.__lattice_box])
         # Handle symmetry types other than FULL
         if self.symmetry_type != SymmetryType.FULL:
             # Get the shape of the symmetry
@@ -1976,8 +2065,8 @@ class Lattice():
             for cell in layer:
                 cell.rotate_from_axis(angle, z_axis)
         # Rotate the lattice box, if any
-        if self.lattice_box:
-            self.lattice_box.rotate_from_axis(angle, z_axis)
+        if self.__lattice_box:
+            self.__lattice_box.rotate_from_axis(angle, z_axis)
         # Rotate the lattice compound on which a symmetry operation has been
         # applied, if any
         if self.symmetry_type != SymmetryType.FULL:
@@ -2103,11 +2192,11 @@ class Lattice():
         # Store all the cells to look for the region to update
         cells: List[Cell] = []
         # If a box is present, add it to the list of cells
-        if self.lattice_box:
+        if self.__lattice_box:
             # Copy the lattice box cell and update its face by cutting out the
             # cells; this to prevent to select the box region instead of a
             # cell as the box is not empty
-            lattice_box = deepcopy(self.lattice_box)
+            lattice_box = deepcopy(self.__lattice_box)
             lattice_box.face = make_compound(
                 self.__extract_box_subfaces(cmpd, GeometryType.TECHNOLOGICAL))
             cells.append(lattice_box)
@@ -2132,9 +2221,9 @@ class Lattice():
             # Update the cell properties of the lattice box, if it has
             # been modified (first position in the list of cells)
             if i == 0:
-                for zone in self.lattice_box.tech_geom_props:
+                for zone in self.__lattice_box.tech_geom_props:
                     if is_point_inside_shape(point, zone):
-                        self.lattice_box.tech_geom_props[zone][
+                        self.__lattice_box.tech_geom_props[zone][
                             property_type] = value
                         break
             break
@@ -2241,7 +2330,7 @@ class Lattice():
         # lattice has either a single cell or is enclosed in a box
         if type_geo in [LatticeGeometryType.HEXAGON_TRAN,
                         LatticeGeometryType.RECTANGLE_TRAN]:
-            if len(self.lattice_cells) > 1 and self.lattice_box is None:
+            if len(self.lattice_cells) > 1 and self.__lattice_box is None:
                 raise RuntimeError(
                     f"The given type of geometry '{type_geo}' is not "
                     "compatible with the current lattice geometry layout as "
