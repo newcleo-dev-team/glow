@@ -2,18 +2,23 @@
 Module containing unittest classes to assess that the classes and functions
 of the `glow.generator.geom_extractor` module have a valid implementation.
 """
-from copy import deepcopy
-from math import pi, sin, sqrt
-from typing import Any, Dict
+import io
 import unittest
 
-from glow.generator.geom_extractor import LatticeDataExtractor
+from contextlib import redirect_stdout
+from copy import deepcopy
+from math import pi, sin, sqrt
+from typing import Any, Dict, List
+
+from glow.generator.geom_extractor import Edge, Face, LatticeDataExtractor, \
+    classify_lattice_edges
 from glow.geometry_layouts.cells import HexCell, RectCell
 from glow.geometry_layouts.geometries import Hexagon, Rectangle
 from glow.geometry_layouts.lattices import Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    get_shape_type, make_compound, make_cut, make_face, make_vertex
-from glow.support.types import GeometryType, SymmetryType
+    get_shape_name, make_compound, make_face, make_vertex, set_shape_name
+from glow.support.types import GeometryType, LatticeGeometryType, \
+    PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes, build_contiguous_edges
 
 
@@ -155,6 +160,193 @@ class TestLatticeDataExtractor(unittest.TestCase):
         self.assertEqual(lde.subfaces, [])
         self.assertEqual(lde.edges, [])
         self.assertEqual(len(lde.id_vs_edge.values()), len(lde.lattice_edges))
+
+    def test_build_boundaries(self) -> None:
+        """
+        Method that tests the implementation of the method `build_boundaries`
+        of the `LatticeDataExtractor` class.
+        """
+        # Verify no 'Boundary' objects are built when the lattice type is
+        # 'ISOTROPIC'
+        self.lattice.type_geo = LatticeGeometryType.ISOTROPIC
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        lde.lattice = deepcopy(self.lattice)
+        lde.boundaries = []
+        lde.build_boundaries()
+        self.assertEqual(len(lde.boundaries), 0)
+
+        # Verify 'Boundary' objects have been created for the borders of the
+        # lattice
+        self.lattice.apply_symmetry(SymmetryType.EIGHTH)
+        self.lattice.type_geo = LatticeGeometryType.RECTANGLE_EIGHT
+        lde = LatticeDataExtractor(self.lattice, GeometryType.TECHNOLOGICAL)
+        lde.build_boundaries()
+        self.assertEqual(len(lde.boundaries), 3)
+        self.assertTrue(
+            are_same_shapes(
+                make_face(build_contiguous_edges([
+                    make_vertex((0.0, 0.0, 0.0)),
+                    make_vertex((1.5, 0.0, 0.0)),
+                    make_vertex((1.5, 1.5, 0.0)),
+                ])),
+                make_face([b.border for b in lde.boundaries]),
+                ShapeType.FACE
+            )
+        )
+
+    def test_build_edges(self) -> None:
+        """
+        Method that tests the implementation of the method `build_edges`
+        of the `LatticeDataExtractor` class.
+        """
+        # Build the association between edge names and 'Face' objects for
+        # the case of a rectangular shape and its edges
+        shared_shape = Rectangle()
+        borders = shared_shape.borders
+        set_shape_name(shared_shape.face, "FACE_1")
+        face = Face(shared_shape.face, 'MAT')
+        edge_names_vs_faces: Dict[str, List[Any | Face]]  = {
+            'EDGE_1': [borders[0], face],
+            'EDGE_2': [borders[1], face],
+            'EDGE_3': [borders[2], face],
+            'EDGE_4': [borders[3], face]
+        }
+        for b, n in zip(shared_shape.borders, edge_names_vs_faces.keys()):
+            set_shape_name(b, n)
+
+        # Instantiate the 'LatticeDataExtractor' class without attributes
+        # and only initialize the 'edges' one
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        lde.edges = []
+        lde.build_edges(edge_names_vs_faces)
+
+        # Verify the list of 'Edge' objects has been built
+        self.assertEqual(len(lde.edges), 4)
+        self.assertTrue(
+            all(
+                are_same_shapes(
+                    e.left.face, face.face, ShapeType.FACE) for e in lde.edges
+            )
+        )
+
+    def test_build_edges_and_faces_association(self) -> None:
+        """
+        Method that tests the implementation of the method
+        `build_edges_and_faces_association` of the
+        `LatticeDataExtractor` class.
+        """
+        # Build a reference shape that mimics the lattice
+        ref_shape = Rectangle()
+        set_shape_name(ref_shape.face, "FACE_1")
+        ref_edges = ref_shape.borders
+        ref_id_vs_edges = classify_lattice_edges(ref_edges)
+        ref_face = Face(ref_shape.face, 'MAT')
+        # Instantiate the 'LatticeDataExtractor' class without attributes
+        # and only initialize the needed attributes
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        lde.subfaces = [ref_face]
+        lde.lattice_edges = ref_edges
+        lde.id_vs_edge = ref_id_vs_edges
+        result = lde.build_edges_and_faces_association()
+
+        # Verify the resulting data structure by checking:
+        # 1. that has four entries;
+        # 2. if the edges' names (the keys) have a corresponding name among
+        #    the lattice's edges;
+        # 3. if the first element of the values of the resulting dictionary
+        #    is equal to any of the lattice's edges;
+        # 4. if the second element of the values of the resulting dictionary
+        #    is equal to the reference face.
+        self.assertEqual(len(result), 4)
+        for edge_name, edge_faces in result.items():
+            self.assertTrue(
+                any(get_shape_name(e) == edge_name
+                    for e in ref_id_vs_edges.values())
+            )
+            self.assertTrue(
+                any(
+                    are_same_shapes(e, edge_faces[0], ShapeType.EDGE)
+                    for e in ref_id_vs_edges.values()
+                )
+            )
+            self.assertTrue(
+                are_same_shapes(
+                    ref_face.face, edge_faces[1].face, ShapeType.FACE)
+            )
+
+    def test_build_faces(self) -> None:
+        """
+        Method that tests the implementation of the method `build_faces`
+        of the `LatticeDataExtractor` class.
+        """
+        # Instantiate the 'LatticeDataExtractor' class without attributes
+        # and only initialize the needed attributes
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        lde.lattice = deepcopy(self.lattice)
+        lde.subfaces = []
+
+        # Verify an exception is raised if building the 'Face' objects from
+        # lattice's regions not having any 'PropertyType', or no value is
+        # assigned for the indicated type.
+        # N.B. Since only the 'PropertyType.MATERIAL' is present, it is not
+        # possible to test the case where calling the method with a different
+        # 'PropertyType' element.
+        lde.lattice.build_regions(GeometryType.TECHNOLOGICAL)
+        with self.assertRaises(RuntimeError):
+            lde.build_faces(PropertyType.MATERIAL)
+        for region in lde.lattice.regions:
+            region.properties = {PropertyType.MATERIAL: ""}
+        with self.assertRaises(RuntimeError):
+            lde.build_faces(PropertyType.MATERIAL)
+
+        # Assign the values for the 'PropertyType.MATERIAL' and call
+        # the method
+        for region in lde.lattice.regions:
+            region.properties = {PropertyType.MATERIAL: "MAT"}
+        lde.build_faces(PropertyType.MATERIAL)
+
+        # Verify the 'Face' objects have been correctly generated
+        self.assertEqual(len(lde.subfaces), len(lde.lattice.regions))
+        for i, face in enumerate(lde.subfaces):
+            self.assertEqual(face.no, i+1)
+
+    def test_print_log_analysis(self) -> None:
+        """
+        Method that tests the implementation of the method
+        `print_log_analysis` of the `LatticeDataExtractor` class.
+        """
+        # Build the association between edge names and 'Face' objects for
+        # the case of a rectangular shape and its edges
+        ref_shape = Rectangle()
+        set_shape_name(ref_shape.face, "FACE_1")
+        ref_edges = ref_shape.borders
+        ref_id_vs_edges = classify_lattice_edges(ref_edges)
+        ref_face = Face(ref_shape.face, 'MAT')
+        edge_names_vs_faces: Dict[str, List[Any | Face]]  = {
+            'EDGE_1': [ref_edges[0], ref_face],
+            'EDGE_2': [ref_edges[1], ref_face],
+            'EDGE_3': [ref_edges[2], ref_face],
+            'EDGE_4': [ref_edges[3], ref_face]
+        }
+        # Instantiate the 'LatticeDataExtractor' class without attributes
+        # and only initialize the needed attributes
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        lde.edges = [Edge.__new__(Edge)]*4
+        lde.subfaces = [ref_face]
+
+        # Call the printer method and capture its output
+        f = io.StringIO()
+        with redirect_stdout(f):
+            lde.print_log_analysis(edge_names_vs_faces)
+        # Split the lines
+        output = f.getvalue().strip().splitlines()
+
+        # Verify the correct information is printed
+        self.assertIn("1", output[0])
+        self.assertIn("4", output[1])
+        self.assertIn("4", output[2])
+        self.assertIn("0", output[3])
+        self.assertIn("0", output[4])
 
     def test_preprocess_cart_lattice(self) -> None:
         """

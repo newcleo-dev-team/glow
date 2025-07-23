@@ -132,7 +132,7 @@ class Edge():
             check_shape_expected_types(edge, [ShapeType.EDGE])
             # Get the number of the edge directly from the name attribute of
             # the corresponding GEOM edge object
-            self.no : int = get_id_from_shape(edge)
+            self.no: int = get_id_from_shape(edge)
         except RuntimeError as e:
             raise RuntimeError(
                 f"Error with 'Edge' whose data is: {self.data}") from e
