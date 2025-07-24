@@ -2,11 +2,12 @@
 Module containing unittest classes to assess that the classes and functions
 of the `glow.geometry_layouts.cells` module have a valid implementation.
 """
+import math
+import unittest
+
 from abc import ABC
 from copy import deepcopy
-import math
 from typing import Any, Dict, Tuple, Union
-import unittest
 
 from glow.support.types import CellType, GeometryType, PropertyType
 from glow.geometry_layouts.cells import Cell, GenericCell, HexCell, RectCell, \

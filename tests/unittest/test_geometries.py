@@ -2,11 +2,12 @@
 Module containing unittest classes to assess that the classes and functions
 of the `glow.geometry_layouts.geometries` module have a valid implementation.
 """
+import math
+import unittest
+
 from abc import ABC
 from copy import deepcopy
 from typing import Callable
-import unittest
-import math
 
 from glow.support.utility import are_same_shapes
 from glow.interface.geom_interface import *

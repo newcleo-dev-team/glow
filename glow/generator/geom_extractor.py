@@ -9,8 +9,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Self
 
-from glow.support.types import BoundaryType, CellType, GeometryType, \
-    LatticeGeometryType, PropertyType, SymmetryType
+from glow.support.types import NAME_EDGE_TYPE, BoundaryType, CellType, \
+    EdgeType, GeometryType, LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.support.utility import build_compound_borders, \
     check_shape_expected_types, get_id_from_name, get_id_from_shape, \
@@ -139,7 +139,7 @@ class Edge():
         # Store the edge object
         self.edge: Any  = edge
         # Get the type of edge as a string
-        self.kind: str = str(self.data[0])
+        self.kind: EdgeType = NAME_EDGE_TYPE[str(self.data[0])][0]
         # Initialize to 'None' both the right and the left 'Face' objects
         self.right: Face | None = None
         self.left: Face | None = None
@@ -170,7 +170,7 @@ class Edge():
         A tuple with the X-Y-Z coordinates of the edge starting point
         """
         # Handle the point retrieval differently if the edge is a circle
-        if self.kind == "CIRCLE":
+        if self.kind == EdgeType.CIRCLE:
             # Get the X-Y-Z coordinates of the circle center
             x1, y1, z1  = self.data[1:4]
             # Get the circle radius
@@ -212,12 +212,12 @@ class Edge():
         # face position relative to the edge
         if not is_point_inside_shape(self.__build_point_on_edge_normal(),
                                      face.face):
-            if self.kind == "SEGMENT":
+            if self.kind == EdgeType.SEGMENT:
                 self.right = face
             else:
                 self.left = face
         else:
-            if self.kind == "SEGMENT":
+            if self.kind == EdgeType.SEGMENT:
                 self.left = face
             else:
                 self.right = face
@@ -252,7 +252,7 @@ class Edge():
         A vertex object representing a point slightly to the left of the
         middle point of the edge.
         """
-        if self.kind == "CIRCLE":
+        if self.kind == EdgeType.CIRCLE:
             # Extract the X-Y-Z coordinates of the circle center
             (xc, yc, zc) = self.data[1:4]
             # Extract the circle radius
@@ -260,7 +260,7 @@ class Edge():
             # Build a point (as a GEOM object) positioned at an infinitesimal
             # distance from the starting point of the circle
             return make_vertex((xc+radius-epsilon, yc, zc))
-        if self.kind == "ARC_CIRCLE":
+        if self.kind == EdgeType.ARC_CIRCLE:
             # Extract the X-Y-Z coordinates of the circle center the arc
             # belongs to
             (xc, yc, zc) = self.data[1:4]
@@ -277,7 +277,7 @@ class Edge():
                   (coord[1] - yc)*(1.0 - epsilon/radius))
             # Build a GEOM point along the direction of the just built vector
             return make_vertex((xc + vm[0], yc + vm[1], zc))
-        if self.kind == "SEGMENT":
+        if self.kind == EdgeType.SEGMENT:
             # Extract the X-Y-Z coordinates of the extremes of the segment
             (x1, y1, z1, x2, y2, _) = self.data[1:7]
             # Build a GEOM point on the segment, positioned at its middle

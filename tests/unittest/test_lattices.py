@@ -2,10 +2,10 @@
 Module containing unittest classes to assess that the classes and functions
 of the `glow.geometry_layouts.lattice` module have a valid implementation.
 """
-from copy import deepcopy
 import math
 import unittest
 
+from copy import deepcopy
 from typing import List
 
 from glow.support.types import *

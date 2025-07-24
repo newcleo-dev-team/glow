@@ -3,31 +3,17 @@ This module contains the classes that support the generation of the output
 TDT file containing the geometry representation for further analysis in
 DRAGON.
 """
-from dataclasses import dataclass, field
-from enum import Enum
-from io import TextIOWrapper
 import math
 import os
+
+from dataclasses import dataclass, field
+from io import TextIOWrapper
 from pathlib import Path
 from typing import List, Tuple
-from glow.support.types import BoundaryType, LatticeGeometryType, SymmetryType
+
 from glow.generator.geom_extractor import Boundary, Edge, Face
-
-
-class Element (Enum):
-    """
-    Enumeration assigning each geometric element type an index.
-    """
-    SEGMENT = 1
-    CIRCLE  = 2
-    ARC     = 3
-
-
-# Dictionary of element type VS a tuple containing the corresponding
-# attribute of the 'Element' class and a descriptive string
-TYPE_ELEM = {"SEGMENT"     : (Element.SEGMENT, "line segment"),
-             "CIRCLE"      : (Element.CIRCLE, "circle"),
-             "ARC_CIRCLE"  : (Element.ARC, "circular arc")}
+from glow.support.types import NAME_EDGE_TYPE, BoundaryType, EdgeType, \
+    LatticeGeometryType, SymmetryType
 
 
 @dataclass
@@ -232,7 +218,7 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
     for edge in sorted(tdt_data.edges):
         # Write the information about the current edge
         # Get the element type index and its descriptive string
-        type_indx, type_descr = TYPE_ELEM[edge.kind]
+        type_indx, type_descr = NAME_EDGE_TYPE[edge.kind.name]
 
         # Get the index of the left/right faces if any is associated
         # to the edge
@@ -248,20 +234,20 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
         file.write("*\n")
 
         # Write the geometric data of the edge according to its type
-        if type_indx == Element.SEGMENT:
+        if type_indx == EdgeType.SEGMENT:
             # Extract the edge data as 'x1, y1, z1, x2, y2, z2'
             x1, y1, _, x2, y2, _ = edge.data[1:]
             # Write the info about the X-Y coordinates of the first point
             # and the X-Y distances between the segment vertices
             file.write(f"  {x1:6f}, {y1:6f}, {(x2-x1):6f}, {(y2-y1):6f}\n")
-        elif type_indx == Element.CIRCLE:
+        elif type_indx == EdgeType.CIRCLE:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R'
             xc, yc, _, _, _, _, R = edge.data[1:]
             # Write the info about the X-Y coordinates of the circle center,
             # the radius and a 4th data (value '0.0') which is mandatory
             # despite not being indicated in the APOLLO2 doc of 15/06/09
             file.write(f"  {xc:6f}, {yc:6f}, {R:6f}, 0.0\n")
-        elif type_indx == Element.ARC:
+        elif type_indx == EdgeType.ARC:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R,
             #                           x1, y1, z1, x2, y2, z2'
             xc, yc, _, _, _, _, R, x1, y1, _, x2, y2, _ = edge.data[1:]

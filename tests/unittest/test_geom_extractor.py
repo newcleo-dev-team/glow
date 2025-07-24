@@ -2,21 +2,21 @@
 Module containing unittest classes to assess that the classes and functions
 of the `glow.generator.geom_extractor` module have a valid implementation.
 """
-from ast import Tuple
-from copy import deepcopy
-from math import sqrt
 import math
-from typing import Any, Callable, Dict, List
 import unittest
+
+from typing import Any, Dict, List, Tuple
 
 from glow.generator.geom_extractor import Boundary, Edge, Face, build_edge_id
 from glow.geometry_layouts.geometries import Rectangle
-from glow.geometry_layouts.lattices import Lattice
-from glow.interface.geom_interface import ShapeType, extract_sub_shapes, get_kind_of_shape, get_point_coordinates, is_point_inside_shape, make_arc_edge, make_circle, make_compound, make_edge, make_face, make_partition, make_vertex, set_shape_name
-from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, BoundaryType, CellType, LatticeGeometryType, \
-    TYPEGEO_VS_BC, SymmetryType
-from glow.support.utility import are_same_shapes, build_contiguous_edges
-from support_funcs import BoundaryData, build_bd_full_hex, build_bd_sixth_hex, build_boundary_data
+from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
+    get_kind_of_shape, is_point_inside_shape, make_arc_edge, make_circle, \
+    make_compound, make_edge, make_face, make_partition, make_vertex, \
+    set_shape_name
+from glow.support.types import NAME_EDGE_TYPE, CellType, EdgeType, \
+    LatticeGeometryType, SymmetryType
+from glow.support.utility import are_same_shapes
+from support_funcs import BoundaryData, build_boundary_data
 
 
 class TestBoundary(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestBoundary(unittest.TestCase):
         )
         self.lattice_center: Any = make_vertex((0.0, 0.0, 0.0))
         self.dimensions: Dict[CellType, Tuple[float, float]] = {
-            CellType.HEX: (1.0, sqrt(3)/2),
+            CellType.HEX: (1.0, math.sqrt(3)/2),
             CellType.RECT: (2.0, 1.0)
         }
 
@@ -434,7 +434,7 @@ class TestEdge(unittest.TestCase):
             )
             self.assertEqual(edge.data, get_kind_of_shape(ef[0]))
             self.assertEqual(edge.no, i+1)
-            self.assertEqual(edge.kind, 'SEGMENT')
+            self.assertEqual(edge.kind, EdgeType.SEGMENT)
             self.assertEqual(edge.left, ef[1])
             if i == 1:
                 self.assertEqual(edge.right, ef[2])
@@ -467,7 +467,7 @@ class TestEdge(unittest.TestCase):
         edge = Edge.__new__(Edge)
         # Set the attributes so to replicate an edge segment
         edge.data = get_kind_of_shape(sgmnt)
-        edge.kind = str(edge.data[0])
+        edge.kind = NAME_EDGE_TYPE[str(edge.data[0])][0]
         edge.edge = sgmnt
         edge.right = None
         edge.left = None
@@ -482,7 +482,7 @@ class TestEdge(unittest.TestCase):
         edge = Edge.__new__(Edge)
         # Set the attributes so to replicate an edge circle
         edge.data = get_kind_of_shape(circle)
-        edge.kind = str(edge.data[0])
+        edge.kind = NAME_EDGE_TYPE[str(edge.data[0])][0]
         edge.edge = circle
         edge.right = None
         edge.left = None
@@ -570,5 +570,3 @@ class TestFace(unittest.TestCase):
             all(build_edge_id(b) in face.edge_vs_id.values()
                 for b in rect_face.borders)
         )
-
-

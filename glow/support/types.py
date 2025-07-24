@@ -4,7 +4,7 @@ BCs, geometry, etc.) used throughout the code.
 Utility functions are herein declared as well.
 """
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 
 class BoundaryType(Enum):
@@ -33,6 +33,23 @@ class BoundaryType(Enum):
     AXIAL_SYMMETRY    : int = 4
     CENTRAL_SYMMETRY  : int = 5
 
+
+class EdgeType(Enum):
+    """
+    Enumeration assigning to each edge type an index.
+
+    Attributes
+    ----------
+    SEGMENT     : int = 1
+        Identifying a segment-type edge.
+    CIRCLE      : int = 2
+        Identifying a circle-type edge.
+    ARC_CIRCLE  : int = 3
+        Identifying an arc of circle-type edge.
+    """
+    SEGMENT     : int = 1
+    CIRCLE      : int = 2
+    ARC_CIRCLE  : int = 3
 
 class GeometryType(Enum):
     """
@@ -203,5 +220,14 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
             LatticeGeometryType.SYMMETRIES_TWO,
             LatticeGeometryType.RECTANGLE_EIGHT],
     }
+}
+
+
+# Dictionary of edges' type name VS a tuple containing the corresponding
+# attribute of the 'EdgeType' enumeration and a descriptive string
+NAME_EDGE_TYPE : Dict[str, Tuple[EdgeType, str]] = {
+    "SEGMENT"     : (EdgeType.SEGMENT, "line segment"),
+    "CIRCLE"      : (EdgeType.CIRCLE, "circle"),
+    "ARC_CIRCLE"  : (EdgeType.ARC_CIRCLE, "circular arc")
 }
 
