@@ -11,12 +11,13 @@ from math import pi, sin, sqrt
 from typing import Any, Dict, List
 
 from glow.generator.geom_extractor import Edge, Face, LatticeDataExtractor, \
-    classify_lattice_edges
+    analyse_lattice, build_edge_id, classify_lattice_edges
 from glow.geometry_layouts.cells import HexCell, RectCell
 from glow.geometry_layouts.geometries import Hexagon, Rectangle
 from glow.geometry_layouts.lattices import Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    get_shape_name, make_compound, make_face, make_vertex, set_shape_name
+    get_shape_name, make_arc_edge, make_circle, make_compound, make_edge, \
+    make_face, make_partition, make_vertex, set_shape_name
 from glow.support.types import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes, build_contiguous_edges
@@ -151,8 +152,8 @@ class TestLatticeDataExtractor(unittest.TestCase):
         self.assertTrue(
             are_same_shapes(
                 make_compound(lde.lattice_edges),
-                make_compound(extract_sub_shapes(self.lattice.lattice_cmpd,
-                                                 ShapeType.EDGE)),
+                make_partition(
+                    [self.lattice.lattice_cmpd], [], ShapeType.EDGE),
                 ShapeType.COMPOUND
             )
         )
@@ -310,6 +311,82 @@ class TestLatticeDataExtractor(unittest.TestCase):
         for i, face in enumerate(lde.subfaces):
             self.assertEqual(face.no, i+1)
 
+    def test_get_unique_edges(self) -> None:
+        """
+        Method that tests the implementation of the private method
+        `__get_unique_edges` of the `LatticeDataExtractor` class.
+
+        Notes
+        -----
+        The test case is related to two adjacent cartesian cells: one has
+        the shared border subdivided into two edges, whereas the other no.
+        When it comes to storing the edges, the ones of the cell having
+        two subedges are saved.
+        When the method being tested is called, an edge of one of the two
+        regions is provided. For the second cell, the complete edge is
+        looked for, but this is not present among the stored edges.
+        The present test case verifies that the two edges of the first cell
+        are correctly identified as part of the one of the second cell.
+        """
+        # Declare the edges and the IDs dictionary to use in the test
+        lattice_edges = [
+            make_edge(v1, v2) for v1, v2 in [
+                (make_vertex((0.0, 0.0, 0.0)), make_vertex((1.0, 0.0, 0.0))),
+                (make_vertex((1.0, 0.0, 0.0)), make_vertex((1.0, 0.5, 0.0))),
+                (make_vertex((1.0, 0.5, 0.0)), make_vertex((1.0, 1.0, 0.0))),
+                (make_vertex((1.0, 1.0, 0.0)), make_vertex((0.0, 1.0, 0.0))),
+                (make_vertex((0.0, 1.0, 0.0)), make_vertex((0.0, 0.0, 0.0))),
+                (make_vertex((1.0, 0.0, 0.0)), make_vertex((2.0, 0.0, 0.0))),
+                (make_vertex((2.0, 0.0, 0.0)), make_vertex((2.0, 1.0, 0.0))),
+                (make_vertex((2.0, 1.0, 0.0)), make_vertex((1.0, 1.0, 0.0)))
+            ]
+        ]
+        id_vs_edge = classify_lattice_edges(lattice_edges)
+
+        # Instantiate the 'LatticeDataExtractor' class without attributes
+        # and only initialize the needed attributes
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        lde.lattice_edges = lattice_edges
+        lde.id_vs_edge = id_vs_edge
+
+        # Call the method providing an edge that is present among the stored
+        # ones
+        edge_to_test = list(id_vs_edge.values())[0]
+        edge_id = list(id_vs_edge.keys())[0]
+        found_edges = lde._LatticeDataExtractor__get_unique_edges(
+            edge_to_test, edge_id)
+        # Verify only one edge is returned and that is present among the
+        # stored ones
+        self.assertEqual(len(found_edges), 1)
+        self.assertTrue(
+            are_same_shapes(found_edges[0], edge_to_test, ShapeType.EDGE)
+        )
+
+        # Call the method providing the edge of the second cell that is not
+        # present among the stored ones
+        edge_to_test = make_edge(
+            make_vertex((1.0, 1.0, 0.0)), make_vertex((1.0, 0.0, 0.0))
+        )
+        edge_id = build_edge_id(edge_to_test)
+        found_edges = lde._LatticeDataExtractor__get_unique_edges(
+            edge_to_test, edge_id)
+        # Verify two edges are returned and that are the ones belonging to
+        # the first cell
+        self.assertEqual(len(found_edges), 2)
+        self.assertTrue(
+            are_same_shapes(found_edges[0], lattice_edges[1], ShapeType.EDGE)
+        )
+        self.assertTrue(
+            are_same_shapes(found_edges[1], lattice_edges[2], ShapeType.EDGE)
+        )
+
+        # Verify an exception is raised when providing an edge not belonging
+        # to any of the two cells
+        invalid_edge = make_circle(make_vertex((0.0, 0.0, 0.0)), None, 1.0)
+        with self.assertRaises(RuntimeError):
+            _ = lde._LatticeDataExtractor__get_unique_edges(
+                invalid_edge, build_edge_id(invalid_edge))
+
     def test_print_log_analysis(self) -> None:
         """
         Method that tests the implementation of the method
@@ -320,7 +397,6 @@ class TestLatticeDataExtractor(unittest.TestCase):
         ref_shape = Rectangle()
         set_shape_name(ref_shape.face, "FACE_1")
         ref_edges = ref_shape.borders
-        ref_id_vs_edges = classify_lattice_edges(ref_edges)
         ref_face = Face(ref_shape.face, 'MAT')
         edge_names_vs_faces: Dict[str, List[Any | Face]]  = {
             'EDGE_1': [ref_edges[0], ref_face],
@@ -590,3 +666,126 @@ class TestLatticeDataExtractor(unittest.TestCase):
             )
         )
 
+
+class TestGeomExtractorFunctions(unittest.TestCase):
+    """
+    Test case for verifying the correct implementation of the functions
+    declared in the `geom_extractor.py` module.
+
+    Attributes
+    ----------
+    """
+    def setUp(self):
+        """
+        Method that sets up the test environment for the functions declared
+        in the `geom_extractor.py` module.
+        It initializes the attributes common to all the tests.
+        """
+        cell = RectCell()
+        cell.add_circle(0.25)
+        cell.set_properties({PropertyType.MATERIAL: ['MAT1', 'MAT2']})
+        self.lattice: Lattice = Lattice([cell])
+        self.lattice.add_ring_of_cells(cell, 1)
+        self.lattice.build_regions(GeometryType.TECHNOLOGICAL)
+
+    def test_analyse_lattice(self) -> None:
+        """
+        Method that tests the implementation of the function `analyse_lattice`
+        declared in the `geom_extractor.py` module.
+        """
+        # Call the function extracting the geometric data from the lattice
+        lde = analyse_lattice(
+            self.lattice, GeometryType.SECTORIZED, PropertyType.MATERIAL)
+
+        # Verify the 'LatticeDataExtractor' contains the needed information
+        self.assertIsInstance(lde, LatticeDataExtractor)
+        self.assertEqual(len(lde.borders), 4)
+        self.assertEqual(len(lde.boundaries), 0)
+        self.assertEqual(len(lde.subfaces), 18)
+        self.assertEqual(len(lde.edges), 24+9)
+        self.assertEqual(len(lde.id_vs_edge), 24+9)
+        self.assertTrue(
+            are_same_shapes(
+                make_compound(lde.lattice_edges),
+                make_partition(
+                    [self.lattice.lattice_cmpd], [], ShapeType.EDGE),
+                ShapeType.COMPOUND
+            )
+        )
+
+    def test_build_edge_id(self) -> None:
+        """
+        Method that tests the implementation of the function `build_edge_id`
+        declared in the `geom_extractor.py` module.
+        """
+        # Declare the edges to test, one for each type
+        sgmnt = make_edge(
+            make_vertex((0.0, 0.0, 0.0)), make_vertex((1.0, 0.0, 0.0))
+        )
+        arc_crcl = make_arc_edge(
+            make_vertex((0.0, 1.0, 0.0)),
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((1.0, 1.0, 0.0))
+        )
+        circle = make_circle(make_vertex((0.0, 0.0, 0.0)), None, 1.0)
+        # Strings to compare the resulting ID with
+        ref_sgmnt_id = "EDGE_SEGMENT_0_0_0_1_0_0"
+        ref_arc_crcl_id = "EDGE_ARC_CIRCLE_0_1_0_0_0_1_1_0_0_0_1_1_0"
+        ref_circle_id = "EDGE_CIRCLE_0_0_0_0_0_1_1"
+
+        # Get the edges' information and verify its correctness
+        sgmnt_id = build_edge_id(sgmnt)
+        arc_crcl_id = build_edge_id(arc_crcl)
+        circle_id = build_edge_id(circle)
+        self.assertIn(ref_sgmnt_id, sgmnt_id)
+        self.assertIn(ref_arc_crcl_id, arc_crcl_id)
+        self.assertIn(ref_circle_id, circle_id)
+
+        # Verify an exception is raised when providing a shape that is not
+        # an edge
+        with self.assertRaises(RuntimeError):
+            _ = build_edge_id(make_face([circle]))
+
+    def test_classify_lattice_edges(self) -> None:
+        """
+        Method that tests the implementation of the function
+        `classify_lattice_edges` declared in the `geom_extractor.py`
+        module.
+        """
+        # Declare the edges to use in the test, one for each type
+        sgmnt = make_edge(
+            make_vertex((0.0, 0.0, 0.0)), make_vertex((1.0, 0.0, 0.0))
+        )
+        arc_crcl = make_arc_edge(
+            make_vertex((0.0, 1.0, 0.0)),
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((1.0, 1.0, 0.0))
+        )
+        circle = make_circle(make_vertex((0.0, 0.0, 0.0)), None, 1.0)
+        # Reference dictionary of strings VS edges with which compare the
+        # dictionary resulting from the function call
+        ref_ids_edges = {
+            "EDGE_SEGMENT_0_0_0_1_0_0": sgmnt,
+            "EDGE_ARC_CIRCLE_0_1_0_0_0_1_1_0_0_0_1_1_0": arc_crcl,
+            "EDGE_CIRCLE_0_0_0_0_0_1_1": circle
+        }
+
+        # Build the classificaton of the edges
+        ids_edges = classify_lattice_edges([sgmnt, arc_crcl, circle])
+
+        # Verify the correct classification information is present and that
+        # the edges' names are set
+        for ref_id_edge, id_edge in zip(ref_ids_edges, ids_edges):
+            self.assertEqual(ref_id_edge, id_edge)
+            self.assertTrue(
+                are_same_shapes(
+                    ref_ids_edges[ref_id_edge],
+                    ids_edges[id_edge],
+                    ShapeType.EDGE
+                )
+            )
+
+        # Verify an exception is raised if any of the elements in the list
+        # is not among the allowed edges' types
+        with self.assertRaises(RuntimeError):
+            _ = classify_lattice_edges([make_face(circle)])

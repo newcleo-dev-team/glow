@@ -564,15 +564,15 @@ def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     Parameters
     ----------
     point1  : Any
-        One of the arc construction point
+        The vertex object being the arc's center
     point2  : Any
-        One of the arc construction point
+        The vertex object being the arc's start point
     point3  : Any
-        One of the arc construction point
+        The vertex object being the arc's end point
 
     Returns
     -------
-    The arc edge built on the given three construction points.
+    The arc edge built from the given three construction points.
     """
     return geompy.MakeArcCenter(point1, point2, point3, False)
 
