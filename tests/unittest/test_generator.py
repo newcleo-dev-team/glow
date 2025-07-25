@@ -232,7 +232,9 @@ class TestGeneratorFunctions(unittest.TestCase):
         tdt_tran.boundaries = self.boundaries
         tdt_tran.type_geo = LatticeGeometryType.RECTANGLE_TRAN
 
+        # Declare a buffer where the text is written to
         buffer = io.StringIO()
+        # Call the function and retrieve the text from the buffer
         _write_boundary_conditions(buffer, tdt_tran)
         output = buffer.getvalue()
         # Verify the boundaries section contains the expected data for the

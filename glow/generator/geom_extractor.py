@@ -440,6 +440,11 @@ class Boundary:
             self.angle = math.degrees(math.atan2(-dy, -dx))
             x1 = x2
             y1 = y2
+        # If the angle is close to zero, it can happen that it is written
+        # with a minus sign which is unnecessary; hence, it is set to 0.0
+        # explicitly
+        if math.isclose(self.angle, 0.0):
+            self.angle = 0.0
 
         # Initialize the border axes to the edge start point
         self.tx = x1
