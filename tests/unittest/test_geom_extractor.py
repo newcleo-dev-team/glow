@@ -13,7 +13,7 @@ from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     get_kind_of_shape, is_point_inside_shape, make_arc_edge, make_circle, \
     make_compound, make_edge, make_face, make_partition, make_vertex, \
     set_shape_name
-from glow.support.types import NAME_EDGE_TYPE, CellType, EdgeType, \
+from glow.support.types import EDGE_NAME_VS_TYPE, CellType, EdgeType, \
     LatticeGeometryType, SymmetryType
 from glow.support.utility import are_same_shapes
 from support_funcs import BoundaryData, build_boundary_data
@@ -467,7 +467,7 @@ class TestEdge(unittest.TestCase):
         edge = Edge.__new__(Edge)
         # Set the attributes so to replicate an edge segment
         edge.data = get_kind_of_shape(sgmnt)
-        edge.kind = NAME_EDGE_TYPE[str(edge.data[0])][0]
+        edge.kind = EDGE_NAME_VS_TYPE[str(edge.data[0])][0]
         edge.edge = sgmnt
         edge.right = None
         edge.left = None
@@ -482,7 +482,7 @@ class TestEdge(unittest.TestCase):
         edge = Edge.__new__(Edge)
         # Set the attributes so to replicate an edge circle
         edge.data = get_kind_of_shape(circle)
-        edge.kind = NAME_EDGE_TYPE[str(edge.data[0])][0]
+        edge.kind = EDGE_NAME_VS_TYPE[str(edge.data[0])][0]
         edge.edge = circle
         edge.right = None
         edge.left = None

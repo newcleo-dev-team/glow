@@ -671,31 +671,22 @@ class TestGeomExtractorFunctions(unittest.TestCase):
     """
     Test case for verifying the correct implementation of the functions
     declared in the `geom_extractor.py` module.
-
-    Attributes
-    ----------
     """
-    def setUp(self):
-        """
-        Method that sets up the test environment for the functions declared
-        in the `geom_extractor.py` module.
-        It initializes the attributes common to all the tests.
-        """
-        cell = RectCell()
-        cell.add_circle(0.25)
-        cell.set_properties({PropertyType.MATERIAL: ['MAT1', 'MAT2']})
-        self.lattice: Lattice = Lattice([cell])
-        self.lattice.add_ring_of_cells(cell, 1)
-        self.lattice.build_regions(GeometryType.TECHNOLOGICAL)
-
     def test_analyse_lattice(self) -> None:
         """
         Method that tests the implementation of the function `analyse_lattice`
         declared in the `geom_extractor.py` module.
         """
+        cell = RectCell()
+        cell.add_circle(0.25)
+        cell.set_properties({PropertyType.MATERIAL: ['MAT1', 'MAT2']})
+        lattice: Lattice = Lattice([cell])
+        lattice.add_ring_of_cells(cell, 1)
+        lattice.build_regions(GeometryType.TECHNOLOGICAL)
+
         # Call the function extracting the geometric data from the lattice
         lde = analyse_lattice(
-            self.lattice, GeometryType.SECTORIZED, PropertyType.MATERIAL)
+            lattice, GeometryType.SECTORIZED, PropertyType.MATERIAL)
 
         # Verify the 'LatticeDataExtractor' contains the needed information
         self.assertIsInstance(lde, LatticeDataExtractor)
@@ -708,7 +699,7 @@ class TestGeomExtractorFunctions(unittest.TestCase):
             are_same_shapes(
                 make_compound(lde.lattice_edges),
                 make_partition(
-                    [self.lattice.lattice_cmpd], [], ShapeType.EDGE),
+                    [lattice.lattice_cmpd], [], ShapeType.EDGE),
                 ShapeType.COMPOUND
             )
         )

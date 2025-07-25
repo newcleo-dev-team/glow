@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Self
 
-from glow.support.types import NAME_EDGE_TYPE, BoundaryType, CellType, \
+from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, CellType, \
     EdgeType, GeometryType, LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.support.utility import build_compound_borders, \
@@ -104,12 +104,19 @@ class Edge():
     The identification of the left/right faces is performed by building
     a point on the edge's normal so that it is sligtly on the edge left.
 
+    Parameters
+    ----------
+    edge : Any
+        The GEOM object of type EDGE representing an edge.
+    faces : Tuple[Face, ...]
+        Providing the `Face` objects the edge belongs to.
+
     Attributes
     ----------
     no : int
         The edge number extracted from the GEOM edge object name.
     edge : Any
-        A GEOM object of type EDGE representing an edge
+        A GEOM object of type EDGE representing an edge.
     data : Any
         Characteristic data of the given GEOM edge object.
     kind : str
@@ -124,7 +131,7 @@ class Edge():
         of the edge, or `None` if the edge does not have any face on its
         left.
     """
-    def __init__(self, edge: Any, *faces: List[Face]):
+    def __init__(self, edge: Any, *faces: Face):
         # Store all the information of the given GEOM edge object
         self.data: List[Any] = get_kind_of_shape(edge)
         try:
@@ -139,7 +146,7 @@ class Edge():
         # Store the edge object
         self.edge: Any  = edge
         # Get the type of edge as a string
-        self.kind: EdgeType = NAME_EDGE_TYPE[str(self.data[0])][0]
+        self.kind: EdgeType = EDGE_NAME_VS_TYPE[str(self.data[0])][0]
         # Initialize to 'None' both the right and the left 'Face' objects
         self.right: Face | None = None
         self.left: Face | None = None

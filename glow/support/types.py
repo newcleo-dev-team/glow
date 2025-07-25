@@ -198,9 +198,10 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
         SymmetryType.FULL : [
             LatticeGeometryType.ISOTROPIC, LatticeGeometryType.HEXAGON_TRAN],
         SymmetryType.THIRD : [
-            LatticeGeometryType.SYMMETRIES_TWO, LatticeGeometryType.R120],
+            LatticeGeometryType.ROTATION, LatticeGeometryType.R120],
         SymmetryType.SIXTH : [
             LatticeGeometryType.SYMMETRIES_TWO,
+            LatticeGeometryType.ROTATION,
             LatticeGeometryType.SA60,
             LatticeGeometryType.RA60],
         SymmetryType.TWELFTH : [
@@ -225,7 +226,7 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
 
 # Dictionary of edges' type name VS a tuple containing the corresponding
 # attribute of the 'EdgeType' enumeration and a descriptive string
-NAME_EDGE_TYPE : Dict[str, Tuple[EdgeType, str]] = {
+EDGE_NAME_VS_TYPE : Dict[str, Tuple[EdgeType, str]] = {
     "SEGMENT"     : (EdgeType.SEGMENT, "line segment"),
     "CIRCLE"      : (EdgeType.CIRCLE, "circle"),
     "ARC_CIRCLE"  : (EdgeType.ARC_CIRCLE, "circular arc")
