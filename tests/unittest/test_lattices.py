@@ -1175,6 +1175,7 @@ class TestLattice(unittest.TestCase):
                     get_point_coordinates(self.lattice.lattice_center),
                     get_point_coordinates(c.figure.o)) for c in cells)
             )
+            self.assertTrue(self.lattice.is_update_needed)
         else:
             lx = 0.0
             ly = 0.0
@@ -1183,6 +1184,7 @@ class TestLattice(unittest.TestCase):
             self.assertIsNone(self.lattice.cells_type)
             self.assertIsNone(self.lattice.cells_rot)
             self.assertEqual(self.lattice.distance, 0.0)
+            self.assertFalse(self.lattice.is_update_needed)
 
         self.assertEqual(len(self.lattice.lattice_cells), len(cells))
         self.assertEqual(len(self.lattice.layers[0]), len(cells))
@@ -1196,9 +1198,8 @@ class TestLattice(unittest.TestCase):
         self.assertEqual(len(self.lattice.box_layers), len(box_layers))
         self.assertIsNone(self.lattice.lattice_symm)
         self.assertEqual(len(self.lattice.regions), 0)
-        self.assertEqual(self.lattice.displayed_geom,
-                         GeometryType.TECHNOLOGICAL)
-        self.assertFalse(self.lattice.is_update_needed)
+        self.assertEqual(
+            self.lattice.displayed_geom, GeometryType.TECHNOLOGICAL)
 
         if box_layers:
             self.assertIsNotNone(self.lattice.lattice_box)

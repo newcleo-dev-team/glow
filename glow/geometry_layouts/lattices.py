@@ -2341,6 +2341,10 @@ class Lattice():
         for cell in cells:
             self.__evaluate_no_rings(get_point_coordinates(cell.figure.o))
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
+
+
 def get_compound_from_geometry(
         geo_type: GeometryType, lattice_cells: List[Cell]) -> Any:
     """
