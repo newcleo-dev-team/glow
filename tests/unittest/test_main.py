@@ -6,9 +6,42 @@ from pathlib import Path
 
 from glow.geometry_layouts.cells import RectCell
 from glow.geometry_layouts.lattices import Lattice
-from glow.main import analyse_and_generate_tdt
+from glow.main import TdtSetup, analyse_and_generate_tdt
 from glow.support.types import EDGE_NAME_VS_TYPE, EdgeType, GeometryType, \
     LatticeGeometryType, PropertyType
+
+
+class TestTdtSetup(unittest.TestCase):
+    """
+    Test case for verifying the correct implementation of the `TdtSetup`
+    dataclass. In particular, the logic that stores the value of the `albedo`
+    attribute is tested.
+    """
+    def test_init_valid_albedo(self):
+        """
+        Method that tests that a valid value for the albedo is accepted.
+        """
+        # Test lower/upper bounds
+        self.assertEqual(TdtSetup(albedo=0.0).albedo, 0.0)
+        self.assertEqual(TdtSetup(albedo=1.0).albedo, 1.0)
+        # Test a value in the validity range
+        self.assertEqual(TdtSetup(albedo=0.5).albedo, 0.5)
+        # Test when None is provided or the default value is kept
+        self.assertIsNone(TdtSetup(albedo=None).albedo)
+        self.assertIsNone(TdtSetup().albedo)
+        # Test values very close to bounds
+        self.assertEqual(TdtSetup(albedo=1e-12).albedo, 1e-12)
+        self.assertEqual(TdtSetup(albedo=1.0 - 1e-12).albedo, 1.0 - 1e-12)
+
+    def test_init_invalid_albedo(self):
+        """
+        Method that tests that a invalid value for the albedo raises an
+        exception.
+        """
+        with self.assertRaises(RuntimeError):
+            TdtSetup(albedo=-0.1)
+        with self.assertRaises(RuntimeError):
+            TdtSetup(albedo=1.1)
 
 
 class TestMainFunction(unittest.TestCase):
@@ -31,6 +64,9 @@ class TestMainFunction(unittest.TestCase):
     prop_type : PropertyType
         The type of property assigned to the lattice's regions, as element
         of the `PropertyType` enumeration.
+    format : str
+        A string indicating the format with which the geometric data about
+        the edges and the BCs is written to file.
     """
     def setUp(self):
         """
@@ -45,6 +81,7 @@ class TestMainFunction(unittest.TestCase):
         self.geom_type: GeometryType = GeometryType.TECHNOLOGICAL
         self.prop_type: PropertyType = PropertyType.MATERIAL
         self.lattice.build_regions(self.geom_type)
+        self.format: str = f"{{:.{7}E}}"
 
     def tearDown(self):
         """
@@ -62,10 +99,13 @@ class TestMainFunction(unittest.TestCase):
         module.
         """
         # Call the function to test
-        analyse_and_generate_tdt(lattice=self.lattice,
-                                 filename=self.file_name.split('.')[0],
-                                 geom_type=self.geom_type,
-                                 property_type=self.prop_type)
+        analyse_and_generate_tdt(
+            lattice=self.lattice,
+            filename=self.file_name.split('.')[0],
+            tdt_config=TdtSetup(
+                self.geom_type, self.prop_type, 0.0
+            )
+        )
 
         # Verify that the output TDT file has been generated
         self.assertTrue(os.path.exists(self.file_name))
@@ -104,12 +144,16 @@ class TestMainFunction(unittest.TestCase):
             (1.0, 0.0, 90.0),
         ]
         self.assertIn(f"  0, {len(boundaries)}, 0", content)
-        self.assertIn("* albedo\n  1.0", content) # FIXME have attribute
+        self.assertIn("* albedo\n  0.0", content)
         for i, bc in enumerate(boundaries):
             self.assertIn("* type  number of elements\n  2, 1", content)
             self.assertIn(f"*   elements\n{i+1}", content)
             self.assertIn("* tx, ty, angle", content)
-            self.assertIn(f"{bc[0]:6f} {bc[1]:6f} {bc[2]:6f}", content)
+            self.assertIn(
+                f"{self.format.format(bc[0])} {self.format.format(bc[1])}" + \
+                f" {self.format.format(bc[2])}",
+                content
+            )
 
     def __assess_edges_section(self, content) -> None:
         """
@@ -134,7 +178,10 @@ class TestMainFunction(unittest.TestCase):
                 f"* ELEM  {i+1}  {EDGE_NAME_VS_TYPE['SEGMENT'][1]}", content)
             self.assertIn(f" {EdgeType.SEGMENT.value}, 0, {1}", content)
             self.assertIn(
-                f"  {edge[0]:6f}, {edge[1]:6f}, {edge[2]:6f}, {edge[3]:6f}",
+                f"  {self.format.format(edge[0])}, " + \
+                f"{self.format.format(edge[1])}, " + \
+                f"{self.format.format(edge[2])}, " + \
+                f"{self.format.format(edge[3])}",
                 content)
 
     def __assess_header_section(self, content) -> None:

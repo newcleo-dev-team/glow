@@ -88,6 +88,7 @@ class TestTdtData(unittest.TestCase):
             boundaries=self.boundaries,
             type_geo=self.type_geo,
             type_sym=self.symmetry_type,
+            albedo=0.0,
             impressions=(1, 1),
             precisions=(1e-6, 1e-6)
         )
@@ -98,6 +99,7 @@ class TestTdtData(unittest.TestCase):
         self.assertEqual(tdt.impressions, (1, 1))
         self.assertEqual(tdt.precisions, (1e-6, 1e-6))
         self.assertEqual(tdt.nb_folds, 0)
+        self.assertEqual(tdt.albedo, 0.0)
         for te, e in zip(tdt.edges, self.edges):
             self.assertEqual(te, e)
         for tb, b in zip(tdt.boundaries, self.boundaries):
@@ -123,6 +125,84 @@ class TestTdtData(unittest.TestCase):
             precisions=(1e-6, 1e-6)
         )
         self.assertEqual(tdt.nb_folds, 4)
+
+    def test_init_with_albedo(self) -> None:
+        """
+        Method that tests the initialization of the `TdtData` class with
+        different values of the `albedo` attribute and of the type of
+        geometry of the lattice.
+        """
+        # Instantiate the dataclass with an albedo value not set (i.e. None)
+        # and an ISOTROPIC type of geometry. The albedo is automatically set
+        # to 1.0
+        tdt = TdtData(
+            filename=self.file_name + ".dat",
+            edges=self.edges,
+            faces=[self.ref_face],
+            boundaries=self.boundaries,
+            type_geo=LatticeGeometryType.ISOTROPIC,
+            type_sym=SymmetryType.FULL,
+            impressions=(1, 1),
+            precisions=(1e-6, 1e-6)
+        )
+        self.assertEqual(tdt.albedo, 1.0)
+
+        # Instantiate the dataclass with the albedo set to a value and an
+        # ISOTROPIC type of geometry. The albedo is set to the given value
+        tdt = TdtData(
+            filename=self.file_name + ".dat",
+            edges=self.edges,
+            faces=[self.ref_face],
+            boundaries=self.boundaries,
+            type_geo=LatticeGeometryType.ISOTROPIC,
+            type_sym=SymmetryType.FULL,
+            albedo=0.5,
+            impressions=(1, 1),
+            precisions=(1e-6, 1e-6)
+        )
+        self.assertEqual(tdt.albedo, 0.5)
+
+        # Instantiate the dataclass with the albedo set to a value and a type
+        # of geometry different from ISOTROPIC. An exception is raised.
+        with self.assertRaises(RuntimeError):
+            tdt = TdtData(
+                filename=self.file_name + ".dat",
+                edges=self.edges,
+                faces=[self.ref_face],
+                boundaries=self.boundaries,
+                type_geo=LatticeGeometryType.RECTANGLE_TRAN,
+                type_sym=SymmetryType.FULL,
+                albedo=0.5,
+                impressions=(1, 1),
+                precisions=(1e-6, 1e-6)
+            )
+
+        # Instantiate the dataclass with the albedo set to 0.0 or None and a
+        # type of geometry different from ISOTROPIC. The albedo is set to 0.0
+        # in both cases.
+        tdt = TdtData(
+            filename=self.file_name + ".dat",
+            edges=self.edges,
+            faces=[self.ref_face],
+            boundaries=self.boundaries,
+            type_geo=LatticeGeometryType.RECTANGLE_TRAN,
+            type_sym=SymmetryType.FULL,
+            albedo=0.0,
+            impressions=(1, 1),
+            precisions=(1e-6, 1e-6)
+        )
+        self.assertEqual(tdt.albedo, 0.0)
+        tdt = TdtData(
+            filename=self.file_name + ".dat",
+            edges=self.edges,
+            faces=[self.ref_face],
+            boundaries=self.boundaries,
+            type_geo=LatticeGeometryType.RECTANGLE_TRAN,
+            type_sym=SymmetryType.FULL,
+            impressions=(1, 1),
+            precisions=(1e-6, 1e-6)
+        )
+        self.assertEqual(tdt.albedo, 0.0)
 
     def test_build_properties_id(self) -> None:
         """
@@ -179,6 +259,9 @@ class TestGeneratorFunctions(unittest.TestCase):
     tdt : TdtData
         The `TdtData` object collecting all the characteristics of the
         geometry layout.
+    format : str
+        A string indicating the format with which the geometric data about
+        the edges and the BCs is written to file.
     """
     def setUp(self) -> None:
         """
@@ -217,9 +300,11 @@ class TestGeneratorFunctions(unittest.TestCase):
             boundaries=self.boundaries,
             type_geo=self.type_geo,
             type_sym=SymmetryType.FULL,
+            albedo=0.0,
             impressions=(1, 1),
             precisions=(1e-6, 1e-6)
         )
+        self.format: str = f"{{:.{7}E}}"
 
     def test_write_boundary_conditions(self) -> None:
         """
@@ -231,6 +316,7 @@ class TestGeneratorFunctions(unittest.TestCase):
         tdt_tran = TdtData.__new__(TdtData)
         tdt_tran.boundaries = self.boundaries
         tdt_tran.type_geo = LatticeGeometryType.RECTANGLE_TRAN
+        tdt_tran.albedo = 0.0
 
         # Declare a buffer where the text is written to
         buffer = io.StringIO()
@@ -246,6 +332,7 @@ class TestGeneratorFunctions(unittest.TestCase):
         tdt_iso = TdtData.__new__(TdtData)
         tdt_iso.boundaries = self.boundaries
         tdt_iso.type_geo = LatticeGeometryType.ISOTROPIC
+        tdt_iso.albedo = 1.0
 
         buffer_iso = io.StringIO()
         _write_boundary_conditions(buffer_iso, tdt_iso)
@@ -254,7 +341,7 @@ class TestGeneratorFunctions(unittest.TestCase):
             "* boundaries conditions: defaul nbbcda allsur", output_iso)
         self.assertIn("  0, 0, 0", output_iso)
         self.assertIn("* albedo", output_iso)
-        self.assertIn("  1.0", output_iso)
+        self.assertIn(f"  {tdt_iso.albedo}", output_iso)
         # Should not contain boundary details
         self.assertNotIn("* type  number of elements", output_iso)
 
@@ -265,6 +352,7 @@ class TestGeneratorFunctions(unittest.TestCase):
         refl_boundary.type = BoundaryType.REFL
         tdt_refl.boundaries = [refl_boundary]
         tdt_refl.type_geo = LatticeGeometryType.RECTANGLE_TRAN
+        tdt_refl.albedo = 0.0
 
         buffer_refl = io.StringIO()
         with self.assertRaises(RuntimeError):
@@ -340,8 +428,10 @@ class TestGeneratorFunctions(unittest.TestCase):
             self.assertIn(
                 f" {EdgeType.CIRCLE.value}, {edge.right.no}, 0", output)
             self.assertIn(
-                f"  {edge.data[1]:6f}, {edge.data[2]:6f}, " + \
-                f"{edge.data[7]:6f}, 0.0",
+                f"  {self.format.format(edge.data[1])}, " + \
+                f"{self.format.format(edge.data[2])}, " + \
+                f"{self.format.format(edge.data[7])}, " + \
+                f"{self.format.format(0.0)}",
                 output)
 
     def test_write_edges_arc_circle(self) -> None:
@@ -383,8 +473,10 @@ class TestGeneratorFunctions(unittest.TestCase):
             self.assertIn(
                 f" {EdgeType.ARC_CIRCLE.value}, {edge.right.no}, 0", output)
             self.assertIn(
-                f"  {edge.data[1]:6f}, {edge.data[2]:6f}, " + \
-                f"{edge.data[7]:6f}, {0.0:6f}, {90.0:6f}",
+                f"  {self.format.format(edge.data[1])}, " + \
+                f"{self.format.format(edge.data[2])}, " + \
+                f"{self.format.format(edge.data[7])}, " + \
+                f"{self.format.format(0.0)}, {self.format.format(90.0)}",
                 output)
 
     def test_write_header(self) -> None:
@@ -484,7 +576,7 @@ class TestGeneratorFunctions(unittest.TestCase):
         self.assertIn("* boundaries conditions: defaul nbbcda allsur", content)
         self.assertIn(f"  0, {len(tdt_data.boundaries)}, 0", content)
         self.assertIn("* albedo", content)
-        self.assertIn("  1.0", content) # FIXME have attribute
+        self.assertIn(f"  {tdt_data.albedo}", content)
         # Verify that each boundary is written with the correct data
         for bc in tdt_data.boundaries:
             self.assertIn("* type  number of elements", content)
@@ -494,7 +586,12 @@ class TestGeneratorFunctions(unittest.TestCase):
             for edge_no in bc.edge_indxs:
                 self.assertIn(f"{edge_no}", content)
                 self.assertIn("* tx, ty, angle", content)
-                self.assertIn(f"{bc.tx:6f} {bc.ty:6f} {bc.angle:6f}", content)
+                self.assertIn(
+                    f"{self.format(bc.tx)} " + \
+                    f"{self.format.format(bc.ty)} " + \
+                    f"{self.format.format(bc.angle)}",
+                    content
+                )
 
     def __assess_header(self, tdt_data: TdtData, content: str) -> None:
         """
@@ -602,7 +699,8 @@ class TestGeneratorFunctions(unittest.TestCase):
             self.assertIn(
                 f" {EdgeType.SEGMENT.value}, 0, {edge.left.no}", content)
             self.assertIn(
-                f"  {edge.data[1]:6f}, {edge.data[2]:6f}, " + \
-                f"{(edge.data[4]-edge.data[1]):6f}, " + \
-                f"{(edge.data[5]-edge.data[2]):6f}",
+                f"  {self.format.format(edge.data[1])}, " + \
+                f"{self.format.format(edge.data[2])}, " + \
+                f"{self.format.format(edge.data[4]-edge.data[1])}, " + \
+                f"{self.format.format(edge.data[5]-edge.data[2])}",
                 content)

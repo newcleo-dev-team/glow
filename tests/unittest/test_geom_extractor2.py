@@ -18,6 +18,7 @@ from glow.geometry_layouts.lattices import Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     get_shape_name, make_arc_edge, make_circle, make_compound, make_edge, \
     make_face, make_partition, make_vertex, set_shape_name
+from glow.main import TdtSetup
 from glow.support.types import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes, build_contiguous_edges
@@ -686,7 +687,7 @@ class TestGeomExtractorFunctions(unittest.TestCase):
 
         # Call the function extracting the geometric data from the lattice
         lde = analyse_lattice(
-            lattice, GeometryType.SECTORIZED, PropertyType.MATERIAL)
+            lattice, TdtSetup(GeometryType.SECTORIZED, PropertyType.MATERIAL))
 
         # Verify the 'LatticeDataExtractor' contains the needed information
         self.assertIsInstance(lde, LatticeDataExtractor)
