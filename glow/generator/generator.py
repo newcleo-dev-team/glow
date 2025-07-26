@@ -32,6 +32,14 @@ TYPE_ELEM = {"SEGMENT"     : (Element.SEGMENT, "line segment"),
              "CIRCLE"      : (Element.CIRCLE, "circle"),
              "ARC_CIRCLE"  : (Element.ARC, "circular arc")}
 
+# Precision in terms of number of digits after the decimal
+PRECISION : int = 7
+
+# Format string for floating-point values in scientific notation with
+# defined precision
+FORMAT: str = f"{{:.{PRECISION}E}}"
+
+
 
 @dataclass
 class TdtData():
@@ -61,6 +69,9 @@ class TdtData():
                     associated with
     properties_id : List[int]
                     List of the IDs of the properties in the lattice
+    albedo        : float | None
+                    Identifying the value for the albedo applied to the
+                    lattice's BCs.
     """
     filename      : str = os.path.join(Path(__file__).resolve().parent.parent,
                                        "tdt_lattice.dat")
@@ -69,6 +80,7 @@ class TdtData():
     boundaries    : List[Boundary] = field(default_factory=list)
     type_geo      : LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
     type_sym      : SymmetryType = SymmetryType.FULL
+    albedo        : float | None = None
     impressions   : Tuple[int, int] = (0, 0)
     precisions    : Tuple[float, float] = (1e-5, 1e-5)
     properties    : List[str] = field(init=False)
@@ -86,6 +98,19 @@ class TdtData():
         self.nb_folds = 0
         if self.type_geo.value <= LatticeGeometryType.SYMMETRIES_TWO.value:
             self.nb_folds = self.type_sym.value
+        # Set the albedo for the lattice's BCs according to the type of
+        # geometry, i.e. by default is 1.0 if ISOTROPIC, 0.0 for the other
+        # types
+        if self.type_geo == LatticeGeometryType.ISOTROPIC:
+            self.albedo = 1.0 if self.albedo is None else self.albedo
+        else:
+            if self.albedo is not None and self.albedo > 0.0:
+                raise RuntimeError(
+                    f"A value of {self.albedo} for the albedo is not "
+                    f"compatible with the '{self.type_geo}' type of "
+                    "geometry.")
+            self.albedo = 0.0
+
         # Set the list of property names and IDs
         self.__build_properties_id()
 
@@ -256,14 +281,15 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             x1, y1, _, x2, y2, _ = edge.data[1:]
             # Write the info about the X-Y coordinates of the first point
             # and the X-Y distances between the segment vertices
-            file.write(f"  {x1:6f}, {y1:6f}, {(x2-x1):6f}, {(y2-y1):6f}\n")
+            file.write(f"  {FORMAT.format(x1)}, {FORMAT.format(y1)}, " + \
+                       f"{FORMAT.format(x2-x1)}, {FORMAT.format(y2-y1)}\n")
         elif type_indx == Element.CIRCLE:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R'
             xc, yc, _, _, _, _, R = edge.data[1:]
             # Write the info about the X-Y coordinates of the circle center,
-            # the radius and a 4th data (value '0.0') which is mandatory
-            # despite not being indicated in the APOLLO2 doc of 15/06/09
-            file.write(f"  {xc:6f}, {yc:6f}, {R:6f}, 0.0\n")
+            # the radius and a 4th data (value '0.0')
+            file.write(f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
+                       f"{FORMAT.format(R)}, {FORMAT.format(0.0)}\n")
         elif type_indx == Element.ARC:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R,
             #                           x1, y1, z1, x2, y2, z2'
@@ -279,8 +305,9 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             # Write the info about the X-Y coordinates of the arc circle
             # center, its radius, the angle of the first point of the arc
             # and the angle difference between the two arc points
-            file.write(f"  {xc:6f}, {yc:6f}, {R:6f}, {angle_1:6f}, "
-                       f"{delta_angle:6f}\n")
+            file.write(f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
+                       f"{FORMAT.format(R)}, {FORMAT.format(angle_1)}, " + \
+                       f"{FORMAT.format(delta_angle)}\n")
 
 def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
@@ -311,7 +338,7 @@ def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     # the albedo
     file.write(f"  {default_bc}, {non_default_bc_no}, 0\n")
     file.write("* albedo\n")
-    file.write(f"  {1.0:.1f}\n")
+    file.write(f"  {tdt_data.albedo:.1f}\n")
 
     # Nothing more to write if no specific geometry type is set
     if tdt_data.type_geo == LatticeGeometryType.ISOTROPIC:
@@ -335,7 +362,8 @@ def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
                 "module of DRAGON5.")
         # Write the X-Y coordinates of the border axes
         file.write("* tx, ty, angle\n")
-        file.write(f"  {bc.tx:6f} {bc.ty:6f} {bc.angle:6f}\n")
+        file.write(f"  {FORMAT.format(bc.tx)} {FORMAT.format(bc.ty)} " + \
+                   f"{FORMAT.format(bc.angle)}\n")
 
 
 def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
