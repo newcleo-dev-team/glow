@@ -32,6 +32,14 @@ TYPE_ELEM = {"SEGMENT"     : (Element.SEGMENT, "line segment"),
              "CIRCLE"      : (Element.CIRCLE, "circle"),
              "ARC_CIRCLE"  : (Element.ARC, "circular arc")}
 
+# Precision in terms of number of digits after the decimal
+PRECISION : int = 7
+
+# Format string for floating-point values in scientific notation with
+# defined precision
+FORMAT: str = f"{{:.{PRECISION}E}}"
+
+
 
 @dataclass
 class TdtData():
@@ -273,14 +281,15 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             x1, y1, _, x2, y2, _ = edge.data[1:]
             # Write the info about the X-Y coordinates of the first point
             # and the X-Y distances between the segment vertices
-            file.write(f"  {x1:6f}, {y1:6f}, {(x2-x1):6f}, {(y2-y1):6f}\n")
+            file.write(f"  {FORMAT.format(x1)}, {FORMAT.format(y1)}, " + \
+                       f"{FORMAT.format(x2-x1)}, {FORMAT.format(y2-y1)}\n")
         elif type_indx == Element.CIRCLE:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R'
             xc, yc, _, _, _, _, R = edge.data[1:]
             # Write the info about the X-Y coordinates of the circle center,
-            # the radius and a 4th data (value '0.0') which is mandatory
-            # despite not being indicated in the APOLLO2 doc of 15/06/09
-            file.write(f"  {xc:6f}, {yc:6f}, {R:6f}, 0.0\n")
+            # the radius and a 4th data (value '0.0')
+            file.write(f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
+                       f"{FORMAT.format(R)}, {FORMAT.format(0.0)}\n")
         elif type_indx == Element.ARC:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R,
             #                           x1, y1, z1, x2, y2, z2'
@@ -296,8 +305,9 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             # Write the info about the X-Y coordinates of the arc circle
             # center, its radius, the angle of the first point of the arc
             # and the angle difference between the two arc points
-            file.write(f"  {xc:6f}, {yc:6f}, {R:6f}, {angle_1:6f}, "
-                       f"{delta_angle:6f}\n")
+            file.write(f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
+                       f"{FORMAT.format(R)}, {FORMAT.format(angle_1)}, " + \
+                       f"{FORMAT.format(delta_angle)}\n")
 
 def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
@@ -352,7 +362,8 @@ def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
                 "module of DRAGON5.")
         # Write the X-Y coordinates of the border axes
         file.write("* tx, ty, angle\n")
-        file.write(f"  {bc.tx:6f} {bc.ty:6f} {bc.angle:6f}\n")
+        file.write(f"  {FORMAT.format(bc.tx)} {FORMAT.format(bc.ty)} " + \
+                   f"{FORMAT.format(bc.angle)}\n")
 
 
 def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
