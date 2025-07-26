@@ -61,6 +61,9 @@ class TdtData():
                     associated with
     properties_id : List[int]
                     List of the IDs of the properties in the lattice
+    albedo        : float | None
+                    Identifying the value for the albedo applied to the
+                    lattice's BCs.
     """
     filename      : str = os.path.join(Path(__file__).resolve().parent.parent,
                                        "tdt_lattice.dat")
@@ -69,6 +72,7 @@ class TdtData():
     boundaries    : List[Boundary] = field(default_factory=list)
     type_geo      : LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
     type_sym      : SymmetryType = SymmetryType.FULL
+    albedo        : float | None = None
     impressions   : Tuple[int, int] = (0, 0)
     precisions    : Tuple[float, float] = (1e-5, 1e-5)
     properties    : List[str] = field(init=False)
@@ -86,6 +90,19 @@ class TdtData():
         self.nb_folds = 0
         if self.type_geo.value <= LatticeGeometryType.SYMMETRIES_TWO.value:
             self.nb_folds = self.type_sym.value
+        # Set the albedo for the lattice's BCs according to the type of
+        # geometry, i.e. by default is 1.0 if ISOTROPIC, 0.0 for the other
+        # types
+        if self.type_geo == LatticeGeometryType.ISOTROPIC:
+            self.albedo = 1.0 if self.albedo is None else self.albedo
+        else:
+            if self.albedo is not None and self.albedo > 0.0:
+                raise RuntimeError(
+                    f"A value of {self.albedo} for the albedo is not "
+                    f"compatible with the '{self.type_geo}' type of "
+                    "geometry.")
+            self.albedo = 0.0
+
         # Set the list of property names and IDs
         self.__build_properties_id()
 
@@ -311,7 +328,7 @@ def _write_boundary_conditions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     # the albedo
     file.write(f"  {default_bc}, {non_default_bc_no}, 0\n")
     file.write("* albedo\n")
-    file.write(f"  {1.0:.1f}\n")
+    file.write(f"  {tdt_data.albedo:.1f}\n")
 
     # Nothing more to write if no specific geometry type is set
     if tdt_data.type_geo == LatticeGeometryType.ISOTROPIC:

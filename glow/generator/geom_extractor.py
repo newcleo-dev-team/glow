@@ -21,6 +21,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
     make_face, make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
     set_shape_name, update_salome_study
+from glow.main import TdtSetup
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -1025,8 +1026,7 @@ class LatticeDataExtractor():
 
 
 def analyse_lattice(lattice: Lattice,
-                    geom_type: GeometryType,
-                    property_type: PropertyType) -> LatticeDataExtractor:
+                    tdt_config: TdtSetup) -> LatticeDataExtractor:
     """
     Function that performs the lattice analysis in order to extract the
     needed information about the regions, and the associated properties,
@@ -1036,13 +1036,11 @@ def analyse_lattice(lattice: Lattice,
     Parameters
     ----------
     lattice : Lattice
-        The instance of the 'Lattice' class storing the geometrical data
-        about the lattice to analyse
-    geom_type : GeometryType = GeometryType.TECHNOLOGICAL
-        The type of geometry of the lattice cells to use in the analysis
-    property_type : PropertyType = PropertyType.MATERIAL
-        The type of property associated to the lattice regions to use in
-        the analysis
+        The instance of the `Lattice` class storing the geometrical data
+        about the lattice to analyse.
+    tdt_config : TdtSetup
+        Dataclass providing the settings for exporting the TDT representation
+        of the geometry layout of the lattice.
 
     Returns
     -------
@@ -1052,9 +1050,9 @@ def analyse_lattice(lattice: Lattice,
     """
     # Instantiate the class for extracting the geometric data from the lattice
     # according to the given type of geometry
-    data_extractor = LatticeDataExtractor(lattice, geom_type)
+    data_extractor = LatticeDataExtractor(lattice, tdt_config.geom_type)
     # Call its method for performing the analysis
-    data_extractor.build_faces(property_type)
+    data_extractor.build_faces(tdt_config.property_type)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()
     data_extractor.build_edges(edge_name_vs_faces)
     data_extractor.build_boundaries()
