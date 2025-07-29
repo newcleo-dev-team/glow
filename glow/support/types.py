@@ -210,7 +210,8 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
     CellType.RECT : {
         SymmetryType.FULL : [
             LatticeGeometryType.ISOTROPIC,
-            LatticeGeometryType.RECTANGLE_TRAN],
+            LatticeGeometryType.RECTANGLE_TRAN,
+            LatticeGeometryType.RECTANGLE_SYM],
         SymmetryType.HALF : [
             LatticeGeometryType.SYMMETRIES_TWO,
             LatticeGeometryType.RECTANGLE_SYM],
