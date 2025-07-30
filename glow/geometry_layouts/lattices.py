@@ -2171,8 +2171,7 @@ class Lattice():
                     continue
             # Search for the region among the cells (lattice's cells)
             for region in cell.tech_geom_props:
-                if (is_point_inside_shape(point, region) and
-                    are_same_shapes(shape, region, ShapeType.FACE)):
+                if is_point_inside_shape(point, region):
                     cell.tech_geom_props[region][property_type] = value
                     return
         # Raise an exception if no region has been found

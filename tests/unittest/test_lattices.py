@@ -484,7 +484,7 @@ class TestLattice(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.lattice.set_region_property(
                 *property_value,
-                make_face([make_circle(self.o, None, 0.1)])
+                make_face([make_circle(make_vertex((10, 10, 0)), None, 0.1)])
             )
         with self.assertRaises(RuntimeError):
             # Mock the displayed geometry is the sectorized one
