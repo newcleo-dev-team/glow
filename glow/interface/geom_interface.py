@@ -393,7 +393,7 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
     # lesser than the 1e-15 tolerance
     for i, info in enumerate(kind_of_shape):
         if isinstance(info, float):
-            if abs(info) < 1e-15:
+            if abs(info) < 1e-10:
                 kind_of_shape[i] = 0
     return kind_of_shape
 

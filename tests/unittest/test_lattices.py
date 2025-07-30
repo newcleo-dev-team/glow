@@ -528,7 +528,7 @@ class TestLattice(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.lattice.set_type_geo(LatticeGeometryType.RECTANGLE_TRAN)
         with self.assertRaises(RuntimeError):
-            self.lattice.set_type_geo(LatticeGeometryType.RECTANGLE_SYM)
+            self.lattice.set_type_geo(LatticeGeometryType.RECTANGLE_EIGHT)
         # Apply a symmetry
         self.lattice.apply_symmetry(SymmetryType.EIGHTH)
         typ_geo = self.lattice.type_geo

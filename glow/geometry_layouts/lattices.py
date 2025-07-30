@@ -1067,9 +1067,8 @@ class Lattice():
     def __assemble_layers(self) -> List[Cell]:
         """
         Method that assembles all the lattice layers made by list of cells
-        in a single compound. Each layer will cut all the layers below itself,
-        if any overlapping occurs. Lastly, the lattice box, if present, is
-        assembled with the whole compound.
+        in a single layer of cells. Each layer will cut all the layers below
+        itself, if any overlapping occurs.
         The method populate and returns a list of 'Cell' objects representing
         the cells currently present in the lattice after removal and cut
         operations due to layers overlapping.
@@ -1176,8 +1175,9 @@ class Lattice():
         sub_layer_cmpd = make_compound([cell.face for cell in sub_layer])
         # Return immediately if the two layers do not overlap
         if get_min_distance(layer_cmpd, sub_layer_cmpd) > 0.0 or \
-            not extract_sub_shapes(make_common(layer_cmpd, sub_layer_cmpd),
-                                  ShapeType.FACE):
+            not extract_sub_shapes(
+                make_compound([make_common(layer_cmpd, sub_layer_cmpd)]),
+                ShapeType.FACE):
             return
         print(f"The current layer overlaps the inferior one.")
 
@@ -1188,8 +1188,9 @@ class Lattice():
             # Continue with the next cell if the common operation between
             # the cell's face and the superior layer does not return any
             # face, meaning there is no overlapping
-            if not extract_sub_shapes(make_common(cell.face, layer_cmpd),
-                                      ShapeType.FACE):
+            if not extract_sub_shapes(
+                make_compound([make_common(cell.face, layer_cmpd)]),
+                ShapeType.FACE):
                 continue
             # Cut the cell face with the layer and check if the result has
             # any face; if not, it means the cell is completely overlapped,
@@ -1809,7 +1810,8 @@ class Lattice():
         self.layers.append([])
         # Loop through the ring indices starting from the current number of
         # rings of cells
-        for i_ring in range(self.rings_no+1, no_rings+1):
+        n0 = self.rings_no
+        for i_ring in range(n0+1, n0+no_rings+1):
             # Add a ring of cells at the current index
             self.add_ring_of_cells(cell, i_ring, len(self.layers) - 1)
         # Set the need to update the lattice geometry

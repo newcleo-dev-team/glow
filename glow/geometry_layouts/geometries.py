@@ -11,11 +11,11 @@ from glow.support.utility import check_shape_expected_types, \
     compute_point_by_reference
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, extract_sub_shapes, get_basic_properties, \
-    get_bounding_box, get_min_distance, get_point_coordinates, \
-    get_shape_name, make_arc_edge, make_cdg, make_circle, make_edge, \
-    make_face, make_partition, make_rotation, make_translation, make_vector, \
-    make_vector_from_points, make_vertex, make_vertex_on_curve, \
-    remove_from_study, update_salome_study
+    get_bounding_box, get_min_distance, get_object_from_id, \
+    get_point_coordinates, get_shape_name, make_arc_edge, make_cdg, \
+    make_circle, make_edge, make_face, make_partition, make_rotation, \
+    make_translation, make_vector, make_vector_from_points, make_vertex, \
+    make_vertex_on_curve, remove_from_study, update_salome_study
 
 
 class Surface(ABC):
@@ -200,7 +200,7 @@ class Surface(ABC):
         if self.name == "":
             self.name = get_shape_name(self.face)
         # Delete the face from the study if already present
-        if self.face_entry_id:
+        if self.face_entry_id and get_object_from_id(self.face_entry_id):
             remove_from_study(self.face_entry_id)
         # Add the surface to the current SALOME study
         self.face_entry_id = add_to_study(self.face, self.name)
