@@ -8,7 +8,7 @@ viewer.
 # TEST THE HEXAGONAL CELL
 # -----------------------
 from glow.geometry_layouts.cells import HexCell
-from glow.generator.support import GeometryType, PropertyType
+from glow.support.types import GeometryType, PropertyType
 
 
 hex_cell = HexCell(name="Hexagonal cell")

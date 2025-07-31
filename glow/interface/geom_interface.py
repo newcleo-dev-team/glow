@@ -70,7 +70,8 @@ NAME_VS_SHAPE_TYPE: Dict[str, ShapeType] = {
     'POLYGON': ShapeType.FACE,
     'ARC_CIRCLE': ShapeType.EDGE,
     'CIRCLE': ShapeType.EDGE,
-    'SEGMENT': ShapeType.EDGE
+    'SEGMENT': ShapeType.EDGE,
+    'DISK_CIRCLE': ShapeType.FACE
 }
 
 
@@ -123,7 +124,8 @@ def clear_view() -> None:
     Function that clears out any geometrical shape currently displayed in
     the SALOME 3D viewer.
     """
-    salome.sg.EraseAll()
+    if is_gui_available():
+        salome.sg.EraseAll()
 
 
 def display_shape(entry_id: str) -> None:
@@ -136,7 +138,8 @@ def display_shape(entry_id: str) -> None:
     id  : str
         The entry ID of the shape to display in the SALOME 3D viewer.
     """
-    salome.sg.Display(entry_id)
+    if is_gui_available():
+        salome.sg.Display(entry_id)
 
 
 def extract_sorted_sub_shapes(shape: Any,
@@ -200,7 +203,43 @@ def fuse_edges_in_wire(wire: Any) -> Any:
     return geompy.FuseCollinearEdgesWithinWire(wire, [])
 
 
-def get_basic_properties(shape: Any) -> Tuple:
+def get_angle_between_shapes(shape1: Any, shape2: Any) -> float:
+    """
+    Function that computes the angle in degrees between two EDGE-type shapes,
+    which must both be linear edges, i.e. their type name in SALOME is
+    `SEGMENT`.
+
+    Parameters
+    ----------
+    shape1 : Any
+        The first shape object, expected to be a linear edge
+    shape2 : Any
+        The second shape object, expected to be a linear edge
+
+    Returns
+    -------
+    float
+        The angle in degrees between the two segment-type shapes.
+
+    Raises
+    ------
+    RuntimeError
+        If either `shape1` or `shape2` is not of type `SEGMENT`.
+    """
+    # Get the specific type name of the two shapes
+    shape1_type = str(get_kind_of_shape(shape1)[0])
+    shape2_type = str(get_kind_of_shape(shape2)[0])
+    # Check if the given shapes are of the expected 'SEGMENT' type
+    if shape1_type != "SEGMENT" or shape2_type != "SEGMENT":
+        raise RuntimeError(
+            "Both shapes must be objects of type 'SEGMENT': however, shape1 "
+            f"is of type '{shape1_type}' and shape2 is of type "
+            f"'{shape2_type}'")
+    # Return the angle in degrees between the two EDGE-type shapes
+    return geompy.GetAngle(shape1, shape2)
+
+
+def get_basic_properties(shape: Any) -> List[float]:
     """
     Function that returns the sum of the lengths of all the wires, the
     area and volume of the given shape.
@@ -255,6 +294,34 @@ def get_closed_free_boundary(compound: Any) -> List[Any]:
         raise RuntimeError("No closed free boundaries could be extracted "
                            "from the given compound object")
     return closed
+
+
+def get_id_from_object(shape: Any) -> str:
+    """
+    Function that retrieves the unique SALOME ID associated with a given
+    shape object, if shown in the current SALOME study.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape object for which to retrieve the SALOME ID.
+
+    Returns
+    -------
+    str
+        The unique SALOME ID corresponding to the provided shape.
+
+    Raises
+    ------
+    RuntimeError
+        If the shape is not present in the current SALOME study.
+    """
+    id = salome.ObjectToID(shape)
+    if id is None:
+        raise RuntimeError(
+            f"The shape {get_shape_name(shape)} is not present in the "
+            "current SALOME study.")
+    return id
 
 
 def get_in_place(shape1: Any, shape2: Any) -> Any:
@@ -326,7 +393,7 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
     # lesser than the 1e-15 tolerance
     for i, info in enumerate(kind_of_shape):
         if isinstance(info, float):
-            if abs(info) < 1e-15:
+            if abs(info) < 1e-10:
                 kind_of_shape[i] = 0
     return kind_of_shape
 
@@ -476,6 +543,18 @@ def is_point_inside_shape(point: Any, shape: Any) -> bool:
     return geompy.AreCoordsInside(shape,
                                   list(get_point_coordinates(point)))[0]
 
+def is_gui_available() -> None:
+    """
+    Function that returns a boolean flag indicating whether the SALOME GUI
+    is available when running a script.
+
+    Returns
+    -------
+    bool
+        `True` if the SALOME GUI is available, `False` otherwise.
+    """
+    return salome.sg.hasDesktop()
+
 
 def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     """
@@ -485,15 +564,15 @@ def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     Parameters
     ----------
     point1  : Any
-        One of the arc construction point
+        The vertex object being the arc's center
     point2  : Any
-        One of the arc construction point
+        The vertex object being the arc's start point
     point3  : Any
-        One of the arc construction point
+        The vertex object being the arc's end point
 
     Returns
     -------
-    The arc edge built on the given three construction points.
+    The arc edge built from the given three construction points.
     """
     return geompy.MakeArcCenter(point1, point2, point3, False)
 
@@ -903,7 +982,7 @@ def update_salome_study() -> None:
     the study.
     """
     # Show everything on the SALOME application
-    if salome.sg.hasDesktop():
+    if is_gui_available():
         # Update the object browser with the objects added to the study
         salome.sg.updateObjBrowser()
         # Set the view to top

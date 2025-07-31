@@ -11,19 +11,19 @@ from typing import Any, Dict, List, Self, Tuple, Union
 
 from glow.geometry_layouts.geometries import GenericSurface, Surface, Circle, \
     Rectangle, Hexagon
-from glow.geometry_layouts.utility import build_compound_borders, \
-    update_relative_pos
+from glow.support.utility import are_same_shapes, build_compound_borders, \
+    compute_point_by_reference, generate_unique_random_colors, \
+    retrieve_selected_object
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
-    get_kind_of_shape, get_min_distance, get_object_from_id, \
+    get_bounding_box, get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_point_inside_shape, make_cdg, make_common, make_face, make_line, \
-    make_partition, make_rotation, make_translation, make_vector_from_points, \
-    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
-    make_vertex_on_lines_intersection, remove_from_study, set_color_face, \
-    update_salome_study
-from glow.generator.support import CellType, GeometryType, PropertyType, \
-    generate_unique_random_colors
+    get_shape_type, is_point_inside_shape, make_cdg, make_compound, make_cut, \
+    make_face, make_line, make_partition, make_rotation, make_translation, \
+    make_vector_from_points, make_vertex, make_vertex_inside_face, \
+    make_vertex_on_curve, make_vertex_on_lines_intersection, \
+    remove_from_study, set_color_face, update_salome_study
+from glow.support.types import CellType, GeometryType, PropertyType
 
 
 @dataclass
@@ -422,11 +422,13 @@ class Cell(ABC):
         """
         # Assemble the cell's figure with the cell's centered circles only
         centered_regions = extract_sub_shapes(
-            make_partition(
-                [self.figure.face] + [
-                    c.face for c in self.get_centered_circles()],
-                [],
-                ShapeType.FACE),
+            make_compound([
+                make_partition(
+                    [self.figure.face] + [
+                        c.face for c in self.get_centered_circles()],
+                    [],
+                    ShapeType.FACE)]
+            ),
             ShapeType.FACE
         )
         # Sort the regions according to the distance from the cell center
@@ -513,7 +515,7 @@ class Cell(ABC):
                 # entry region VS properties in the support dictionary
                 if is_point_inside_shape(pnt, zone):
                     # print("Assigning value", values)
-                    support_dict[region] = values
+                    support_dict[region] = deepcopy(values)
                     break
         # Update the given dictionary
         regions_dict.clear()
@@ -569,9 +571,6 @@ class Cell(ABC):
         # Rotate the cell geometrical elements around its central axis
         self.rotate_from_axis(angle, z_axis)
 
-        # Update the cell rotation
-        self.rotation += math.radians(angle)
-
     def rotate_from_axis(self, angle: float, axis: Any) -> None:
         """
         Method that rotates all the geometrical elements the cell is made of
@@ -620,6 +619,9 @@ class Cell(ABC):
             # Copy the just built dictionary back into the old one
             self.tech_geom_sect_opts = deepcopy(new_dict)
 
+        # Update the cell rotation
+        self.rotation += math.radians(angle)
+
     def translate(self, new_pos: Tuple[float, float, float]) -> Self:
         """
         Method that builds a copy of this class translated with respect to
@@ -663,7 +665,7 @@ class Cell(ABC):
         for tech_face, prop in cell.tech_geom_props.items():
             # Calculate the region new position so that it keeps its relative
             # position wrt the translated cell center
-            region_to_center = update_relative_pos(
+            region_to_center = compute_point_by_reference(
                 make_cdg(tech_face), self.figure.o, new_pos)
             # Build a translation vector between the region previous CDG and
             # its new position
@@ -1236,11 +1238,11 @@ class Cell(ABC):
                 # Set the region color in the viewer
                 set_color_face(region.face, region.color)
                 # Add the cell region to the study
-                region_id = add_to_study_in_father(
+                region.face_entry_id = add_to_study_in_father(
                     self.face, region.face, region.name)
                 # Display the region in the current view, if needed
                 if update_view:
-                    display_shape(region_id)
+                    display_shape(region.face_entry_id)
         except:
             # Show only the whole cell face before raising the caught exception
             display_shape(self.face_entry_id)
@@ -1319,35 +1321,42 @@ class Cell(ABC):
         study.
         """
         # Extract the geometrical object currently selected in the current
-        # SALOME study
-        shape = get_selected_object()
-        if not shape:
-            raise RuntimeError("Please, select a single region whose data to "
-                               "show.")
-        # Get the region that corresponds to the given shape
-        for region in self.regions:
-            if get_min_distance(region.inner_point, shape) < 1e-5:
-                # Print info about the region name and its properties
-                print(f"{region.name}:")
-                if not region.properties:
-                    print("   No associated properties.")
-                    return
-                for prop_type, value in region.properties.items():
-                    print(f"   {prop_type.name}: {value}")
+        # SALOME study, if any
+        shape = retrieve_selected_object(
+            "Please, select a single region whose data to show.")
+        # Get the region that corresponds to the given shape and print the
+        # corresponding data
+        print(get_region_info(shape, self.regions))
 
     def set_region_property(
-            self, property_type: PropertyType, value: str) -> None:
+            self,
+            property_type: PropertyType,
+            value: str,
+            region: Any | None = None) -> None:
         """
         Method that allows to set a value of a given type of property for
-        the cell region which is currently selected in the SALOME study.
+        the cell region, passed as input, or the one currently selected
+        in the SALOME study, if none is provided as input.
 
         Parameters
         ----------
         property_type : PropertyType
             The value of the 'PropertyType' enumeration indicating which
             type of property to assign to the selected region
-        value         : str
+        value : str
             The value of the property type to assign to the selected region
+        region : Any | None = None
+            The cell's region of the technological geometry whose property
+            to change. When not provided, the region currently selected is
+            considered.
+
+        Raises
+        ------
+        RuntimeError
+            - If the displayed geometry is not the `TECHNOLOGICAL` one.
+            - When no region, or more than one, is selected.
+            - If the indicated region cannot be found among the ones stored
+              in the properties dictionary.
         """
         # Check which cell geometry type is currently shown; if different
         # from the TECHNOLOGICAL one, raise an exception
@@ -1357,17 +1366,50 @@ class Cell(ABC):
                 "geometry. To set cell regions properties, show the '"
                 "TECHNOLOGICAL' geometry first.")
         # Extract the geometrical object currently selected in the current
-        # SALOME study
-        shape = get_selected_object()
-        if not shape:
-            raise RuntimeError("Please, select a single region to assign "
-                               "a property to.")
-        # Get the region that corresponds to the given shape
+        # SALOME study, if no one is provided as input
+        if region is None:
+            region = retrieve_selected_object(
+                "Please, select a single region to assign a property to.")
+        # Get the region that corresponds to the given shape and set the
+        # value for the indicated property
+        self.__set_region_property(region, property_type, value)
+
+    def __set_region_property(
+            self,
+            shape: Any,
+            property_type: PropertyType,
+            value: str) -> None:
+        """
+        Method that looks for the given region in the dictionary of cell's
+        regions vs properties and sets the value for the indicated property
+        type.
+
+        Parameters
+        ----------
+        shape : Any
+            The cell's region of the technological geometry whose property
+            to change.
+        property_type : PropertyType
+            Indicating the type of property the value associated to the
+            region needs to be changed.
+        value : str
+            The value of the property type to set.
+
+        Raises
+        ------
+        RuntimeError
+            If no region can be found among the ones stored in the properties
+            dictionary.
+        """
         for region in self.tech_geom_props:
-            if get_min_distance(make_vertex_inside_face(region), shape) < 1e-5:
-                # Either update or create an entry to the region dictionary
+            if are_same_shapes(region, shape, ShapeType.FACE):
+                # Either update or create an entry in the region dictionary
                 # of properties
-                self.tech_geom_props[region] = {property_type: value}
+                self.tech_geom_props[region][property_type] = value
+                return
+        else:
+            raise RuntimeError("No region could be found among the ones "
+                               "stored in the properties dictionary.")
 
     def update_geometry(self) -> None:
         """
@@ -1407,11 +1449,13 @@ class Cell(ABC):
                 # Store the cell's dictionaries
                 props = deepcopy(self.tech_geom_props)
                 sec_opts = deepcopy(self.tech_geom_sect_opts)
+                sect_face = deepcopy(self.sectorized_face)
                 # Re-initialize the cell geometry and its dictionaries
                 self.__initialize_cell()
                 # Update the cell face with the face built on the given shape
                 # borders
                 self.face = make_face(build_compound_borders(shape))
+                self.sectorized_face = sect_face
                 # Update the cell face with the edges found in the given shape
                 self.__update_cell_with_edges(shape)
                 # Re-build the cell's dictionaries
@@ -1465,6 +1509,8 @@ class Cell(ABC):
         self.face = face
         # Clear the previously stored 'Circle' objects
         self.inner_circles = []
+        # Set the attribute storing the cell's sectorized face to None
+        self.sectorized_face = None
 
     def __initialize_region_dicts(self) -> None:
         """
@@ -1504,10 +1550,19 @@ class Cell(ABC):
             The geometric object to update the cell with
         """
         # Loop through all the edge objects of the cell to identify
-        # the presence of any added edges
+        # the presence of any added edges, excluding the ones of the
+        # borders of the shape
         arcs_data = []
         edges_to_add = []
-        for edge in extract_sub_shapes(shape, ShapeType.EDGE):
+        borders = build_compound_borders(shape)
+        edges_to_check = []
+        for e in extract_sub_shapes(shape, ShapeType.EDGE):
+            for b in borders:
+                if are_same_shapes(e, b, ShapeType.EDGE):
+                    break
+            else:
+                edges_to_check.append(e)
+        for edge in edges_to_check:
             # Get the information of the given edge object
             data = get_kind_of_shape(edge)
             if str(data[0]) == 'CIRCLE':
@@ -1809,8 +1864,8 @@ class HexCell(Cell):
                   dimensions
         """
         if radius > self.apothem:
-            raise ValueError("The circle cannot be added to the cell as its "
-                             "dimensions exceedes the one of the cell")
+            raise RuntimeError("The circle cannot be added to the cell as "
+                               "its dimensions exceedes the one of the cell")
 
     def sectorize(
         self, sectors_no: List[int], angles: List[float], **kwargs) -> None:
@@ -1916,13 +1971,18 @@ class GenericCell(Cell):
         # Call the superclass constructor
         super().__init__(GenericSurface(self.face), get_shape_name(self.face))
 
-    def _check_radius_vs_cell_dim(self):
+    def _check_radius_vs_cell_dim(self, radius: float):
         """
         Method for assessing if the circle, whose radius is given as input,
         can be added to the cell. No implementation is needed for this method
         as the cell surface is generic.
         """
-        return
+        # Get the min-max dimensions of the cell
+        x_min, x_max, y_min, y_max = get_bounding_box(self.face)
+        if radius > (x_max - x_min)/2 and radius > (y_max - y_min)/2:
+            raise RuntimeError(
+                "The circle cannot be added to the cell as its dimensions "
+                "exceede those of the cell.")
 
     def _initialize_specific_cell(self):
         """
@@ -1933,8 +1993,7 @@ class GenericCell(Cell):
 
     def sectorize(self,
                   sectors_no: List[int],
-                  angles: List[float],
-                  **kwargs) -> None:
+                  angles: List[float]) -> None:
         """
         Method that subdivides the cell into sectors. Given the number of
         sectors for each cell zone and the values of the angles to start
@@ -1951,10 +2010,87 @@ class GenericCell(Cell):
         angles      : List[float]
             List of angles (in degree) the sectorization should start from
             for each cell zone coming from the technological geometry
-        kwargs      : Any
-            Additional parameters for the sectorization.
         """
-        return super().sectorize(sectors_no, angles, **kwargs)
+        self._sectorize_cell(sectors_no, angles, False)
+
+
+def check_cell_circle_are_cut(cell: Cell) -> bool:
+    """
+    Function that verifies if any of the circular regions of the given `Cell`
+    object have been cut as a result of a modification to the cell's geometry
+    layout.
+    A cut operation between the compound made by the cell's centered circular
+    regions and the current state of the cell's face determines if any
+    circular region has been cut. If the result does not have any face object,
+    it means the circular regions are still a whole.
+
+    Parameters
+    ----------
+    cell : Cell
+        The `Cell` object to check if its circular regions have been cut in
+        the cell's geometry layout.
+
+    Returns
+    -------
+    bool
+        `True`, if the cell's circular regions have been cut, `False`
+        otherwise.
+    """
+    # Go to the next cell if no inner circles are present
+    if not cell.inner_circles:
+        return False
+    # Extract the compound made by the union of the cell-centered
+    # circular regions
+    circ_regions = make_partition(
+        [circle.face for circle in cell.get_centered_circles()],
+        [],
+        ShapeType.FACE)
+    # Cut the compound made from the circular regions with the cell
+    # face. If this operation does not produce any face object, it
+    # means that the circular regions of the cell are not cut.
+    if not extract_sub_shapes(
+        make_compound([make_cut(circ_regions, cell.face)]),
+        ShapeType.FACE):
+        return False
+    return True
+
+
+def get_region_info(shape: Any, regions: List[Region]) -> str:
+    """
+    Function that, given the shape, retrieves the name of the corresponding
+    `Region` object and the values of its associated properties, if any is
+    present.
+
+    Parameters
+    ----------
+    shape : Any
+        The geometrical shape to retrieve info about.
+    regions : List[Region]
+        A list of `Region` object to search the shape among.
+
+    Returns
+    -------
+    str
+        A descriptive string indicating the name of the found region and
+        its associated properties.
+
+    Raises
+    ------
+    RuntimeError
+        If the provided shape does not have any corresponding `Region`
+        object.
+    """
+    # Get the region that corresponds to the given shape
+    for region in regions:
+        if are_same_shapes(region.face, shape, ShapeType.FACE):
+            # Build the info about the region name and its properties
+            if not region.properties:
+                return region.name + "\n   No associated properties."
+            for prop_type, value in region.properties.items():
+                return region.name + f"\n   {prop_type.name}: {value}"
+    else:
+        raise RuntimeError("The indicated region could be found among "
+                            "the cell's ones.")
 
 
 if __name__ == "__main__":

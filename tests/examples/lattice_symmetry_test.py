@@ -27,7 +27,7 @@ import sys
 import time
 from glow.geometry_layouts.cells import HexCell
 from glow.geometry_layouts.lattices import Lattice
-from glow.generator.support import PropertyType, SymmetryType
+from glow.support.types import PropertyType, SymmetryType
 from glow.main import analyse_and_generate_tdt
 
 # Get the initial time

@@ -14,7 +14,8 @@ import sys
 # Import the GLOW geometry classes
 from glow.geometry_layouts.cells import HexCell
 from glow.geometry_layouts.lattices import Lattice
-from glow.generator.support import PropertyType, SymmetryType
+from glow.interface.geom_interface import *
+from glow.support.types import *
 from glow.main import analyse_and_generate_tdt
 
 # ----------------------------------------------------------------------

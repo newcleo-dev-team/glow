@@ -3,24 +3,24 @@ Module containing classes that deals with the extraction of the geometric
 information from the lattice built in SALOME. The functionalities in this
 module serve for preparing all the data for the output TDT file generation.
 """
-
-from copy import deepcopy
 import math
 
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple, Union, Self
+from typing import Any, Dict, List, Tuple, Self
 
-from glow.generator.support import BoundaryType, CellType, GeometryType, \
-    LatticeGeometryType, PropertyType, SymmetryType
+from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, CellType, \
+    EdgeType, GeometryType, LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
-from glow.geometry_layouts.utility import build_compound_borders, \
-    get_id_from_name, translate_wrt_reference
-from glow.interface.geom_interface import ShapeType, add_to_study, \
+from glow.support.utility import build_compound_borders, \
+    check_shape_expected_types, get_id_from_name, get_id_from_shape, \
+    translate_wrt_reference
+from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
-    make_face, make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
-    set_shape_name, update_salome_study
+    make_face, make_partition, make_vertex, make_vertex_inside_face, \
+    make_vertex_on_curve, set_shape_name
 from glow.main import TdtSetup
 
 
@@ -67,11 +67,19 @@ class Face():
         the attribute that allows to order instances of this class on the
         basis of the 'no' attribute is set as well.
         """
-        # Extract the face number from the corresponding GEOM name attribute
-        self.no = int(get_shape_name(self.face).split('_')[1])
-        # Build a point within the face
+        # Build a point inside the face
         self.inner_point = get_point_coordinates(
             make_vertex_inside_face(self.face))
+        try:
+            # Check the type of the received face is correct
+            check_shape_expected_types(self.face, [ShapeType.FACE])
+            # Extract the face number from the corresponding GEOM name
+            # attribute
+            self.no = get_id_from_shape(self.face)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Error with 'Face' whose inner point is: {self.inner_point}"
+            ) from e
         # Define the attribute for sorting instances of this class
         self.sort_index = self.no
         # Extract the edges and associate an ID to each
@@ -81,7 +89,6 @@ class Face():
             # characteristics  --> two edges share the same entry
             edge_id = build_edge_id(edge)
             self.edge_vs_id[edge] = edge_id
-            # print(f"Subface no. {self.no}, edge ID: {id}")
 
     def __str__(self):
         return f"Region {self.no}, name={get_shape_name(self.face)}, " + \
@@ -92,57 +99,66 @@ class Edge():
     """
     Class that provides a data representation for an edge of a face in
     the lattice.
+    It provides an global index allowing to uniquely identify the edge,
+    and two `Face` attributes, allowing to identify the face on the left
+    and right of the edge.
+    The identification of the left/right faces is performed by building
+    a point on the edge's normal so that it is sligtly on the edge left.
 
-    This object can be used to determine the position of one or two faces
-    relative to an edge.
-    The position is determined either by performing a scalar product of
-    two vectors, or by observing the position of a point relative to a
-    circle.
+    Parameters
+    ----------
+    edge : Any
+        The GEOM object of type EDGE representing an edge.
+    faces : Tuple[Face, ...]
+        Providing the `Face` objects the edge belongs to.
 
     Attributes
     ----------
-    no      : int
-              The edge number extracted from the GEOM edge object name
-              attribute
-    edge    : Any
-              A GEOM object of type EDGE representing an edge
-    data    : Any
-              Characteristic data of the given GEOM edge object depending
-              on its type
-    kind    : str
-              Type of edge; admitted types are: CIRCLE, ARC_CIRCLE, SEGMENT
-    right   : Any
-              The GEOM face object to the right of the current edge
-    left    : Any
-              The GEOM face object to the left of the current edge
+    no : int
+        The edge number extracted from the GEOM edge object name.
+    edge : Any
+        A GEOM object of type EDGE representing an edge.
+    data : Any
+        Characteristic data of the given GEOM edge object.
+    kind : str
+        Indicating the type of edge with admitted values being `CIRCLE`,
+        `ARC_CIRCLE`, `SEGMENT`.
+    right : Face | None
+        A `Face` object providing the information for the face to the right
+        of the edge, or `None` if the edge does not have any face on its
+        right.
+    left : Face | None
+        A `Face` object providing the information for the face to the left
+        of the edge, or `None` if the edge does not have any face on its
+        left.
     """
-    def __init__(self, edge: Any, *faces: List[Face]):
-        # Get the number of the edge directly from the name attribute of the
-        # corresponding GEOM edge object
-        name = get_shape_name(edge)
-        try:
-            self.no = get_id_from_name(name)
-        except:
-            raise RuntimeError(f"Error for edge: {name}")
-
-        self.edge  = edge
+    def __init__(self, edge: Any, *faces: Face):
         # Store all the information of the given GEOM edge object
-        self.data  = get_kind_of_shape(edge)
-        # Convert the first piece of information, retrieved from the GEOM edge object,
-        # into string
-        self.kind  = str(self.data[0])
-
-        # Initialize to 'None' both the right and the left GEOM face objects
-        self.right = None
-        self.left  = None
-        # Loop through all the given GEOM face objects associated to the current edge.
-        # This allows to define the faces on the right and those on the left wrt the
-        # edge.
+        self.data: List[Any] = get_kind_of_shape(edge)
+        try:
+            # Check the type of the received edge is correct
+            check_shape_expected_types(edge, [ShapeType.EDGE])
+            # Get the number of the edge directly from the name attribute of
+            # the corresponding GEOM edge object
+            self.no: int = get_id_from_shape(edge)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Error with 'Edge' whose data is: {self.data}") from e
+        # Store the edge object
+        self.edge: Any  = edge
+        # Get the type of edge as a string
+        self.kind: EdgeType = EDGE_NAME_VS_TYPE[str(self.data[0])][0]
+        # Initialize to 'None' both the right and the left 'Face' objects
+        self.right: Face | None = None
+        self.left: Face | None = None
+        # Loop through all the given GEOM face objects associated to the
+        # current edge. This allows to define the faces on the right and
+        # those on the left wrt the edge.
         for f in faces:
             # Add a face connected to the edge
             self.__add_face(f)
-
-        # Check everything is allright
+        # Check that both right and left faces have been assigned, if the
+        # edge is shared by two faces
         if len(faces) > 1 and (not self.right or not self.left):
             raise RuntimeError(
                 f"The edge no. {self.no} have 2 faces (no. "
@@ -162,7 +178,7 @@ class Edge():
         A tuple with the X-Y-Z coordinates of the edge starting point
         """
         # Handle the point retrieval differently if the edge is a circle
-        if self.kind == "CIRCLE":
+        if self.kind == EdgeType.CIRCLE:
             # Get the X-Y-Z coordinates of the circle center
             x1, y1, z1  = self.data[1:4]
             # Get the circle radius
@@ -172,7 +188,7 @@ class Edge():
             return x1 + r, y1, z1
         # Handle the other edge types by returning the X-Y-Z coordinates of
         # the first point of the edge
-        return self.data[-6:-3]
+        return tuple(self.data[-6:-3])
 
     def __add_face(self, face: Face) -> None:
         """
@@ -204,12 +220,12 @@ class Edge():
         # face position relative to the edge
         if not is_point_inside_shape(self.__build_point_on_edge_normal(),
                                      face.face):
-            if self.kind == "SEGMENT":
+            if self.kind == EdgeType.SEGMENT:
                 self.right = face
             else:
                 self.left = face
         else:
-            if self.kind == "SEGMENT":
+            if self.kind == EdgeType.SEGMENT:
                 self.left = face
             else:
                 self.right = face
@@ -244,7 +260,7 @@ class Edge():
         A vertex object representing a point slightly to the left of the
         middle point of the edge.
         """
-        if self.kind == "CIRCLE":
+        if self.kind == EdgeType.CIRCLE:
             # Extract the X-Y-Z coordinates of the circle center
             (xc, yc, zc) = self.data[1:4]
             # Extract the circle radius
@@ -252,7 +268,7 @@ class Edge():
             # Build a point (as a GEOM object) positioned at an infinitesimal
             # distance from the starting point of the circle
             return make_vertex((xc+radius-epsilon, yc, zc))
-        if self.kind == "ARC_CIRCLE":
+        if self.kind == EdgeType.ARC_CIRCLE:
             # Extract the X-Y-Z coordinates of the circle center the arc
             # belongs to
             (xc, yc, zc) = self.data[1:4]
@@ -269,7 +285,7 @@ class Edge():
                   (coord[1] - yc)*(1.0 - epsilon/radius))
             # Build a GEOM point along the direction of the just built vector
             return make_vertex((xc + vm[0], yc + vm[1], zc))
-        if self.kind == "SEGMENT":
+        if self.kind == EdgeType.SEGMENT:
             # Extract the X-Y-Z coordinates of the extremes of the segment
             (x1, y1, z1, x2, y2, _) = self.data[1:7]
             # Build a GEOM point on the segment, positioned at its middle
@@ -359,6 +375,12 @@ class Boundary:
                  type_geo: LatticeGeometryType,
                  lattice_o: Any,
                  dimensions: Tuple[float, float]) -> None:
+        # Check the received border is an edge
+        try:
+            check_shape_expected_types(border, [ShapeType.EDGE])
+        except RuntimeError as e:
+            raise RuntimeError("Error while initializing the 'Border' "
+                               "instance.") from e
         # Initialize instance attributes
         self.type       : BoundaryType
         self.border     : Any = border
@@ -369,14 +391,14 @@ class Boundary:
         # Set the border characteristics in terms of type and border axis
         self.__build_border_characteristics(*dimensions, lattice_o, type_geo)
 
-    def get_bc_type_number(self) -> str:
+    def get_bc_type_number(self) -> int:
         """
         Method that returns the index associated to the BC type in the
         corresponding instance attribute dictionary.
 
         Returns
         -------
-        A string describing the type for the BC this class instance
+        An integer describing the type for the BC this class instance
         refers to.
         """
         return self.type.value
@@ -419,6 +441,11 @@ class Boundary:
             self.angle = math.degrees(math.atan2(-dy, -dx))
             x1 = x2
             y1 = y2
+        # If the angle is close to zero, it can happen that it is written
+        # with a minus sign which is unnecessary; hence, it is set to 0.0
+        # explicitly
+        if math.isclose(self.angle, 0.0):
+            self.angle = 0.0
 
         # Initialize the border axes to the edge start point
         self.tx = x1
@@ -436,7 +463,9 @@ class Boundary:
                 # Identifying a border characterized by the 'AXIAL_SYMMETRY'
                 # type of BC, which corresponds to the 'REFL' case in DRAGON5
                 self.type = BoundaryType.AXIAL_SYMMETRY
-            case LatticeGeometryType.RA60 | LatticeGeometryType.R120:
+            case (LatticeGeometryType.RA60 |
+                  LatticeGeometryType.R120 |
+                  LatticeGeometryType.ROTATION):
                 # Identifying a border characterized by any of the 'ROTATION'
                 # or 'TRANSLATION' types of BC, which correspond to the 'ROTA'
                 # or 'TRAN' cases respectively in DRAGON5. The position of the
@@ -448,26 +477,26 @@ class Boundary:
             case LatticeGeometryType.RECTANGLE_TRAN:
                 # The BC information for the case of a cartesian geometry
                 # with TRAN BCs follows the axes definition below:
-                #             M=3
-                #        ************
-                #        *          *
-                #    M=2 *          * M=4
-                #        ************
-                #             M=1
+                #              M=3 (0,-ly)
+                #             ************
+                #  M=2 (lx,0) *          * M=4 (-lx,0)
+                #             ************
+                #              M=1 (0,ly)
                 if math.isclose(math.sin(math.radians(self.angle)), 0.0):
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=3 (dx < 0)
                     self.tx = 0.0
-                    self.ty = (dx/abs(dx)) * lx
+                    self.ty = (dx/abs(dx)) * ly
                 elif math.isclose(math.sin(math.radians(self.angle)), 1.0):
                     # The sign of 'dy' discriminates between the M=4 (dy > 0)
                     # and M=2 (dy < 0)
-                    self.tx = -(dy/abs(dy)) * ly
+                    self.tx = -(dy/abs(dy)) * lx
                     self.ty = 0.0
                 else:
                     raise RuntimeError(
                         f"The border has an angle of {self.angle}° which is "
-                        "not admitted")
+                        "not one of the admitted values (0°, 90°) for a "
+                        "cartesian geometry with TRAN as BC.")
                 # Assign the BC type
                 self.type = BoundaryType.TRANSLATION
             case LatticeGeometryType.HEXAGON_TRAN:
@@ -482,8 +511,9 @@ class Boundary:
                 #                    *****
                 #                     M=1 (0, 2ly)
                 if math.isclose(math.sin(math.radians(self.angle)), 1.0):
-                    raise RuntimeError("The case of an hexagonal lattice "
-                        "made by cells rotated by 0° is not handled.")
+                    raise RuntimeError(
+                        "The border refers to a Y-oriented hexagon which "
+                        "is not admitted for tracking.")
                 if abs(dy) < 1e-7:
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=4 (dx < 0)
@@ -508,7 +538,7 @@ class Boundary:
 
     def find_edges_on_border(self,
                              boundaries: Any,
-                             id_vs_edge: Dict[Any, str]) -> None:
+                             id_vs_edge: Dict[str, Any]) -> None:
         """
         Method that finds and associates all the GEOM edges related to the
         lattice border this instance refers to.
@@ -542,46 +572,48 @@ class Boundary:
             else:
                 # Raise an exception if the found sub-shape type is not
                 # 'SEGMENT'
-                raise AssertionError("Only edges of type 'SEGMENT' can be "
-                                     "contained in a lattice border! "
-                                     f"(found {shape_type})")
+                raise RuntimeError(
+                    "Only edges of type 'SEGMENT' can be contained in a "
+                    f"lattice border! (found {shape_type})")
 
 
 class LatticeDataExtractor():
     """
     Class that extracts the needed geometrical data from the given lattice
     to be used further on for generating the output TDT file.
-    It determines the association of faces with properties, that of edges
-    with connected faces and the edges that represents the lattice borders.
+    It determines the association of faces with properties, the one between
+    edges and the faces they belong to or are shared by two faces, as well
+    as the geometric and BCs about the lattice's borders.
 
     Parameters
     ----------
     lattice : Lattice
-        An instance of the 'Lattice' class storing the lattice information
+        An instance of the `Lattice` class storing the lattice information
+        to extract.
     geom_type : GeometryType
-        The type of geometry of the lattice cells used to extract the regions
+        The type of geometry of the lattice's cells used to extract the
+        corresponding regions.
 
     Attributes
     ----------
-    lattice             : Lattice
-                          The 'Lattice' object storing the lattice information
-    borders             : Any
-                          The GEOM compound object grouping the edges
-                          representing the lattice borders
-    boundaries          : List[Boundary]
-                          The list of 'Boundary' objects storing the lattice
-                          borders information
-    subfaces            : List[Any]
-                          The list of 'Face' objects storing information about
-                          each region of the lattice
-    edges               : List[Edge]
-                          The list of 'Edge' objects storing information about
-                          each edge of the lattice
-    id_vs_edge          : Dict[str, Any]
-                          A dictionary of the lattice edge ID VS the GEOM edge
-                          object reference
-    lattice_edges       : List[Any]
-                          A list of the GEOM edge objects for the lattice
+    lattice : Lattice
+        The `Lattice` object storing the geometric information to extract.
+    borders : List[Any]
+        The list of edge objects representing the lattice's borders.
+    boundaries : List[Boundary]
+        The list of `Boundary` objects storing the geometric and BCs
+        information about the lattice's borders.
+    subfaces : List[Face]
+        The list of `Face` objects storing the geometric information about
+        each region of the lattice.
+    edges : List[Edge]
+        The list of `Edge` objects storing the geometric information about
+        each edge of the lattice and the faces they belong to.
+    id_vs_edge : Dict[str, Any]
+        A dictionary of the IDs for the lattice's edges VS the corresponding
+        edge objects.
+    lattice_edges : List[Any]
+        The list of the edge objects contained in the lattice.
     """
     # Identifying the symmetry types for each type of lattice cells for which
     # the lattice translation should be evaluated
@@ -989,7 +1021,9 @@ class LatticeDataExtractor():
             # Re-evaluate the lattice borders
             self.borders = build_compound_borders(lattice_cmpd)
         # Extract the lattice edges from the lattice compound to analyse
-        self.lattice_edges = extract_sub_shapes(lattice_cmpd, ShapeType.EDGE)
+        self.lattice_edges = extract_sub_shapes(
+            make_partition([lattice_cmpd], [], ShapeType.FACE),
+            ShapeType.EDGE)
 
     def __update_edge_face_association(
             self,
@@ -1063,12 +1097,11 @@ def analyse_lattice(lattice: Lattice,
 
 def build_edge_id(edge: Any) -> str:
     """
-    Function that builds an unique ID for a GEOM edge object in the geometry
-    to process.
-    This is performed by retrieving characteristic information abount the edge
-    by means of the GEOM ``KindOfShape()`` function. This provides a list
-    containing the type of shape and a series of parameters that describe the
-    shape itself.
+    Function that builds a unique ID for a GEOM edge object in the geometry
+    layout to process.
+    This is performed by retrieving characteristic information abount the
+    edge in terms of a list containing the type of shape and a series of
+    parameters that describe the shape itself.
     According to the shape type we could have:
 
     - CIRCLE xc yc zc dx dy dz R
@@ -1079,25 +1112,31 @@ def build_edge_id(edge: Any) -> str:
     - SEGMENT x1 y1 z1 x2 y2 z2
       (X-Y-Z coordinates of segment starting and ending points)
 
-    If any shape type other than 'CIRCLE', 'ARC_CIRCLE' and 'SEGMENT' is
+    If any shape type other than `CIRCLE`, `ARC_CIRCLE` and `SEGMENT` is
     provided, an exception is raised.
 
     Parameters
     ----------
-    edge  : Any
-            A GEOM edge object
+    edge : Any
+        A GEOM edge object to build an ID for.
 
     Returns
     -------
-    A string representing the built unique ID for the edge.
+    A string representing the unique ID for the edge.
+
+    Raises
+    ------
+    RuntimeError
+        If the type of the provided edge is not among the allowed `CIRCLE`,
+        `ARC_CIRCLE` and `SEGMENT`.
     """
     # Get the information of the given GEOM shape object
     data = get_kind_of_shape(edge)
     # Check if the shape is one of the admitted edges
     if str(data[0]) not in ['CIRCLE', 'ARC_CIRCLE', 'SEGMENT']:
-        raise ValueError(f"The shape, whose information is '{data}', is not "
-                         "one of the admitted edges 'CIRCLE', 'ARC_CIRCLE', "
-                         "'SEGMENT'")
+        raise RuntimeError(
+            f"The shape, whose information is '{data}', is not one of the "
+            "admitted edges types 'CIRCLE', 'ARC_CIRCLE', 'SEGMENT'")
     # Loop through all the other information about the edge and build
     # the ID by appending all the info
     return "EDGE_" + str(data[0]) + "_" + "_".join(f"{info:.6g}"
@@ -1108,37 +1147,37 @@ def classify_lattice_edges(edges: List[Any]) -> Dict[str, Any]:
     Function that classifies the given lattice edges (as GEOM objects)
     by building a dictionary with keys being a unique ID and values the
     corresponding GEOM edge object.
-    Handled lattice cases are:
-    - complete lattice;
-    - boxed lattice with applied symmetry.
+    The IDs are built from the geometric characteristics of the edges;
+    for each edge its `name` internal attribute is set using a global
+    index over all the lattice's edges.
 
     Parameters
     ----------
     edges : List[Any]
-            A list of the GEOM edge objects to be classified
+        A list of the GEOM edge objects to be classified.
 
     Returns
     -------
-    A dictionary storing the edges IDs and the GEOM edges themselves.
+    Dict[str, Any]
+        A dictionary storing the edges IDs and the corresponding GEOM edges.
+
+    Raises
+    ------
+    RuntimeError
+        If any of the elements in the input list is not an edge of the
+        allowed `CIRCLE`, `ARC_CIRCLE` and `SEGMENT` types.
     """
-    # # Initialize the list of GEOM edges
-    # edges = []
-    # # Handle the case of a lattice with applied symmetry
-    # if not lattice.symmetry_type == SymmetryType.FULL:
-    #     edges = geompy.SubShapeAllSortedCentres(lattice.lattice_symm,
-    #                                             EDGE_TYPE)
-    # else:
-    #     # Full lattice case
-    #     edges = geompy.SubShapeAllSortedCentres(lattice.lattice_edges,
-    #                                             EDGE_TYPE)
+    # Initialize the dictionary of GEOM edges
     ids_edges = {}
-    for indx, edge in enumerate(edges):
-        # Set the name of the GEOM edge object
-        set_shape_name(edge, f"EDGE_{indx + 1}")
-        # Build a unique ID for the edge
-        edge_id = build_edge_id(edge)
-        # Add an entry to the dictionary storing edges ID VS the
-        # corresponding GEOM edge objects
-        ids_edges[edge_id] = edge
+    try:
+        for indx, edge in enumerate(edges):
+            # Set the name of the GEOM edge object
+            set_shape_name(edge, f"EDGE_{indx + 1}")
+            # Add an entry to the dictionary storing edges ID VS the
+            # corresponding GEOM edge objects
+            ids_edges[build_edge_id(edge)] = edge
+    except RuntimeError as e:
+        raise RuntimeError(
+            "Error while classifying the lattice's edges.") from e
     # Return the built dictionary
     return ids_edges

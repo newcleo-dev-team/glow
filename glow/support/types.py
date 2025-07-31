@@ -3,8 +3,6 @@ Module containing enumeration classes for expressing different types (e.g.
 BCs, geometry, etc.) used throughout the code.
 Utility functions are herein declared as well.
 """
-import random
-
 from enum import Enum
 from typing import Dict, List, Tuple
 
@@ -35,6 +33,23 @@ class BoundaryType(Enum):
     AXIAL_SYMMETRY    : int = 4
     CENTRAL_SYMMETRY  : int = 5
 
+
+class EdgeType(Enum):
+    """
+    Enumeration assigning to each edge type an index.
+
+    Attributes
+    ----------
+    SEGMENT     : int = 1
+        Identifying a segment-type edge.
+    CIRCLE      : int = 2
+        Identifying a circle-type edge.
+    ARC_CIRCLE  : int = 3
+        Identifying an arc of circle-type edge.
+    """
+    SEGMENT     : int = 1
+    CIRCLE      : int = 2
+    ARC_CIRCLE  : int = 3
 
 class GeometryType(Enum):
     """
@@ -183,9 +198,10 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
         SymmetryType.FULL : [
             LatticeGeometryType.ISOTROPIC, LatticeGeometryType.HEXAGON_TRAN],
         SymmetryType.THIRD : [
-            LatticeGeometryType.SYMMETRIES_TWO, LatticeGeometryType.R120],
+            LatticeGeometryType.ROTATION, LatticeGeometryType.R120],
         SymmetryType.SIXTH : [
             LatticeGeometryType.SYMMETRIES_TWO,
+            LatticeGeometryType.ROTATION,
             LatticeGeometryType.SA60,
             LatticeGeometryType.RA60],
         SymmetryType.TWELFTH : [
@@ -194,7 +210,8 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
     CellType.RECT : {
         SymmetryType.FULL : [
             LatticeGeometryType.ISOTROPIC,
-            LatticeGeometryType.RECTANGLE_TRAN],
+            LatticeGeometryType.RECTANGLE_TRAN,
+            LatticeGeometryType.RECTANGLE_SYM],
         SymmetryType.HALF : [
             LatticeGeometryType.SYMMETRIES_TWO,
             LatticeGeometryType.RECTANGLE_SYM],
@@ -208,27 +225,11 @@ CELL_VS_SYMM_VS_TYP_GEO : Dict[
 }
 
 
-RGB_COLORS = [(r, g, b) for r in range(0, 256, 10)
-                        for g in range(0, 256, 10)
-                        for b in range(0, 256, 10)]
+# Dictionary of edges' type name VS a tuple containing the corresponding
+# attribute of the 'EdgeType' enumeration and a descriptive string
+EDGE_NAME_VS_TYPE : Dict[str, Tuple[EdgeType, str]] = {
+    "SEGMENT"     : (EdgeType.SEGMENT, "line segment"),
+    "CIRCLE"      : (EdgeType.CIRCLE, "circle"),
+    "ARC_CIRCLE"  : (EdgeType.ARC_CIRCLE, "circular arc")
+}
 
-def generate_unique_random_colors(
-        no_colors: int) -> List[Tuple[int, int, int]]:
-    """
-    Function for generating a specified number of random unique RGB colors.
-
-    Parameters
-    ----------
-    no_colors : int
-                The number of RGB colors to generate
-
-    Returns
-    -------
-    A list of tuples, each providing the 3 integer values identifying an
-    RGB color.
-    """
-    # Declare a seed for the random number generation, so to produce the
-    # same set of colors
-    random.seed(50)
-    # Return 'no_colors'-number of unique colors
-    return random.sample(RGB_COLORS, no_colors)
