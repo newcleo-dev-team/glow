@@ -13,7 +13,7 @@ To run the code, the following dependencies must be satisfied:
 To build the documentation in both *html* and *LaTeX* formats, the following
 dependencies must be satisfied:
 
-- ``sphinx`` :math:`>= 7.3.7`
+- ``sphinx`` :math:`>= 8.2.3`
 - ``sphinx-rtd-theme`` :math:`>= 3.0.2`
-- ``myst-parser`` :math:`>= 3.0.1`
+- ``myst-parser`` :math:`>= 4.0.1`
 - ``sphinxcontrib-bibtex`` :math:`>= 2.6.3`
