@@ -23,13 +23,17 @@ except Exception as e:
     raise ValueError(f"Locale '{us_locale}' not supported!\n" \
                      "Please, install it to generate the doc!")
 
+# -- Source files directory name
+SOURCE_DIR_NAME = "source"
+
+
 # -----------------------------------
 # Documentation configuration options
 # -----------------------------------
 project = "GLOW"
 authors = "Davide Manzione, Daniele Tomatis"
 version = "1.0"
-date = "07/02/2025"
+date = "01/08/2025"
 doc_title = "GLOW: the generator of unstructured, non-native geometries for \
 MoC calculations in DRAGON5"
 id_no = "0"
@@ -56,7 +60,7 @@ exprt_ctrl = "3"
 national_sec = {"country": "4", "sec_level": "1", }
 itns = "1"
 distribution_list = "@newcleo all"
-bibtex_bibfiles = []
+bibtex_bibfiles = [os.path.join(SOURCE_DIR_NAME, 'glow.bib')]
 latex_theme_to_use = "manual"
 
 
@@ -66,9 +70,6 @@ rst_prolog = fr"""
 .. |newcleo| replace:: *new*\cleo
 .. |LICENSE| replace:: **LGPL-2.1**
 """
-
-# -- Source files directory name
-SOURCE_DIR_NAME = "source"
 
 # -- General configuration ---------------------------------------------------
 
@@ -90,16 +91,6 @@ myst_enable_extensions = [
     "deflist",       # To include definition lists for creating glossaries
     "colon_fence",   # To make code blocks more readable in the documentation
 ]
-
-
-# Bibtex options: build a list o paths for each indicated bibtex file.
-# If no bibliografy is provided, used the default file in the
-# 'SOURCE_DIR_NAME' folder
-if bibtex_bibfiles:
-    bibtex_bibfiles = [os.path.join(SOURCE_DIR_NAME, bib_file) for bib_file
-                       in bibtex_bibfiles]
-else:
-    bibtex_bibfiles = [os.path.join(SOURCE_DIR_NAME, 'glow.bib')]
 
 # External links configuration
 extlinks = {}
