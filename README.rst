@@ -12,8 +12,8 @@
 
 
 :Authors: Davide Manzione, Daniele Tomatis
-:Contributors: Gianluca Cirillo
-:Date: 03/03/2025
+:Contributors: Gianluca Cirillo, Camilla De Santis
+:Date: 01/08/2025
 
 Introduction
 ------------
@@ -60,7 +60,7 @@ operations to the lattice according to the type of its cells.
 Depending on the cell types, the following symmetries are handled:
 
   - *Cartesian* - half, quarter and eighth sections.
-  - *Hexagonal* - SA60 and S30 symmetries.
+  - *Hexagonal* - third, sixth and twelfth symmetries.
 
 |TOOL| does not only exploits the geometrical functionalities offered by the
 *GEOM* module of *SALOME*; it also relies on its graphical user interface
@@ -69,8 +69,9 @@ Depending on the cell types, the following symmetries are handled:
 
 *MoC* calculations in *DRAGON5* relies on a proper description of the geometry
 to analyse: |TOOL| allows the collection of the required information from the
-built lattice layout, so that its surface geometry representation can be
-exported to a *.dat* file in the *TDT* *APOLLO2* format.
+built lattice, and automatically sets the type of BCs accordingly with the
+geometry layout. This operation allows the surface geometry representation to
+be exported to a *.dat* file in the *TDT* *APOLLO2* format.
 
 |TOOL| is developed by the **Codes & Methods** group of |newcleo| and it is
 released under the |LICENSE| **License**.
