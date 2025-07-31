@@ -348,6 +348,47 @@ class TestLattice(unittest.TestCase):
         self.__assess_get_regions_info(
             region_face, f"{PropertyType.MATERIAL.name}: MAT")
 
+    def test_overlap_layer_to(self) -> None:
+        """
+        Method that tests the implementation of the private method
+        `__overlap_layer_to` of the `Lattice` class.
+        """
+        layer = HexCell((5.0, 5.0, 0.0), 2.0)
+        sub_layer = [self.hex_cells[0], self.hex_cells[1], self.hex_cells[5]]
+        orig_faces = [cell.face for cell in sub_layer]
+        lattice = Lattice.__new__(Lattice)
+        # ---------------
+        # No overlap case
+        # ---------------
+        lattice._Lattice__overlap_layer_to([layer], sub_layer)
+        # Faces of the sublayer must remain unchanged
+        for cell, face in zip(sub_layer, orig_faces):
+            self.assertTrue(
+                are_same_shapes(cell.face, face, ShapeType.FACE)
+            )
+        # --------------------
+        # Partial overlap case
+        # --------------------
+        layer = HexCell((1.0, 1.0, 0.0), 1.5)
+        sub_layer_po = deepcopy(sub_layer)
+        lattice._Lattice__overlap_layer_to([layer], sub_layer_po)
+        # The overlapped cells must have been cut
+        for cell, face in zip(sub_layer_po, orig_faces):
+            self.assertTrue(
+                are_same_shapes(
+                    cell.face,
+                    make_cut(cell.face, layer.face),
+                    ShapeType.COMPOUND
+                )
+            )
+        # ---------------------
+        # Complete overlap case
+        # ---------------------
+        layer = [HexCell((0.0, 0.0, 0.0), 1.5)]
+        lattice._Lattice__overlap_layer_to(layer, sub_layer)
+        # The completely overlapped cells must have been removed
+        self.assertEqual(len(sub_layer), 2)
+
     def test_restore_cells(self) -> None:
         """
         Method that tests the implementation of the method `restore_cells`
