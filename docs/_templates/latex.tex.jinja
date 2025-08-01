@@ -126,16 +126,12 @@
 \setreviewers{<%= atendofbody ['reviewers'] %>}
 \setapprovers{<%= atendofbody ['approvers'] %>}
 
-\Docfor{<%= atendofbody ['doc_for'] %>}
-\BusinessMarking{<%= atendofbody ['bus_mark'] %>}
-\ExportControl{<%= atendofbody ['exp_ctrl'] %>}
-\NationalSecurity{<%= atendofbody ['national_sec'][0] %>}{<%= atendofbody ['national_sec'][1] %>}
-\ITNS{<%= atendofbody ['itns'] %>}
-<%- if ITNS == 1 %>
-\AIP{1}
-<% else %>
-\AIP{2}
-<%- endif %>
+\setDocfor{<%= atendofbody ['doc_for'] %>}
+\setBusinessMarking{<%= atendofbody ['bus_mark'] %>}
+\setExportControl{<%= atendofbody ['exp_ctrl'] %>}
+\setNationalSecurity{<%= atendofbody ['national_sec'][0] %>}{<%= atendofbody ['national_sec'][1] %>}
+\setITNS{<%= atendofbody ['itns'] %>}
+\setAIP{<%= atendofbody ['aip'] %>}
 \setdistlist{<%= atendofbody ['dist_list'] %>}
 
 <%= makeindex %>

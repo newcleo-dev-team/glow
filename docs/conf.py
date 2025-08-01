@@ -31,11 +31,11 @@ SOURCE_DIR_NAME = "source"
 # Documentation configuration options
 # -----------------------------------
 project = "GLOW"
-authors = "Davide Manzione, Daniele Tomatis"
+authors = "Davide Manzione"
 version = "1.0"
-date = "01/08/2025"
-doc_title = "GLOW: the generator of unstructured, non-native geometries for \
-MoC calculations in DRAGON5"
+date = "See signature"
+doc_title = "GLOW: Generator of Unstructured, Non-Native Geometries for \
+Tracking Analyses in DRAGON5"
 id_no = "0"
 reference_code = "XXX-YYY-ZZZ-???"
 revision_no = "1"
@@ -43,15 +43,16 @@ modified_pages = "All"
 modif_descr = "First Release"
 abstract = "This document is the reference manual for the \
 \\sphinxstyleemphasis{GLOW} \
-(\\sphinxstylestrong{G}eometry\\sphinxstylestrong{L}ayout \
+(\\sphinxstylestrong{G}eometry \\sphinxstylestrong{L}ayout \
 \\sphinxstylestrong{O}riented \\sphinxstylestrong{W}orkflows) Python package, \
 which implements a generator of unstructured, non-native geometries for the \
 \\sphinxstyleemphasis{Method} \\sphinxstyleemphasis{of} \
 \\sphinxstyleemphasis{Characteristics} (MoC) in \
 \\sphinxstyleemphasis{DRAGON5}. It uses the APIs of \
 \\sphinxstyleemphasis{SALOME} to provide the functionalities to \
-build and visualize the geometry, as well as to generate the TDT file for \
-MoC calculations in \\sphinxstyleemphasis{DRAGON5}."
+build and visualize the geometry, and to generate the corresponding surface \
+geometry representation according to the \\sphinxstyleemphasis{APOLLO2} TDT \
+format which \\sphinxstyleemphasis{DRAGON5} uses in tracking analyses."
 reviewers = "Gabriele Ottino"
 approvers = "Daniele Tomatis"
 doc_purpose = "1"
@@ -183,6 +184,8 @@ latex_docclasses = {
     "nwcldocs": "nwcldocs"
 }
 
+# Extract the list of authors
+authors_list = [str(item) + 3*r"\break " for item in authors.split(",")]
 
 #############################
 # Setup for "manual" template
@@ -194,7 +197,7 @@ latex_elements: Dict[str, Any] = {
     "makeindex": "\\usepackage[columns=1]{idxlayout}\\makeindex",
     "figure_align": "H",
 }
-latex_authors = authors
+latex_authors = "".join(str(item) for item in authors_list)
 
 ##########################################
 # Settings to use with "nwcldocs" template
@@ -203,7 +206,9 @@ preamble_nwcldocs = r"\input{../../_templates/preamble_nwcl.texsty}"
 makeindex_nwcldocs = "\\usepackage[columns=1,totoc]{idxlayout}\\makeindex"
 date_nwcldocs = date
 
-reviewers_list = [str(item) + 4*"\\break " for item in reviewers.split(", ")]
+# Extract the list of reviewers and approvers
+reviewers_list = [str(item) + 3*r"\break " for item in reviewers.split(",")]
+approvers_list = [str(item) + 3*r"\break " for item in approvers.split(",")]
 
 # date_nwcldocs = date_object.strftime("%d/%m/%Y")
 atendofbody_nwcldocs = {
@@ -215,7 +220,7 @@ atendofbody_nwcldocs = {
     "pages": modified_pages,
     "desc": modif_descr,
     "reviewers": "".join(str(item) for item in reviewers_list),
-    "approvers": "\\break ".join(str(item) for item in approvers.split(", ")),
+    "approvers": "".join(str(item) for item in approvers_list),
     "doc_for": doc_purpose,
     "bus_mark": business_mark,
     "exp_ctrl": exprt_ctrl,
@@ -250,9 +255,7 @@ if latex_theme_to_use == "nwcldocs":
         latex_elements["makeindex"] = makeindex_nwcldocs
         latex_elements["atendofbody"] = atendofbody_nwcldocs
         latex_elements["sphinxsetup"] = "TitleColor={named}{black}"
-        latex_authors = "\\break ".join(
-            str(item) for item in authors.split(", ")
-        )
+        latex_authors = "".join(str(item) for item in authors_list)
     else:
         raise RuntimeError(
             "No tex environment found!\n"
