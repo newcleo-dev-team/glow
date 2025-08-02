@@ -1,7 +1,6 @@
 """
 Module containing enumeration classes for expressing different types (e.g.
 BCs, geometry, etc.) used throughout the code.
-Utility functions are herein declared as well.
 """
 from enum import Enum
 from typing import Dict, List, Tuple
@@ -9,185 +8,115 @@ from typing import Dict, List, Tuple
 
 class BoundaryType(Enum):
     """
-    Enumeration for defining the lattice boundary condition types.
-
-    Attributes
-    ----------
-    VOID              : int = 0
-                        Indicating a vacuum + albedo BC
-    REFL              : int = 1
-                        Indicating a specular reflexion BC
-    TRANSLATION       : int = 2
-                        Indicating a translation BC
-    ROTATION          : int = 3
-                        Indicating a rotation BC
-    AXIAL_SYMMETRY    : int = 4
-                        Indicating an axial symmetry BC
-    CENTRAL_SYMMETRY  : int = 5
-                        Indicating a central symmetry BC
+    Enumeration for defining the types of the lattice's boundary condition
+    applied to the borders of its geometry layout.
     """
-    VOID              : int = 0
-    REFL              : int = 1
-    TRANSLATION       : int = 2
-    ROTATION          : int = 3
-    AXIAL_SYMMETRY    : int = 4
-    CENTRAL_SYMMETRY  : int = 5
+    VOID:int = 0
+    """Indicating a vacuum + albedo BC."""
+    REFL:int = 1
+    """Indicating a specular reflection BC."""
+    TRANSLATION: int = 2
+    """Indicating a translation BC."""
+    ROTATION: int = 3
+    """Indicating a rotation BC."""
+    AXIAL_SYMMETRY: int = 4
+    """Indicating an axial symmetry BC."""
+    CENTRAL_SYMMETRY: int = 5
+    """Indicating a central symmetry BC."""
 
 
 class EdgeType(Enum):
     """
-    Enumeration assigning to each edge type an index.
-
-    Attributes
-    ----------
-    SEGMENT     : int = 1
-        Identifying a segment-type edge.
-    CIRCLE      : int = 2
-        Identifying a circle-type edge.
-    ARC_CIRCLE  : int = 3
-        Identifying an arc of circle-type edge.
+    Enumeration for identifying each type of edge object with an index.
     """
-    SEGMENT     : int = 1
-    CIRCLE      : int = 2
-    ARC_CIRCLE  : int = 3
+    SEGMENT: int = 1
+    """Identifying a segment-type edge."""
+    CIRCLE: int = 2
+    """ Identifying a circle-type edge."""
+    ARC_CIRCLE: int = 3
+    """Identifying an arc of circle-type edge."""
+
 
 class GeometryType(Enum):
     """
     Enumeration for defining either the lattice or the single cell
     geometry type.
-
-    Attributes
-    ----------
-    TECHNOLOGICAL : int = 0
-        Identifying the cell/lattice technological geometry
-    SECTORIZED    : int = 1
-        Identifying the cell/lattice sectorized geometry
     """
-    TECHNOLOGICAL : int = 0
-    SECTORIZED    : int = 1
+    TECHNOLOGICAL: int = 0
+    """Identifying the cell/lattice technological geometry."""
+    SECTORIZED: int = 1
+    """Identifying the cell/lattice sectorized geometry."""
 
 
 class LatticeGeometryType(Enum):
     """
-    Enumeration for defining the lattice geometry types.
-
-    Attributes
-    ----------
-    ISOTROPIC       : int = 0
-                      Generic geometry with vacuum or isotropic reflexion
-    SYMMETRIES_TWO  : int = 1
-                      Generic geometry with symmetries of two axis of angle
-                      pi/n, n>0
-    ROTATION        : int = 2
-                      Generic geometry with rotation of angle 2*pi/n, n>1
-    RECTANGLE_TRAN  : int = 5
-                      Rectangular geometry with translation on all sides
-    RECTANGLE_SYM   : int = 6
-                      Rectangular geometry with symmetry on all sides
-    RECTANGLE_EIGHT : int = 7
-                      1/8 assembly with symmetries on all sides
-    SA60            : int = 8
-                      Isosceles triangle geometry with symmetries on all
-                      sides (SA60)
-    HEXAGON_TRAN    : int = 9
-                      Hexagonal geometry with translations on all sides
-    RA60            : int = 10
-                      Isosceles triangle geometry with RA60 rotation and
-                      translation
-    R120            : int = 11
-                      Lozenge geometry with R120 rotation and translation
-    S30             : int = 12
-                      Triangle geometry identifying a symmetry of one twelfth
-                      of an assembly
+    Enumeration for defining the lattice's geometry types. Values higher than
+    2, i.e. ``ROTATION``, refer to geometry layouts for which a cycling
+    tracking needs to be applied (`TSPC` type).
+    The values from ``0`` to ``2`` included, refer to geometry layouts for
+    which a uniform tracking needs to be applied (`TISO` type).
     """
-    ISOTROPIC       : int = 0
-    SYMMETRIES_TWO  : int = 1
-    ROTATION        : int = 2
-    RECTANGLE_TRAN  : int = 5
-    RECTANGLE_SYM   : int = 6
-    RECTANGLE_EIGHT : int = 7
-    SA60            : int = 8
-    HEXAGON_TRAN    : int = 9
-    RA60            : int = 10
-    R120            : int = 11
-    S30             : int = 12
+    ISOTROPIC: int = 0
+    """Generic geometry with vacuum or isotropic reflection."""
+    SYMMETRIES_TWO: int = 1
+    """Generic geometry with symmetries of two axis of angle pi/n, n>0."""
+    ROTATION: int = 2
+    """Generic geometry with rotation of angle 2*pi/n, n>1."""
+    RECTANGLE_TRAN: int = 5
+    """Rectangular geometry with translation on all sides."""
+    RECTANGLE_SYM: int = 6
+    """Rectangular geometry with symmetry on all sides."""
+    RECTANGLE_EIGHT: int = 7
+    """1/8 rectangular assembly with symmetries on all sides."""
+    SA60: int = 8
+    """Isosceles triangle geometry with symmetries on all sides."""
+    HEXAGON_TRAN: int = 9
+    """Hexagonal geometry with translations on all sides."""
+    RA60: int = 10
+    """Isosceles triangle geometry with rotation and translation."""
+    R120: int = 11
+    """Lozenge geometry with rotation and translation."""
+    S30: int = 12
+    """Triangle geometry identifying a symmetry of 1/12 of an assembly."""
 
 
 class SymmetryType(Enum):
     """
-    Enumeration for defining the lattice symmetry types.
-
-    Attributes
-    ----------
-    FULL    : int = 0
-              Identifying a complete lattice
-    HALF    : int = 2
-              Identifying an half of the lattice
-    THIRD   : int = 3
-              Identifying a third of the lattice
-    QUARTER : int = 4
-              Identifying a quarter of the lattice
-    SIXTH   : int = 6
-              Identifying a sixth of the lattice
-    EIGHTH  : int = 8
-              Identifying an eighth of the lattice
-    TWELFTH : int = 12
-              Identifying an twelfth of the lattice
+    Enumeration for defining the lattice's symmetry types.
     """
-    FULL    : int = 0
-    HALF    : int = 2
-    THIRD   : int = 3
-    QUARTER : int = 4
-    SIXTH   : int = 6
-    EIGHTH  : int = 8
-    TWELFTH : int = 12
+    FULL: int = 0
+    """Identifying a complete lattice."""
+    HALF: int = 2
+    """Identifying an half of the lattice."""
+    THIRD: int = 3
+    """Identifying a third of the lattice."""
+    QUARTER: int = 4
+    """Identifying a quarter of the lattice."""
+    SIXTH: int = 6
+    """Identifying a sixth of the lattice."""
+    EIGHTH: int = 8
+    """Identifying an eighth of the lattice."""
+    TWELFTH: int = 12
+    """Identifying an twelfth of the lattice."""
 
 
 class CellType(Enum):
     """
-    Enumeration for defining the cell types.
-
-    Attributes
-    ----------
-    RECT    : int = 0
-              Identifying a cartesian (i.e. rectangular) cell
-    HEX     : int = 1
-              Identifying a hexagonal cell
+    Enumeration for defining the geometric types of cells.
     """
-    RECT    : int = 0
-    HEX     : int = 1
+    RECT: int = 0
+    """Identifying a cartesian (i.e. rectangular) cell."""
+    HEX: int = 1
+    """Identifying a hexagonal cell."""
 
 
 class PropertyType(Enum):
     """
     Enumeration for defining the property types that can be associated
-    to a cell region.
-
-    Attributes
-    ----------
-    MATERIAL  : int = 0
-                Identifying the property for the cell region material
+    to each cell/lattice region.
     """
-    MATERIAL  : int = 0
-    # FIXME add other types
-
-
-# Dictionary associating the compatible BC type to the lattice type of
-# geometry
-TYPEGEO_VS_BC : Dict[LatticeGeometryType, List[BoundaryType]] = {
-    LatticeGeometryType.ISOTROPIC        : [BoundaryType.VOID],
-    LatticeGeometryType.SYMMETRIES_TWO   : [BoundaryType.AXIAL_SYMMETRY],
-    LatticeGeometryType.RECTANGLE_TRAN   : [BoundaryType.TRANSLATION],
-    LatticeGeometryType.RECTANGLE_SYM    : [BoundaryType.AXIAL_SYMMETRY],
-    LatticeGeometryType.RECTANGLE_EIGHT  : [BoundaryType.AXIAL_SYMMETRY],
-    LatticeGeometryType.SA60             : [BoundaryType.AXIAL_SYMMETRY],
-    LatticeGeometryType.HEXAGON_TRAN     : [BoundaryType.TRANSLATION],
-    LatticeGeometryType.RA60             : [BoundaryType.TRANSLATION,
-                                            BoundaryType.ROTATION],
-    LatticeGeometryType.R120             : [BoundaryType.TRANSLATION,
-                                            BoundaryType.ROTATION],
-    LatticeGeometryType.S30              : [BoundaryType.AXIAL_SYMMETRY]
-}
+    MATERIAL: int = 0
+    """Identifying the material property type."""
 
 
 # Dictionary associating for each type of cells, the valid combinations of
@@ -232,4 +161,3 @@ EDGE_NAME_VS_TYPE : Dict[str, Tuple[EdgeType, str]] = {
     "CIRCLE"      : (EdgeType.CIRCLE, "circle"),
     "ARC_CIRCLE"  : (EdgeType.ARC_CIRCLE, "circular arc")
 }
-

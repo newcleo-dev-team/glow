@@ -25,14 +25,6 @@ glow.geometry\_layouts.geometries module
    :show-inheritance:
    :undoc-members:
 
-glow.geometry\_layouts.geometry\_layout module
-----------------------------------------------
-
-.. automodule:: glow.geometry_layouts.geometry_layout
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 glow.geometry\_layouts.lattices module
 --------------------------------------
 

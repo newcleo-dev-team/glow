@@ -14,37 +14,32 @@ class TdtSetup:
     Dataclass holding the settings for configuring how to export the TDT
     file for the lattice's geometry layout.
 
-    Attributes
-    ----------
-    geom_type : GeometryType
-        Identifying the type of geometry of the lattice's cells.
-    property_type : PropertyType
-        Identifying the type of property associated to the lattice's regions.
-    albedo : float | None
-        Identifying the value for the albedo applied to the lattice's BCs.
-
     Notes
     -----
-    The `albedo` attribute can assume values between 0.0 and 1.0, with the
-    latter case indicating the `ALBE 1.0` BC used in DRAGON5 with a uniform
-    tracking (i.e. `LatticeGeometryType.ISOTROPIC`). If `None`, the value
-    that corresponds to the type of geometry of the lattice is used, i.e.
-    0.0 for values of `LatticeGeometryType` greater than 0, 1.0 otherwise.
+    The `albedo` attribute can have values between ``0.0`` and ``1.0``, with
+    the latter case indicating the `ALBE 1.0` BC used in DRAGON5 with a
+    uniform tracking (i.e. ``LatticeGeometryType.ISOTROPIC``). If ``None``,
+    the value that corresponds to the type of geometry of the lattice is used,
+    i.e. ``0.0`` for values of ``LatticeGeometryType`` greater than zero,
+    ``1.0`` otherwise.
     """
     geom_type: GeometryType = GeometryType.TECHNOLOGICAL
+    """Identifying the type of geometry of the lattice's cells."""
     property_type: PropertyType = PropertyType.MATERIAL
+    """Identifying the type of property associated to lattice's regions."""
     albedo: float | None = None
+    """Identifying the value for the albedo applied to the lattice's BCs."""
 
     def __post_init__(self) -> None:
         """
         Method run after the dataclass initialization. It checks whether the
-        value of the `albedo` attribute is in the 0.0-1.0 range. If not, an
+        value of the ``albedo`` attribute is in the 0.0-1.0 range. If not, an
         exception is raised.
 
         Raises
         ------
         RuntimeError
-            If the `albedo` attribute is not in the 0.0-1.0 range.
+            If the ``albedo`` attribute is not in the 0.0-1.0 range.
         """
         if self.albedo is not None:
             if not (
@@ -66,7 +61,7 @@ def analyse_and_generate_tdt(
             None)
     ) -> None:
     """
-    Function that analyses the given lattice, as instance of the `Lattice`
+    Function that analyses the given lattice, as instance of the ``Lattice``
     class, to extract information about the characteristics of its geometry
     and the properties associated to its regions.
     A TDT file, whose name is provided as second parameter, is generated,
@@ -75,7 +70,7 @@ def analyse_and_generate_tdt(
 
     - the geometry type of its cells;
     - the type of property associated to the lattice regions;
-    - the value for the albedo applied to the lattice's BCs. If `None`, a
+    - the value for the albedo applied to the lattice's BCs. If ``None``, a
       default value that corresponds to the lattice's geometry type is
       adopted.
 
