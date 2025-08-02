@@ -19,13 +19,19 @@ describing how fuel pins are positioned, the subdivision of the layout into
 specific regions of calculus and the assignment of properties to the single
 regions are required.
 
-Among the different available analyses, we have:
+Among the different available analyses, we have the following:
 
-  - the *Method of Characteristics* (*MoC*), a deterministic approach for
-    evaluating the neutron flux over the regions of a fuel assembly.
-  - the *Collision Probability Method* (*CPM*), a probabilistic approach that
-    focuses on determining the probability of neutron collisions within spatial
-    regions.
+  - the *Method of Characteristics* (*MoC*), an approach used to solve the
+    neutron transport equation by tracing the paths (*characteristics*) of
+    neutrons through a discretized geometry. It evaluates the neutron flux
+    distribution by integrating the transport equation along straight-line
+    trajectories, accounting for interactions with the material.
+  - the *Collision Probability Method* (*CPM*), an approach that computes the
+    probability of a neutron emitted in one region to have a collision in
+    another region. It assumes isotropic neutron emission and transport in
+    one-dimensional or radially symmetric geometries. It solves for the flux
+    by balancing sources and collisions based on precomputed collision
+    probabilities.
 
 The `DRAGON5 <http://merlin.polymtl.ca/version5.htm>`_ lattice code offers
 several calculation modules focusing on solution techniques for the neutron

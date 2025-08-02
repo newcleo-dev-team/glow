@@ -8,6 +8,9 @@ Details about the available functionalities are provided to guide users in
 setting up a geometry layout, assigning properties to its regions, and
 exporting the layout in the *TDT* format, used by *DRAGON5* for tracking
 analyses.
+The following sections include images to graphically present the results of
+applying the described functionalities of |TOOL|. All of the images represent
+geometry layouts generated in *SALOME* and displayed in its 3D viewer.
 
 Geometry Definition
 -------------------
@@ -410,6 +413,7 @@ The following figure shows the result after applying the indicated sectorization
    numbers are provided to the method.
 
 .. _set-cell-prop:
+
 Setting Up the Cell's Regions Properties
 """"""""""""""""""""""""""""""""""""""""
 
@@ -799,8 +803,8 @@ three methods is shown in :numref:`lattice-add`.
 
    Hexagonal lattice built by applying the three methods for adding cells.
 
-Transformation Operations
-"""""""""""""""""""""""""
+Lattice's Transformation Operations
+"""""""""""""""""""""""""""""""""""
 
 Transformation operations can be applied by calling the methods for rotating
 and translating the lattice's geometric elements, i.e. the *GEOM* compound objects
@@ -1069,8 +1073,8 @@ Setting the value for the property does not result in any change in the lattice'
 geometry layout. It influences the information written in the output TDT file
 in terms of the BCs section, as this is strictly related to the *typgeo*.
 
-Regions Inspection
-""""""""""""""""""
+Lattice's Regions Inspection
+""""""""""""""""""""""""""""
 
 When the regions of the lattice's technological or sectorized geometry are
 displayed in the *SALOME* viewer, information about a selected region
