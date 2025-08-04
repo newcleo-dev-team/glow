@@ -11,6 +11,7 @@ The project is organized according to the following folder structure:
     ├── glow/
     ├── resources/
     ├── tests/
+    ├── tutorials/
     ├── LICENSE
     └── README.rst
 
@@ -21,6 +22,8 @@ The project is organized according to the following folder structure:
   implemented by |TOOL|;
 - ``resources``: contains files that support the configuration and operation
   of |TOOL|;
-- ``tests``: contains Python scripts that provide examples showing how to use
-  the |TOOL| functionalities for building simple geometries and exporting them
-  in the *TDT* format.
+- ``tests``: contains both unittests and functional tests, the former to ensure
+  the correctness of individual code units, the latter to ensure the overall
+  functionalities behave as expected;
+- ``tutorials``: contains Python scripts that provide use cases showing how to
+  use the |TOOL| functionalities for building different geometry layouts.
