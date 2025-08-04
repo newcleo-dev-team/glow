@@ -1306,7 +1306,7 @@ In addition, since *SALOME* comes with an embedded Python console, users can
 import the |TOOL| modules and exploit its functionalities directly.
 
 To see some of the |TOOL| functionalities in action, please refer to the script
-files present in the ``test/examples`` folder: they are intended to show few
+files present in the ``tutorials`` folder: they are intended to show few
 case studies and how they are managed in |TOOL|.
 For further information about the available classes and methods, please refer
 to the :doc:`api_guide` section.

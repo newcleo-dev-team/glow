@@ -248,8 +248,10 @@ class Lattice():
         # Shape to update the lattice's characteristic dimensions with
         if cell is None:
             shape = make_compound([cell.face for cell in self.lattice_cells])
-            # Set the lattice's box to None
+            # Set the lattice's box to None and clear any stored thicknesses
+            # of the box's layers
             self.__lattice_box = None
+            self.box_layers.clear()
         else:
             # Set the lattice's box
             self.__lattice_box = cell

@@ -7,8 +7,9 @@ the implemented features.
 Automated unittests and functional tests are provided in the ``test/unittest``
 and ``test/functional`` folders respectively.
 In addition to them, |TOOL| provides some example scripts in the
-``test/examples`` folder; they illustrate practical use-cases and workflows
-to show how they are managed in |TOOL|.
+``tutorials`` folder; they illustrate practical use-cases and workflows
+to show how they are managed in |TOOL|. See section :ref:`tutorials` for a
+detailed explanation of the provided cases.
 
 Unittest Test Suite
 -------------------

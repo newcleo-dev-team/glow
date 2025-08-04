@@ -145,7 +145,7 @@ import the |TOOL| modules and exploit its functionalities directly.
 
 For a detailed description of the functionalities provided by |TOOL|, please
 refer to the *Getting Started* chapter of the documentation.
-Python scripts are also provided in the ``test/examples`` folder. They are
+Python scripts are also provided in the ``tutorials`` folder. They are
 intended to show some case studies and how they are managed in |TOOL|.
 
 Documentation
