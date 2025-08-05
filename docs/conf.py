@@ -45,18 +45,16 @@ abstract = "This document is the reference manual for the \
 \\sphinxstyleemphasis{GLOW} \
 (\\sphinxstylestrong{G}eometry \\sphinxstylestrong{L}ayout \
 \\sphinxstylestrong{O}riented \\sphinxstylestrong{W}orkflows) Python package, \
-which implements a generator of unstructured, non-native geometries for the \
-\\sphinxstyleemphasis{Method} \\sphinxstyleemphasis{of} \
-\\sphinxstyleemphasis{Characteristics} (MoC) in \
-\\sphinxstyleemphasis{DRAGON5}. It uses the APIs of \
-\\sphinxstyleemphasis{SALOME} to provide the functionalities to \
-build and visualize the geometry, and to generate the corresponding surface \
+which implements a generator of unstructured, non-native geometries to be used \
+for tracking analyses in \\sphinxstyleemphasis{DRAGON5}. \
+It uses the APIs of \\sphinxstyleemphasis{SALOME} to provide the functionalities \
+to build and visualize the geometry layout, and to generate the corresponding surface \
 geometry representation according to the \\sphinxstyleemphasis{APOLLO2} TDT \
 format which \\sphinxstyleemphasis{DRAGON5} uses in tracking analyses."
 reviewers = "Gabriele Ottino"
 approvers = "Daniele Tomatis"
 doc_purpose = "1"
-business_mark = "4"
+business_mark = "1"
 exprt_ctrl = "3"
 national_sec = {"country": "4", "sec_level": "1", }
 itns = "1"
@@ -196,6 +194,7 @@ latex_elements: Dict[str, Any] = {
     "extrapackages": r"\input{../../_templates/extra_manual.texsty}",
     "makeindex": "\\usepackage[columns=1]{idxlayout}\\makeindex",
     "figure_align": "H",
+    "preamble": r"\usepackage{tabularx}"
 }
 latex_authors = "".join(str(item) for item in authors_list)
 
