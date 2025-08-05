@@ -36,36 +36,29 @@ class Face():
     represents a calculation zone containing a list of properties.
     This dataclass can be ordered on the basis of the ``no`` attribute, which
     provides a global index for the faces in the lattice.
-
-    Attributes
-    ----------
-    no          : int
-                  Global index of the face
-    face        : Any
-                  A GEOM object representing a subface of the lattice
-    property    : str
-                  The value of the property associated to the subface
-    inner_point : Tuple[float, float, float]
-                  Coordinates of a point within the subface
-    edge_vs_id  : Dict[Any, str]
-                  Dictionary associating the GEOM edge objects of the lattice
-                  subface to the corresponding ID, based on the edge
-                  geometrical characteristics
     """
-    face        : Any
-    property    : str
+    face: Any
+    """A GEOM face object representing a region of the lattice."""
+    property: str
+    """The value of the property associated to the region."""
+    no: int = field(init=False)
+    """Global index of the face."""
+    inner_point: Tuple[float, float, float] = field(init=False)
+    """XYZ coordinates of a point within the GEOM face object."""
+    edge_vs_id: Dict[Any, str] = field(default_factory=dict, init=False)
+    """
+    Dictionary associating the GEOM edge objects of the lattice subface to
+    the corresponding ID, based on the edge geometrical characteristics.
+    """
+    sort_index: int = field(init=False, repr=False)
+    """Indicating the attribute used to sort ``Face`` objects."""
 
-    sort_index  : int = field(init=False, repr=False)
-    no          : int = field(init=False)
-    inner_point : Tuple[float, float, float] = field(init=False)
-    edge_vs_id  : Dict[Any, str] = field(default_factory=dict, init=False)
-
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Method that is automatically run after the dataclass initialization
         for setting all the attributes that depends on others. In addition,
         the attribute that allows to order instances of this class on the
-        basis of the 'no' attribute is set as well.
+        basis of the ``no`` attribute is set as well.
         """
         # Build a point inside the face
         self.inner_point = get_point_coordinates(
@@ -90,7 +83,7 @@ class Face():
             edge_id = build_edge_id(edge)
             self.edge_vs_id[edge] = edge_id
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Region {self.no}, name={get_shape_name(self.face)}, " + \
                f"property={self.property}"
 
@@ -100,17 +93,18 @@ class Edge():
     Class that provides a data representation for an edge of a face in
     the lattice.
     It provides an global index allowing to uniquely identify the edge,
-    and two `Face` attributes, allowing to identify the face on the left
+    and two ``Face`` attributes, allowing to identify the face on the left
     and right of the edge.
     The identification of the left/right faces is performed by building
-    a point on the edge's normal so that it is sligtly on the edge left.
+    a point on the edge's normal so that it is sligtly on the left of the
+    edge.
 
     Parameters
     ----------
     edge : Any
         The GEOM object of type EDGE representing an edge.
     faces : Tuple[Face, ...]
-        Providing the `Face` objects the edge belongs to.
+        Providing the ``Face`` objects the edge belongs to.
 
     Attributes
     ----------
@@ -121,18 +115,18 @@ class Edge():
     data : Any
         Characteristic data of the given GEOM edge object.
     kind : str
-        Indicating the type of edge with admitted values being `CIRCLE`,
-        `ARC_CIRCLE`, `SEGMENT`.
+        Indicating the type of edge with admitted values being ``CIRCLE``,
+        ``ARC_CIRCLE``, ``SEGMENT``.
     right : Face | None
-        A `Face` object providing the information for the face to the right
-        of the edge, or `None` if the edge does not have any face on its
+        A ``Face`` object providing the information for the face to the right
+        of the edge, or ``None`` if the edge does not have any face on its
         right.
     left : Face | None
-        A `Face` object providing the information for the face to the left
-        of the edge, or `None` if the edge does not have any face on its
+        A ``Face`` object providing the information for the face to the left
+        of the edge, or ``None`` if the edge does not have any face on its
         left.
     """
-    def __init__(self, edge: Any, *faces: Face):
+    def __init__(self, edge: Any, *faces: Face) -> None:
         # Store all the information of the given GEOM edge object
         self.data: List[Any] = get_kind_of_shape(edge)
         try:
@@ -175,7 +169,8 @@ class Edge():
 
         Returns
         -------
-        A tuple with the X-Y-Z coordinates of the edge starting point
+        Tuple[float, float, float]
+            A tuple with the X-Y-Z coordinates of the edge starting point.
         """
         # Handle the point retrieval differently if the edge is a circle
         if self.kind == EdgeType.CIRCLE:
@@ -201,20 +196,20 @@ class Edge():
         left-oriented normal vector for the edge.
         The identification of the face position (left or right) relative
         to the edge depends on the edge nature:
-        - for SEGMENT-type edges, the given face is considered on the left
-          of the edge if the point belongs to the face; on the contrary,
+        - for ``SEGMENT``-type edges, the given face is considered on the
+          left of the edge if the point belongs to the face; on the contrary,
           we have a right face;
-        - for ARC_CIRCLE and CIRCLE-type edges, the criteria is the opposite,
-          i.e. the face is considered on the right of the edge if the point
-          belongs to the face; on the contrary, we have a left face.
+        - for ``ARC_CIRCLE`` and ``CIRCLE``-type edges, the criteria is the
+          opposite, i.e. the face is considered on the right of the edge if
+          the point belongs to the face; on the contrary, we have a left face.
 
         Parameters
         ----------
-        face    : Face
-                  'Face' object whose position (right or left) relative
-                  to the edge has to be determined
+        face : Face
+            ``Face`` object whose position (right or left) relative to the
+            edge has to be determined.
         epsilon : float
-                  Margin small enough to place a point wrt the edge
+            Margin small enough to place a point wrt the edge.
         """
         # Build the point on the left of the edge and use it to identify the
         # face position relative to the edge
@@ -236,16 +231,16 @@ class Edge():
         distance from the edge object this instance refers to.
         Depending on the edge type, this point is built according to the
         following rules:
-        - CIRCLE: the point is positioned slightly on the left wrt the
+        - ``CIRCLE``: the point is positioned slightly on the left wrt the
           X-coordinate of the point laying on the right-most position of
           the circle (identified by the center X-coordinate + the radius).
-        - ARC_CIRCLE: given a point positioned at the middle of the arc,
+        - ``ARC_CIRCLE``: given a point positioned at the middle of the arc,
           another point is built on the vector connecting the arc center and
           the first point. This second point has both its X-Y coordinates
           slightly scaled down by a reduction factor so that its distance
           from the arc center is less than the radius.
-        - SEGMENT: the normalized left-oriented vector normal to the edge is
-          calculated. Its X-Y components are used to determine a point
+        - ``SEGMENT``: the normalized left-oriented vector normal to the edge
+          is calculated. Its X-Y components are used to determine a point
           slightly to the left of a point positioned at the middle of the
           segment.
 
@@ -253,12 +248,13 @@ class Edge():
         ----------
         epsilon : float
             Indicating a value small enough to determine a point to the left
-            of the edge
+            of the edge.
 
         Returns
         -------
-        A vertex object representing a point slightly to the left of the
-        middle point of the edge.
+        Any
+            A vertex object representing a point slightly to the left of the
+            middle point of the edge.
         """
         if self.kind == EdgeType.CIRCLE:
             # Extract the X-Y-Z coordinates of the circle center
@@ -306,7 +302,7 @@ class Edge():
         # If here, raise an exception as the edge has not a valid type
         raise ValueError(f"The kind of shape {self.kind} is not valid!")
 
-    def __str__(self):
+    def __str__(self) -> str:
         lname = rname = "None"
         ename = get_shape_name(self.edge)
         if self.left:
@@ -319,22 +315,22 @@ class Edge():
     # ------------------------------------------
     # Methods for comparing two 'Edge' instances
     # ------------------------------------------
-    def __lt__(self, other: Self):
+    def __lt__(self, other: Self) -> bool:
         return self.no < other.no
 
-    def __le__(self, other: Self):
+    def __le__(self, other: Self) -> bool:
         return self.no <= other.no
 
-    def __eq__(self, other: Self):
+    def __eq__(self, other: Self) -> bool:
         return self.no == other.no
 
-    def __ne__(self, other: Self):
+    def __ne__(self, other: Self) -> bool:
         return self.no != other.no
 
-    def __gt__(self, other: Self):
+    def __gt__(self, other: Self) -> bool:
         return self.no > other.no
 
-    def __ge__(self, other: Self):
+    def __ge__(self, other: Self) -> bool:
         return self.no >= other.no
 
 
@@ -346,29 +342,29 @@ class Boundary:
     Parameters
     ----------
     border : Any
-        A GEOM edge object representing a border of the lattice
+        A GEOM edge object representing a border of the lattice.
     type_geo : LatticeGeometryType
-        Providing the lattice type of geometry
+        Providing the lattice type of geometry.
     lattice_o : Any
-        A vertex object representing the lattice center point
+        A vertex object representing the lattice center point.
     dimensions : Tuple[float, float]
-        The X-Y characteristic dimensions of the lattice the border refers to
+        The X-Y characteristic dimensions of the lattice the border refers to.
 
     Attributes
     ----------
-    border      : Any
-                  A GEOM edge object representing a border of the lattice
-    type        : BoundaryType
-                  Providing the type of BCs
-    angle       : float
-                  Angle (in degrees) of the border defined from its origin to
-                  its second point, so that it is always positive
-    edge_indxs  : List[int]
-                  List of the indices of the edges the border is made of
-    tx          : float
-                  The X-component of the border axis
-    ty          : float
-                  The Y-component of the border axis
+    border : Any
+        A GEOM edge object representing a border of the lattice.
+    type : BoundaryType
+        Providing the type of BCs.
+    angle : float
+        Angle (in degrees) of the border defined from its origin to its
+        second point, so that it is always positive.
+    edge_indxs : List[int]
+        List of the indices of the edges the border is made of.
+    tx : float
+        The X-component of the border axis.
+    ty : float
+        The Y-component of the border axis.
     """
     def __init__(self,
                  border: Any,
@@ -398,8 +394,9 @@ class Boundary:
 
         Returns
         -------
-        An integer describing the type for the BC this class instance
-        refers to.
+        int
+            An integer describing the type for the BC this class instance
+            refers to.
         """
         return self.type.value
 
@@ -413,18 +410,18 @@ class Boundary:
         Method that defines the characteristics of a lattice border that
         represents a boundary for the lattice itself.
         These characteristics are defined in terms of the associated BC type
-        (value of the 'BoundaryType' enumeration), the border axes and its
+        (value of the ``BoundaryType`` enumeration), the border axes and its
         angle; these depend on the specific lattice type of geometry (as
-        value of the 'LatticeGeometryType' enumeration).
+        value of the ``LatticeGeometryType`` enumeration).
 
         Parameters
         ----------
-        lx  : float
-              The X-characteristic dimension of the lattice
-        ly  : float
-              The Y-characteristic dimension of the lattice
+        lx : float
+            The X-characteristic dimension of the lattice.
+        ly : float
+            The Y-characteristic dimension of the lattice.
         lattice_o : Any
-            Vertex object representing the lattice center point
+            Vertex object representing the lattice center point.
         """
         # Get the X-Y coordinates of the two end points of the edge
         x1, y1, _, x2, y2 = get_kind_of_shape(self.border)[1:6]
@@ -549,10 +546,15 @@ class Boundary:
         ----------
         boundaries : Any
             A GEOM compound object made from the list of GEOM edge objects
-            belonging to the lattice boundaries
+            belonging to the lattice boundaries.
         id_vs_edge : Dict[Any, str]
             A dictionary of all the lattice edge IDs VS the corresponding
-            GEOM edge objects
+            GEOM edge objects.
+
+        Raises
+        ------
+        RuntimeError
+            In case the boundary edge is not of type ``SEGMENT``.
         """
         # Loop through all the sub-edges that are part of the lattice border
         # this class instance refers
@@ -562,7 +564,6 @@ class Boundary:
             # one
             shape_type = get_kind_of_shape(shape)[0]
             # Check the retrieved shape is of type 'SEGMENT'
-            # TODO add support also for ARC_CIRCLE
             if str(shape_type) == 'SEGMENT':
                 # Retrieve the GEOM edge object corresponding to its ID
                 edge_ref = id_vs_edge[build_edge_id(shape)]
@@ -582,13 +583,13 @@ class LatticeDataExtractor():
     Class that extracts the needed geometrical data from the given lattice
     to be used further on for generating the output TDT file.
     It determines the association of faces with properties, the one between
-    edges and the faces they belong to or are shared by two faces, as well
-    as the geometric and BCs about the lattice's borders.
+    edges and the faces they belong to, as well as the geometric data and BC
+    types of the lattice's borders.
 
     Parameters
     ----------
     lattice : Lattice
-        An instance of the `Lattice` class storing the lattice information
+        An instance of the ``Lattice`` class storing the lattice information
         to extract.
     geom_type : GeometryType
         The type of geometry of the lattice's cells used to extract the
@@ -597,17 +598,17 @@ class LatticeDataExtractor():
     Attributes
     ----------
     lattice : Lattice
-        The `Lattice` object storing the geometric information to extract.
+        The ``Lattice`` object storing the geometric information to extract.
     borders : List[Any]
         The list of edge objects representing the lattice's borders.
     boundaries : List[Boundary]
-        The list of `Boundary` objects storing the geometric and BCs
+        The list of ``Boundary`` objects storing the geometric and BCs
         information about the lattice's borders.
     subfaces : List[Face]
-        The list of `Face` objects storing the geometric information about
+        The list of ``Face`` objects storing the geometric information about
         each region of the lattice.
     edges : List[Edge]
-        The list of `Edge` objects storing the geometric information about
+        The list of ``Edge`` objects storing the geometric information about
         each edge of the lattice and the faces they belong to.
     id_vs_edge : Dict[str, Any]
         A dictionary of the IDs for the lattice's edges VS the corresponding
@@ -615,12 +616,14 @@ class LatticeDataExtractor():
     lattice_edges : List[Any]
         The list of the edge objects contained in the lattice.
     """
-    # Identifying the symmetry types for each type of lattice cells for which
-    # the lattice translation should be evaluated
     CASES_FOR_TRANSLATION = {
         CellType.RECT: [SymmetryType.FULL, SymmetryType.HALF],
         CellType.HEX: [SymmetryType.THIRD, SymmetryType.SIXTH]
     }
+    """
+    Identifying the symmetry types for each type of lattice cells for which
+    the lattice translation should be evaluated.
+    """
 
     def __init__(self, lattice: Lattice, geom_type: GeometryType) -> None:
         # Raise an exception if the lattice does not have any cell
@@ -643,10 +646,10 @@ class LatticeDataExtractor():
 
     def build_boundaries(self) -> None:
         """
-        Method that constructs a list of 'Boundary' objects representing the
-        lattice boundary edges, i.e. those connected to a single face.
+        Method that constructs a list of ``Boundary`` objects representing
+        the lattice boundary edges, i.e. those connected to a single face.
         All the GEOM edges being part of each boundary are associated to the
-        same 'Boundary' object.
+        same ``Boundary`` object.
         """
         # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
         # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
@@ -682,16 +685,17 @@ class LatticeDataExtractor():
     def build_edges(
             self, edge_names_vs_faces: Dict[str, List[Any | Face]]) -> None:
         """
-        Method that builds a list of 'Edge' objects from the given dictionary.
+        Method that builds a list of ``Edge`` objects from the given
+        dictionary.
         It associates for each edge name a list containing the corresponding
-        GEOM edge and the 'Face' objects; the latter represent the faces
+        GEOM edge and the ``Face`` objects; the latter represent the faces
         sharing the same edge.
 
         Parameters
         ----------
         edge_names_vs_faces : Dict[str, List[Any | Face]]
             Dictionary of edge names VS the list with the corresponding
-            GEOM edge and the connected 'Face' objects
+            GEOM edge and the connected ``Face`` objects.
         """
         # Loop through all the lists of objects associated to each edge
         for shapes in edge_names_vs_faces.values():
@@ -707,8 +711,9 @@ class LatticeDataExtractor():
 
         Returns
         -------
-        A dictionary whose entries associate a list of adjacent faces (as
-        'Face' objects) to the name of the corresponding shared edge.
+        Dict[str, List[Face]]
+            A dictionary whose entries associate a list of adjacent faces (as
+            ``Face`` objects) to the name of the corresponding shared edge.
         """
         # Initialize the dictionary storing the edges names VS the list of
         # connected faces
@@ -730,7 +735,7 @@ class LatticeDataExtractor():
 
     def build_faces(self, property_type: PropertyType) -> None:
         """
-        Method that builds a list of 'Face' objects from the GEOM face
+        Method that builds a list of ``Face`` objects from the GEOM face
         objects, extracted from the lattice regions, and the property
         values. Each region in the lattice corresponds to a region in a
         cell, according to the type of geometry (either technological or
@@ -741,14 +746,15 @@ class LatticeDataExtractor():
         Parameters
         ----------
         property_type : PropertyType = PropertyType.MATERIAL
-            The type of property associated to the lattice regions
+            The type of property associated to the lattice regions.
 
         Raises
         ------
-        RuntimeError:
-            - If no properties are associated to a lattice region.
-            - If no value for the given property type is associated to a
-              lattice region.
+        RuntimeError
+            If no properties are associated to a lattice region.
+        RuntimeError
+            If no value for the given property type is associated to a
+            lattice region.
         """
         # Index identifying the 'Face' object
         subface_indx = 0
@@ -782,7 +788,8 @@ class LatticeDataExtractor():
             # Build a 'Face' object and append to the corresponding list
             self.subfaces.append(Face(region.face, value))
 
-    def print_log_analysis(self, edge_name_vs_faces: Dict[str, List[Any]]):
+    def print_log_analysis(
+            self, edge_name_vs_faces: Dict[str, List[Any]]) -> None:
         """
         Method that prints on the stdout the log of the data extraction from
         the lattice.
@@ -791,7 +798,7 @@ class LatticeDataExtractor():
         ----------
         edge_name_vs_faces : Dict[str, List[Any]]
             A dictionary of the name of the lattice edges VS the GEOM faces
-            connected to it
+            connected to it.
         """
         # Displays the number of faces, the number of edges and the edges
         # associated with one face and two faces.
@@ -822,21 +829,23 @@ class LatticeDataExtractor():
 
         If the current lattice center differs from the provided one, all
         the regions of the lattice are translated so to keep their relative
-        distance from the translated lattice center. The same goes for the
-        provided lattice compound and the vertex object representing the
-        center of the stored `Lattice` instance.
+        distance from the new position of the lattice center.
+        The same translation is applied also to the given lattice compound.
+        In addition, a vertex object with the given XYZ coordinates is
+        assigned to the center of the stored ``Lattice`` instance.
 
         Parameters
         ----------
         lattice_cmpd : Any
-            The lattice compound object to be translated
+            The lattice compound object to be translated.
         new_center : Tuple[float, float, float]
-            The coordinates for the new lattice center
+            The coordinates for the new lattice center.
 
         Returns
         -------
-        The translated lattice compound, or the same compound if the center
-        has not changed.
+        Any
+            The translated lattice compound, or the same compound if the
+            center has not changed.
         """
         # Procede only if the lattice center has changed
         if all(math.isclose(c, nc) for c, nc in zip(
@@ -869,8 +878,9 @@ class LatticeDataExtractor():
 
         Returns
         -------
-        A tuple providing the coordinates of the lattice center so that the
-        lower-left corner coincides with the XYZ space origin.
+        Tuple[float, float, float]
+            A tuple providing the coordinates of the lattice center so that
+            the lower-left corner coincides with the XYZ space origin.
         """
         # Get the lattice face vertices
         lattice_vertices = extract_sub_shapes(make_face(self.borders),
@@ -891,12 +901,13 @@ class LatticeDataExtractor():
         """
         Method that returns the lattice compound that corresponds to the
         currently applied symmetry type. It identifies either the full
-        lattice of a part of it, if any symmetry is applied.
+        lattice or a part of it, if any symmetry is applied.
 
         Returns
         -------
-          The lattice compound that corresponds to the currently applied
-          symmetry type.
+        Any
+            The lattice compound that corresponds to the currently applied
+            symmetry type.
         """
         lattice_cmpd = self.lattice.lattice_cmpd
         if not self.lattice.symmetry_type == SymmetryType.FULL:
@@ -906,40 +917,42 @@ class LatticeDataExtractor():
     def __get_unique_edges(
             self, subface_edge: Any, edge_id: str) -> List[Any]:
         """
-        Method that retrieves the GEOM edge object associated to the given
+        Method that retrieves the GEOM edge objects associated to the given
         ID (second argument) from the attribute dictionary of IDs VS GEOM
         edges.
-        In case of an exception, due to a missing entry in the `id_vs_edge`
+        In case of an exception, due to a missing entry in the ``id_vs_edge``
         dictionary, a further analysis is performed. This could happen for
         edges shared by two adjacent faces: the same edge could have a
         different orientation in the two faces, i.e. starting and ending
         points are inverted, or an edge having a single face from one side
-        can can be associated to different faces from the other.
+        can be associated to different faces from the other.
         In both cases, it is important to retrieve all the corresponding sub
-        edges by exploiting the GEOM function `GetInPlace`; this is used to
+        edges by exploiting the GEOM function ``GetInPlace``; this is used to
         extract the sub-shape(s) of the lattice unique edges, which are
         coincident with, or could be a part of, the GEOM edge provided as
         first argument.
         If any edge is retrieved, the corresponding ID is built and used to
-        get the corresponding GEOM edges stored in the `id_vs_edge` attribute.
+        get the corresponding GEOM edges stored in the ``id_vs_edge``
+        attribute.
 
         Parameters
         ----------
         subface_edge : Any
-            The GEOM edge object to retrieve the corresponding sub-edges from
+            The GEOM edge object to retrieve the corresponding sub-edges from.
         edge_id : str
-            The ID of the edge to look for in the dictionary of IDs VS edges
+            The ID of the edge to look for in the dictionary of IDs VS edges.
 
         Raises
         ------
         RuntimeError
-            If no corresponding edge is found in the lattice
+            If no corresponding edge is found in the lattice.
 
         Returns
         -------
-        A list of GEOM edge objects that is either directly associated to the
-        given ID, or representing the sub-edges the edge can be subdivided
-        into.
+        List[Any]
+            A list of GEOM edge objects that is either directly associated to
+            the given ID, or representing the sub-edges the edge can be
+            subdivided into.
         """
         try:
             return [self.id_vs_edge[edge_id]]
@@ -972,20 +985,20 @@ class LatticeDataExtractor():
         Method that initializes the information to be stored from the lattice
         according to the applied symmetry and the given geometry.
         It re-builds the regions of the lattice according to the given
-        `GeometryType`, if it is needed or the indicated geometry type is
+        ``GeometryType``, if it is needed or the indicated geometry type is
         different from the one used to display them in the SALOME viewer.
         This allows that analysis on the lattice is always performed on the
         up to date regions.
         In case the lattice falls in one of the cases identified by the
-        `CASES_FOR_TRANSLATION` attribute, its compound is translated together
-        with its regions and the center, so that the lower-left corner
-        coincides with the origin of the XYZ space.
+        ``CASES_FOR_TRANSLATION`` attribute, its compound is translated
+        together with its regions and the center, so that the lower-left
+        corner coincides with the origin of the XYZ space.
 
         Parameters
         ----------
         geom_type : GeometryType
             The type of geometry of the lattice cells used to extract the
-            regions
+            regions.
         """
         # Check if the lattice geometry layout needs to be rebuilt
         if (self.lattice.is_update_needed or
@@ -1032,21 +1045,21 @@ class LatticeDataExtractor():
             edges: List[Any]) -> None:
         """
         Method that updates the given dictionary of edge names VS connected
-        faces with the provided 'Face' object and the list of edges.
+        faces with the provided ``Face`` object and the list of edges.
         For each edge, its ID is checked for its presence among the keys of
         the given dictionary: if so, the corresponding list is updated with
-        the 'Face' object, otherwise a new entry is created. The entry has
+        the ``Face`` object, otherwise a new entry is created. The entry has
         as key the edge name, as value a list with the GEOM edge object as
-        first element, followed by the given 'Face' object.
+        first element, followed by the given ``Face`` object.
 
         Parameters
         ----------
         edges_name_vs_faces : Dict[str, List[Any | Face]]
-            A dictionary of edge names VS connected faces
+            A dictionary of edge names VS connected faces.
         subface : Face
-            A 'Face' object to associate the given edges to
+            A ``Face`` object to associate the given edges to.
         edges : List[Any]
-            A list of GEOM edge objects each associated to the given face
+            A list of GEOM edge objects each associated to the given face.
         """
         for edge in edges:
             # Get the edge name
@@ -1059,22 +1072,23 @@ class LatticeDataExtractor():
                 edges_name_vs_faces[edge_name] = [edge, subface]
 
 
-def analyse_lattice(lattice: Lattice,
-                    tdt_config: TdtSetup) -> LatticeDataExtractor:
+def analyse_lattice(
+        lattice: Lattice, tdt_config: TdtSetup) -> LatticeDataExtractor:
     """
-    Function that performs the lattice analysis in order to extract the
-    needed information about the regions, and the associated properties,
-    the edges, the association between edges and faces connected to each
-    of them, and the edges representing the lattice boundaries.
+    Function that performs the lattice analysis to extract the necessary
+    information about the regions and their associated properties, the edges
+    and their association with the faces they belong to. It also extracts
+    information about the edges representing the lattice boundaries.
 
     Parameters
     ----------
     lattice : Lattice
-        The instance of the `Lattice` class storing the geometrical data
+        The instance of the ``Lattice`` class storing the geometrical data
         about the lattice to analyse.
     tdt_config : TdtSetup
-        Dataclass providing the settings for exporting the TDT representation
-        of the geometry layout of the lattice.
+        Dataclass providing the settings for extracting the geometry
+        information from the lattice layout and the properties assigned
+        to its regions.
 
     Returns
     -------
@@ -1099,21 +1113,21 @@ def build_edge_id(edge: Any) -> str:
     """
     Function that builds a unique ID for a GEOM edge object in the geometry
     layout to process.
-    This is performed by retrieving characteristic information abount the
+    This is performed by retrieving characteristic information about the
     edge in terms of a list containing the type of shape and a series of
     parameters that describe the shape itself.
     According to the shape type we could have:
 
-    - CIRCLE xc yc zc dx dy dz R
-      (X-Y-Z center coordinates, X-Y-Z normal vector elements, circle radius)
-    - ARC_CIRCLE xc yc zc dx dy dz R x1 y1 z1 x2 y2 z2
+    - `CIRCLE xc yc zc dx dy dz R`
+      (X-Y-Z center coordinates, X-Y-Z normal vector elements, circle radius).
+    - `ARC_CIRCLE xc yc zc dx dy dz R x1 y1 z1 x2 y2 z2`
       (X-Y-Z center coordinates, X-Y-Z normal vector elements, arc radius,
-      X-Y-Z coordinates of arc starting and ending points)
-    - SEGMENT x1 y1 z1 x2 y2 z2
-      (X-Y-Z coordinates of segment starting and ending points)
+      X-Y-Z coordinates of arc starting and ending points).
+    - `SEGMENT x1 y1 z1 x2 y2 z2`
+      (X-Y-Z coordinates of segment starting and ending points).
 
-    If any shape type other than `CIRCLE`, `ARC_CIRCLE` and `SEGMENT` is
-    provided, an exception is raised.
+    If any shape type other than ``CIRCLE``, ``ARC_CIRCLE`` and ``SEGMENT``
+    is provided, an exception is raised.
 
     Parameters
     ----------
@@ -1122,13 +1136,14 @@ def build_edge_id(edge: Any) -> str:
 
     Returns
     -------
-    A string representing the unique ID for the edge.
+    str
+        A string representing the unique ID for the edge.
 
     Raises
     ------
     RuntimeError
-        If the type of the provided edge is not among the allowed `CIRCLE`,
-        `ARC_CIRCLE` and `SEGMENT`.
+        If the type of the provided edge is not among the allowed ``CIRCLE``,
+        ``ARC_CIRCLE`` and ``SEGMENT``.
     """
     # Get the information of the given GEOM shape object
     data = get_kind_of_shape(edge)
@@ -1148,7 +1163,7 @@ def classify_lattice_edges(edges: List[Any]) -> Dict[str, Any]:
     by building a dictionary with keys being a unique ID and values the
     corresponding GEOM edge object.
     The IDs are built from the geometric characteristics of the edges;
-    for each edge its `name` internal attribute is set using a global
+    for each edge its ``name`` internal attribute is set using a global
     index over all the lattice's edges.
 
     Parameters
@@ -1165,7 +1180,7 @@ def classify_lattice_edges(edges: List[Any]) -> Dict[str, Any]:
     ------
     RuntimeError
         If any of the elements in the input list is not an edge of the
-        allowed `CIRCLE`, `ARC_CIRCLE` and `SEGMENT` types.
+        allowed ``CIRCLE``, ``ARC_CIRCLE`` and ``SEGMENT`` types.
     """
     # Initialize the dictionary of GEOM edges
     ids_edges = {}

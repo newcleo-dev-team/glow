@@ -16,6 +16,9 @@ Welcome to the |TOOL| documentation!
    source/application_configuration.rst
    source/getting_started.rst
    source/api_guide.rst
+   source/tests.rst
+   source/tutorials.rst
+   source/bibliography.rst
    source/contacts.rst
    source/acknowledgments.rst
    source/license.rst

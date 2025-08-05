@@ -12,44 +12,27 @@ from glow.interface import geompy, gst, salome, SALOMEDS
 class ShapeType(Enum):
     """
     Enumeration for defining the GEOM topological types of shapes.
-
-    Attributes
-    ----------
-    COMPOUND  : int
-        Indicating a compound shape type
-    COMPSOLID : int
-        Indicating a compound solid shape type
-    SOLID     : int
-        Indicating a solid shape type
-    SHELL     : int
-        Indicating a shell shape type
-    FACE      : int
-        Indicating a face shape type
-    WIRE      : int
-        Indicating a wire shape type
-    EDGE      : int
-        Indicating an edge shape type
-    VERTEX    : int
-        Indicating a vertex shape type
-    SHAPE     : int
-        Indicating a generic shape type
-    FLAT      : int
-        Indicating a flat shape type
-    PLANAR    : int
-        Indicating a planar shape type
-    POLYGON   : int
-        Indicating a polygon shape type
     """
-    COMPOUND  : int = geompy.ShapeType['COMPOUND']
+    COMPOUND : int = geompy.ShapeType['COMPOUND']
+    """Indicating a compound shape type."""
     COMPSOLID : int = geompy.ShapeType['COMPSOLID']
-    SOLID     : int = geompy.ShapeType['SOLID']
-    SHELL     : int = geompy.ShapeType['SHELL']
-    FACE      : int = geompy.ShapeType['FACE']
-    WIRE      : int = geompy.ShapeType['WIRE']
-    EDGE      : int = geompy.ShapeType['EDGE']
-    VERTEX    : int = geompy.ShapeType['VERTEX']
-    SHAPE     : int = geompy.ShapeType['SHAPE']
-    FLAT      : int = geompy.ShapeType['FLAT']
+    """Indicating a compound solid shape type."""
+    SOLID : int = geompy.ShapeType['SOLID']
+    """Indicating a solid shape type."""
+    SHELL : int = geompy.ShapeType['SHELL']
+    """Indicating a shell shape type."""
+    FACE : int = geompy.ShapeType['FACE']
+    """Indicating a face shape type."""
+    WIRE : int = geompy.ShapeType['WIRE']
+    """Indicating a wire shape type"""
+    EDGE : int = geompy.ShapeType['EDGE']
+    """Indicating an edge shape type."""
+    VERTEX : int = geompy.ShapeType['VERTEX']
+    """Indicating a vertex shape type."""
+    SHAPE : int = geompy.ShapeType['SHAPE']
+    """Indicating a generic shape type."""
+    FLAT : int = geompy.ShapeType['FLAT']
+    """Indicating a flat shape type."""
 
 
 # Dictionary associating the name of the GEOM type of shape VS the
@@ -83,15 +66,15 @@ def add_to_study(shape: Any, name: str) -> str:
     Parameters
     ----------
     shape : Any
-        The shape to be added to the study
-    name  : str
-        The name of the shape to be visualized in the SALOME object
-        browser
+        The shape to be added to the study.
+    name : str
+        The name of the shape to be visualized in the SALOME object browser.
 
     Returns
     -------
-    A string representing the ID entry assigned by SALOME to the shape
-    when added to the current study.
+    str
+        A string representing the ID entry assigned by SALOME to the shape
+        when added to the current study.
     """
     return geompy.addToStudy(shape, name)
 
@@ -103,18 +86,18 @@ def add_to_study_in_father(father_shape: Any, shape: Any, name: str) -> str:
 
     Parameters
     ----------
-    father_shape  : Any
-        The father shape in the object browser of the study
-    shape         : Any
-        The shape to be added to the study
-    name          : str
-        The name of the shape to be visualized in the SALOME object
-        browser
+    father_shape : Any
+        The father shape in the object browser of the study.
+    shape : Any
+        The shape to be added to the study.
+    name : str
+        The name of the shape to be visualized in the SALOME object browser.
 
     Returns
     -------
-    A string representing the ID entry assigned by SALOME to the shape
-    when added to the current study under the given father shape.
+    str
+        A string representing the ID entry assigned by SALOME to the shape
+        when added to the current study under the given father shape.
     """
     return geompy.addToStudyInFather(father_shape, shape, name)
 
@@ -135,7 +118,7 @@ def display_shape(entry_id: str) -> None:
 
     Parameters
     ----------
-    id  : str
+    id : str
         The entry ID of the shape to display in the SALOME 3D viewer.
     """
     if is_gui_available():
@@ -150,16 +133,17 @@ def extract_sorted_sub_shapes(shape: Any,
 
     Parameters
     ----------
-    shape           : Any
-        The shape object to explode
+    shape : Any
+        The shape object to explode.
     sub_shapes_type : ShapeType
-        The type of the sub-shapes to extract as value of the `ShapeType`
-        enumeration
+        The type of the sub-shapes to extract as value of the ``ShapeType``
+        enumeration.
 
     Returns
     -------
-    A list of the sub-shapes of the given type that are contained in the
-    provided shape.
+    List[Any]
+        A list of the sub-shapes of the given type that are contained in the
+        provided shape.
     """
     return geompy.SubShapeAllSortedCentres(shape, sub_shapes_type.value)
 
@@ -171,16 +155,17 @@ def extract_sub_shapes(shape: Any, sub_shapes_type: ShapeType) -> List[Any]:
 
     Parameters
     ----------
-    shape           : Any
-        The shape object to explode
+    shape : Any
+        The shape object to explode.
     sub_shapes_type : ShapeType
-        The type of the sub-shapes to extract as value of the `ShapeType`
-        enumeration
+        The type of the sub-shapes to extract as item of the ``ShapeType``
+        enumeration.
 
     Returns
     -------
-    A list of the sub-shapes of the given type that are contained in the
-    provided shape.
+    List[Any]
+        A list of the sub-shapes of the given type that are contained in the
+        provided shape.
     """
     return geompy.ExtractShapes(shape, sub_shapes_type.value)
 
@@ -192,13 +177,14 @@ def fuse_edges_in_wire(wire: Any) -> Any:
 
     Parameters
     ----------
-    wire  : Any
-        The wire object whose vertices to suppress
+    wire : Any
+        The wire object whose vertices to suppress.
 
     Returns
     -------
-    A modified wire obtained by suppressing vertices in C1 continuous
-    adjacent edges in the wire.
+    Any
+        A modified wire obtained by suppressing vertices in C1 continuous
+        adjacent edges in the wire.
     """
     return geompy.FuseCollinearEdgesWithinWire(wire, [])
 
@@ -207,14 +193,14 @@ def get_angle_between_shapes(shape1: Any, shape2: Any) -> float:
     """
     Function that computes the angle in degrees between two EDGE-type shapes,
     which must both be linear edges, i.e. their type name in SALOME is
-    `SEGMENT`.
+    ``SEGMENT``.
 
     Parameters
     ----------
     shape1 : Any
-        The first shape object, expected to be a linear edge
+        The first shape object, expected to be a linear edge.
     shape2 : Any
-        The second shape object, expected to be a linear edge
+        The second shape object, expected to be a linear edge.
 
     Returns
     -------
@@ -224,7 +210,7 @@ def get_angle_between_shapes(shape1: Any, shape2: Any) -> float:
     Raises
     ------
     RuntimeError
-        If either `shape1` or `shape2` is not of type `SEGMENT`.
+        If either ``shape1`` or ``shape2`` is not of type ``SEGMENT``.
     """
     # Get the specific type name of the two shapes
     shape1_type = str(get_kind_of_shape(shape1)[0])
@@ -247,12 +233,13 @@ def get_basic_properties(shape: Any) -> List[float]:
     Parameters
     ----------
     shape : Any
-        The shape whose geometrical properties to extract
+        The shape whose geometrical properties to extract.
 
     Returns
     -------
-    A list providing the sum of the lengths of all the wires, the area
-    and volume of the given shape.
+    List[float]
+        A list providing the sum of the lengths of all the wires, the area
+        and volume of the given shape.
     """
     return geompy.BasicProperties(shape)
 
@@ -264,12 +251,13 @@ def get_bounding_box(shape: Any) -> List[float]:
     Parameters
     ----------
     shape : Any
-        The shape whose bounding box to extract
+        The shape whose bounding box to extract.
 
     Returns
     -------
-    The [Xmin, Xmax, Ymin, Ymax] values representing the shape bounding
-    box extension.
+    List[float]
+        The `[Xmin, Xmax, Ymin, Ymax]` values representing the shape bounding
+        box extension.
     """
     return geompy.BoundingBox(shape)[:4]
 
@@ -281,13 +269,20 @@ def get_closed_free_boundary(compound: Any) -> List[Any]:
 
     Parameters
     ----------
-    compound  : Any
-        The compound object to extract the closed boundary from
+    compound : Any
+        The compound object to extract the closed boundary from.
 
     Returns
     -------
-    A list of the wire objects each one forming a closed boundary within the
-    given compound.
+    List[Any]
+        A list of the wire objects each one forming a closed boundary within
+        the given compound.
+
+    Raises
+    ------
+    RuntimeError
+        If no closed boundaries could be extracted from the given compound
+        object.
     """
     (isDone, closed, _) = geompy.GetFreeBoundary(compound)
     if not isDone or not closed:
@@ -332,14 +327,15 @@ def get_in_place(shape1: Any, shape2: Any) -> Any:
     Parameters
     ----------
     shape1  : Any
-        The shape to find sub-shapes of
+        The shape to find sub-shapes of.
     shape2  : Any
-        The shape specifying what to find in the first one
+        The shape specifying what to find in the first one.
 
     Returns
     -------
-    A compound object including all the found sub-shapes in the first
-    given shape.
+    Any
+        A compound object including all the found sub-shapes in the first
+        given shape.
     """
     return geompy.GetInPlace(shape1, shape2)
 
@@ -351,12 +347,13 @@ def get_inertia_matrix(shape: Any) -> List[float]:
     Parameters
     ----------
     shape : Any
-        The shape whose inertia matrix to extract
+        The shape whose inertia matrix to extract.
 
     Returns
     -------
-    A list providing, for the given shape, the components of its inertia
-    matrix and the moments of inertia in the XYZ directions.
+    List[float]
+        A list providing, for the given shape, the components of its inertia
+        matrix and the moments of inertia in the XYZ directions.
     """
     return geompy.Inertia(shape)
 
@@ -367,25 +364,28 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
     given shape which depends on the kind of shape.
     Shapes of interest returns the following information:
 
-      - CIRCLE xc yc zc dx dy dz R (X-Y-Z center coordinates, X-Y-Z normal
-        vector elements, circle radius)
-      - ARC_CIRCLE xc yc zc dx dy dz R x1 y1 z1 x2 y2 z2
+      - `CIRCLE xc yc zc dx dy dz R` (X-Y-Z center coordinates, X-Y-Z normal
+        vector elements, circle radius).
+      - `ARC_CIRCLE xc yc zc dx dy dz R x1 y1 z1 x2 y2 z2`
         (X-Y-Z center coordinates, X-Y-Z normal vector elements, arc
-        radius, X-Y-Z coordinates of arc starting and ending points)
-      - SEGMENT x1 y1 z1 x2 y2 z2
-        (X-Y-Z coordinates of segment starting and ending points)
+        radius, X-Y-Z coordinates of arc starting and ending points).
+      - `SEGMENT x1 y1 z1 x2 y2 z2`
+        (X-Y-Z coordinates of segment starting and ending points).
 
-    N.B. Values lesser than the tolerance of 1e-15 are substituted with
-    '0' in the returned list.
+    Notes
+    -----
+    Values lesser than the tolerance of 1e-10 are substituted with ``0`` in
+    the returned list.
 
     Parameters
     ----------
     shape : Any
-        The shape whose geometrical information to extract
+        The shape whose geometrical information to extract.
 
     Returns
     -------
-    A list providing, for the given shape, its geometrical information.
+    List[Any]
+        A list providing, for the given shape, its geometrical information.
     """
     # Extract the list of information about the given shape
     kind_of_shape = geompy.KindOfShape(shape)
@@ -397,20 +397,22 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
                 kind_of_shape[i] = 0
     return kind_of_shape
 
+
 def get_min_distance(shape1: Any, shape2: Any) -> float:
     """
-    Function that returns the minimum distance of the given shapes.
+    Function that returns the minimum distance between the given shapes.
 
     Parameters
     ----------
-    shape1  : Any
-        The first shape to get the minimum distance
-    shape2  : Any
-        The second shape to get the minimum distance
+    shape1 : Any
+        The first shape to get the minimum distance.
+    shape2 : Any
+        The second shape to get the minimum distance.
 
     Returns
     -------
-    The minimum distance between the two given face objects.
+    float
+        The minimum distance between the two given shapes.
     """
     return geompy.MinDistance(shape1, shape2)
 
@@ -418,18 +420,19 @@ def get_min_distance(shape1: Any, shape2: Any) -> float:
 def get_object_from_id(entry_id: str) -> Any | None:
     """
     Function that returns the geometrical object associated to the entry ID
-    declared in the study.
+    declared in the current SALOME study.
 
     Parameters
     ----------
     entry_id : str
         The value of the entry ID associated to the geometrical object in the
-        current SALOME study
+        current SALOME study.
 
     Returns
     -------
-    The geometrical object associated with the given entry ID in the study or
-    None, if no one is associated to the entry ID in the current SALOME study.
+    Any | None
+        The geometrical object associated with the given entry ID in the
+        current SALOME study or ``None``, if no object could be found.
     """
     try:
         return gst.getGeomObjectFromEntry(entry_id)
@@ -439,16 +442,17 @@ def get_object_from_id(entry_id: str) -> Any | None:
 
 def get_point_coordinates(point: Any) -> Tuple[float, float, float]:
     """
-    Function that returns the XYZ coordinates of the given point object.
+    Function that returns the XYZ coordinates of the given vertex object.
 
     Parameters
     ----------
     point : Any
-        The point object whose coordinates are returned
+        The vertex object whose coordinates are returned.
 
     Returns
     -------
-    The XYZ coordinates of the given point object.
+    Tuple[float, float, float]
+        The XYZ coordinates of the given vertex object.
     """
     return geompy.PointCoordinates(point)
 
@@ -460,23 +464,25 @@ def get_selected_object() -> Any:
 
     Returns
     -------
-    The selected geometrical object in the study.
+    Any
+        The selected geometrical object in the study.
     """
     return gst.getGeomObjectSelected()
 
 
 def get_shape_name(shape: Any) -> str:
     """
-    Function that returns the 'name' attribute assigned to the given shape.
+    Function that returns the ``name`` attribute assigned to the given shape.
 
     Parameters
     ----------
     shape : Any
-        The geometrical shape whose name to retrieve
+        The geometrical shape whose name to retrieve.
 
     Returns
     -------
-    The value of the 'name' attribute assigned to the given shape.
+    str
+        The value of the ``name`` attribute assigned to the given shape.
     """
     return shape.GetName()
 
@@ -484,16 +490,17 @@ def get_shape_name(shape: Any) -> str:
 def get_shape_type(shape: Any) -> ShapeType:
     """
     Function that returns the type of the given shape as value of the
-    'ShapeType' enumeration.
+    ``ShapeType`` enumeration.
 
     Parameters
     ----------
     shape : Any
-        The shape whose type to determine
+        The shape whose type to determine.
 
     Returns
     -------
-    The shape type as value of the 'ShapeType' enumeration.
+    ShapeType
+        The shape type as value of the ``ShapeType`` enumeration.
     """
     # Get the name of the shape type
     type = str(get_kind_of_shape(shape)[0])
@@ -511,15 +518,16 @@ def get_subshape_id(shape: Any, subshape: Any) -> str:
 
     Parameters
     ----------
-    shape     : Any
-        The parent shape
-    subshape  : Any
-        The subshape contained in the parent shape
+    shape : Any
+        The parent shape.
+    subshape : Any
+        The subshape contained in the parent shape.
 
     Returns
     -------
-    A string representing the entry ID associated to the subshape in the
-    current study.
+    str
+        A string representing the entry ID associated to the subshape in the
+        current study.
     """
     return geompy.GetSubShapeID(shape, subshape)
 
@@ -532,16 +540,18 @@ def is_point_inside_shape(point: Any, shape: Any) -> bool:
     Parameters
     ----------
     point : Any
-        The point object to check if inside the shape
+        The point object to check if inside the shape.
     shape : Any
-        The shape object the point position has to be evaluated
+        The shape object the point position has to be evaluated.
 
     Returns
     -------
-    True, if the point is inside the shape, False otherwise.
+    bool
+        ``True``, if the point is inside the shape, ``False`` otherwise.
     """
     return geompy.AreCoordsInside(shape,
                                   list(get_point_coordinates(point)))[0]
+
 
 def is_gui_available() -> None:
     """
@@ -551,7 +561,7 @@ def is_gui_available() -> None:
     Returns
     -------
     bool
-        `True` if the SALOME GUI is available, `False` otherwise.
+        ``True`` if the SALOME GUI is available, ``False`` otherwise.
     """
     return salome.sg.hasDesktop()
 
@@ -559,20 +569,21 @@ def is_gui_available() -> None:
 def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     """
     Function that returns the arc edge object built from the given three
-    point objects.
+    vertex objects.
 
     Parameters
     ----------
-    point1  : Any
-        The vertex object being the arc's center
-    point2  : Any
-        The vertex object being the arc's start point
-    point3  : Any
-        The vertex object being the arc's end point
+    point1 : Any
+        The vertex object being the arc's center.
+    point2 : Any
+        The vertex object being the arc's start point.
+    point3 : Any
+        The vertex object being the arc's end point.
 
     Returns
     -------
-    The arc edge built from the given three construction points.
+    Any
+        The arc edge built from the given three construction points.
     """
     return geompy.MakeArcCenter(point1, point2, point3, False)
 
@@ -584,11 +595,12 @@ def make_cdg(shape: Any) -> Any:
     Parameters
     ----------
     shape : Any
-        The geometric shape whose CDG is returned
+        The geometric shape whose CDG is returned.
 
     Returns
     -------
-    The shape CDG as a vertex object.
+    Any
+        The shape CDG as a vertex object.
     """
     return geompy.MakeCDG(shape)
 
@@ -599,35 +611,37 @@ def make_circle(center: Any, axis: Union[Any, None], radius: float) -> Any:
 
     Parameters
     ----------
-    center  : Any
-        The vertex object being the center of the circle
-    axis    : Any
-        The vector object being the normal axis of the circle
-    radius  : float
-        The value of the circle radius
+    center : Any
+        The vertex object being the center of the circle.
+    axis : Any
+        The vector object being the normal axis of the circle.
+    radius : float
+        The value of the circle radius.
 
     Returns
     -------
-    The circle object from the given center, axis and radius
+    Any
+        The circle object from the given center, axis and radius.
     """
     return geompy.MakeCircle(center, axis, radius)
 
 
 def make_common(shape1: Any, shape2: Any) -> Any:
     """
-    Function that performs the 'common' boolean operation between the two
+    Function that performs the `common` boolean operation between the two
     given shapes.
 
     Parameters
     ----------
-    shape1  : Any
-        The first shape of the 'common' operation
-    shape2  : Any
-        The second shape of the 'common' operation
+    shape1 : Any
+        The first shape of the `common` operation.
+    shape2 : Any
+        The second shape of the `common` operation.
 
     Returns
     -------
-    A shape object resulting from the 'common' operation.
+    Any
+        A shape object resulting from the `common` operation.
     """
     return geompy.MakeCommon(shape1, shape2)
 
@@ -638,36 +652,38 @@ def make_compound(shapes: List[Any]) -> Any:
 
     Parameters
     ----------
-    shapes    : List[Any]
-        The list of shapes to be put into the returned compound object
+    shapes : List[Any]
+        The list of shapes to be put into the returned compound object.
 
     Returns
     -------
-    A compound object made from the given list of shapes.
+    Any
+        A compound object made from the given list of shapes.
     """
     return geompy.MakeCompound(shapes)
 
 
 def make_cut(shape1: Any, shape2: Any) -> Any:
     """
-    Function that performs the 'cut' boolean operation between the two
+    Function that performs the `cut` boolean operation between the two
     given shapes.
 
     Parameters
     ----------
-    shape1  : Any
-        The first shape of the 'cut' operation
-    shape2  : Any
-        The second shape of the 'cut' operation
+    shape1 : Any
+        The first shape of the `cut` operation.
+    shape2 : Any
+        The second shape of the `cut` operation.
 
     Returns
     -------
-    A shape object resulting from the 'cut' operation.
+    Any
+        A shape object resulting from the `cut` operation.
     """
     return geompy.MakeCut(shape1, shape2)
 
 
-def make_edge(vertex1: Any, vertex2: Any):
+def make_edge(vertex1: Any, vertex2: Any) -> Any:
     """
     Function that returns an edge object, given the vertex objects being
     its start-end points.
@@ -675,13 +691,14 @@ def make_edge(vertex1: Any, vertex2: Any):
     Parameters
     ----------
     vertex1 : Any
-        The vertex object being the edge start point
+        The vertex object being the edge start point.
     vertex2 : Any
-        The vertex object being the edge end point
+        The vertex object being the edge end point.
 
     Returns
     -------
-    The edge object built from the given start-end points.
+    Any
+        The edge object built from the given start-end points.
     """
     return geompy.MakeEdge(vertex1, vertex2)
 
@@ -694,33 +711,35 @@ def make_face(borders: List[Any]) -> Any:
     Parameters
     ----------
     borders : List[Any]
-        The list of edge objects being the face borders
+        The list of edge objects being the face borders.
 
     Returns
     -------
-    The face object built on the given borders.
+    Any
+        The face object built on the given borders.
     """
     return geompy.MakeFaceWires(borders, True)
 
 
 def make_fuse(shapes: List[Any]) -> Any:
     """
-    Function that performs a 'fuse' boolean operation on the given list
+    Function that performs a `fuse` boolean operation on the given list
     of shapes.
 
     Parameters
     ----------
-    shapes  : List[Any]
-        The list of geometrical shapes to be fused into a single one
+    shapes : List[Any]
+        The list of geometrical shapes to be fused into a single one.
 
     Returns
     -------
-    The face object resulting from fusing all the given shapes.
+    Any
+        The face object resulting from fusing all the given shapes.
     """
     return make_face([geompy.MakeFuseList(shapes, True, True)])
 
 
-def make_line(point1: Any, point2: Any):
+def make_line(point1: Any, point2: Any) -> Any:
     """
     Function that returns a line object (i.e. a straight edge), given
     the point objects being its start-end points.
@@ -728,13 +747,14 @@ def make_line(point1: Any, point2: Any):
     Parameters
     ----------
     point1 : Any
-        The point object being the line start point
+        The point object being the line start point.
     point2 : Any
-        The point object being the line end point
+        The point object being the line end point.
 
     Returns
     -------
-    The line object built from the given start-end points.
+    Any
+        The line object built from the given start-end points.
     """
     return geompy.MakeLineTwoPnt(point1, point2)
 
@@ -749,17 +769,18 @@ def make_partition(
 
     Parameters
     ----------
-    shapes    : List[Any]
-        The list of shapes to be intersected
-    tools     : List[Any]
-        The list of shapes intersecting
-    shape_type: ShapeType
-        The type of the shape resulting from the partition operation
+    shapes : List[Any]
+        The list of shapes to be intersected.
+    tools : List[Any]
+        The list of shapes intersecting.
+    shape_type : ShapeType
+        The type of the shape resulting from the partition operation.
 
     Returns
     -------
-    A shape made by the intersection of all the provided ones with the type
-    specified as input.
+    Any
+        A shape made by the intersection of all the provided ones with the
+        type specified as input.
     """
     return geompy.MakePartition(ListShapes=shapes,
                                 ListTools=tools,
@@ -773,15 +794,16 @@ def make_rotation(shape: Any, axis: Any, angle: float) -> Any:
     Parameters
     ----------
     shape : Any
-        The generic shape object the rotation should be applied to
-    axis  : Any
-        The vector object representing the rotation axis
+        The generic shape object the rotation should be applied to.
+    axis : Any
+        The vector object representing the rotation axis.
     angle : float
-        The rotation angle in radians
+        The rotation angle in radians.
 
     Returns
     -------
-    The rotated shape object.
+    Any
+        The rotated shape object.
     """
     return geompy.MakeRotation(shape, axis, angle)
 
@@ -792,14 +814,15 @@ def make_translation(shape: Any, vector: Any) -> Any:
 
     Parameters
     ----------
-    shape   : Any
-        The generic shape object the translation should be applied to
-    vector  : Any
-        The translation vector object
+    shape : Any
+        The generic shape object the translation should be applied to.
+    vector : Any
+        The translation vector object.
 
     Returns
     -------
-    The translated shape object.
+    Any
+        The translated shape object.
     """
     return geompy.MakeTranslationVector(shape, vector)
 
@@ -811,11 +834,12 @@ def make_vector(vect_elem: Tuple[float, float, float]) -> Any:
     Parameters
     ----------
     vect_elem : Tuple[float, float, float]
-        The XYZ components of the vector to build
+        The XYZ components of the vector to build.
 
     Returns
     -------
-    The vector object built on the given XYZ components.
+    Any
+        The vector object built on the given XYZ components.
     """
     return geompy.MakeVectorDXDYDZ(*vect_elem)
 
@@ -827,13 +851,14 @@ def make_vector_from_points(point1: Any, point2: Any) -> Any:
     Parameters
     ----------
     point1 : Any
-        The start point object of the vector to build
+        The start point object of the vector to build.
     point2 : Any
-        The end point object of the vector to build
+        The end point object of the vector to build.
 
     Returns
     -------
-    The vector object built on the given XYZ components.
+    Any
+        The vector object built on the given XYZ components.
     """
     return geompy.MakeVector(point1, point2)
 
@@ -844,12 +869,13 @@ def make_vertex(coords: Tuple[float, float, float]) -> Any:
 
     Parameters
     ----------
-    coords  : Tuple[float, float, float]
-        The XYZ coordinates of the vertex to build
+    coords : Tuple[float, float, float]
+        The XYZ coordinates of the vertex to build.
 
     Returns
     -------
-    The vertex object positioned at the given XYZ coordinates.
+    Any
+        The vertex object positioned at the given XYZ coordinates.
     """
     return geompy.MakeVertex(*coords)
 
@@ -862,34 +888,36 @@ def make_vertex_inside_face(face: Any) -> Any:
 
     Parameters
     ----------
-    face  : Any
-        The reference face object to put a vertex into
+    face : Any
+        The reference face object to put a vertex into.
 
     Returns
     -------
-    The vertex object positioned within the given face object.
+    Any
+        The vertex object positioned within the given face object.
     """
     return geompy.MakeVertexInsideFace(face)
 
 
 def make_vertex_on_curve(curve: Any, u_param: float) -> Any:
     """
-    Function that returns a vertex object built on the given curve object
-    (being a circle, an arc or an edge) and placed at a position identified
+    Function that returns a vertex object built on the given edge object
+    (being a circle, an arc or a segment) and placed at a position identified
     by the adimensional parameter `u_param`, which expresses the scaled
-    position wrt the curve length.
+    position wrt the edge length.
 
     Parameters
     ----------
-    curve   : Any
-        The reference curve object along which the vertex should be placed
+    curve : Any
+        The reference edge object along which the vertex should be placed.
     u_param : float
-        Identifying the position of the vertex along the curve, expressed
-        in the range [0-1] as it is scaled to the length of the curve.
+        Identifying the position of the vertex along the edge, expressed
+        in the range [0-1] as it is scaled to the length of the edge.
 
     Returns
     -------
-    The vertex object positioned along the curve length.
+    Any
+        The vertex object positioned along the edge length.
     """
     return geompy.MakeVertexOnCurve(curve, u_param, True)
 
@@ -902,14 +930,14 @@ def make_vertex_on_lines_intersection(line1: Any, line2: Any) -> Any:
     Parameters
     ----------
     line1 : Any
-        The first reference line object
+        The first reference line object.
     line2 : Any
-        The second reference line object
+        The second reference line object.
 
     Returns
     -------
-    The vertex object being the intersection point of the two given
-    lines.
+    Any
+        The vertex object being the intersection point of the two given lines.
     """
     return geompy.MakeVertexOnLinesIntersection(line1, line2)
 
@@ -922,11 +950,12 @@ def make_wire(edges: List[Any]) -> Any:
     Parameters
     ----------
     edges : List[Any]
-        The list of edge objects to build a wire from
+        The list of edge objects to build a wire from.
 
     Returns
     -------
-    A wire object build from the given edges.
+    Any
+        A wire object build from the given edges.
     """
     return geompy.MakeWire(edges)
 
@@ -938,8 +967,8 @@ def remove_from_study(entry_id: str) -> None:
 
     Parameters
     ----------
-    entry_id  : str
-        The ID of the geometrical object to be removed by the study.
+    entry_id : str
+        The ID of the geometrical object to be removed from the study.
     """
     gst.removeFromStudy(entry_id)
 
@@ -951,26 +980,26 @@ def set_color_face(face: Any, color: Tuple[int, int, int]) -> None:
 
     Parameters
     ----------
-    face  : Any
-        The face object to which assigned a color when displayed in the
-        3D viewer
+    face : Any
+        The face object to which a color is assigned when displayed in the
+        3D viewer.
     color : Tuple[int, int, int]
-        The RGB code of the color to assign to the face
+        The RGB code of the color to assign to the face.
     """
     face.SetColor(SALOMEDS.Color(*(rgb/255 for rgb in color)))
 
 
 def set_shape_name(shape: Any, name: str) -> None:
     """
-    Function that assigns a value to the 'name' attribute for the given
+    Function that assigns a value to the ``name`` attribute for the given
     shape.
 
     Parameters
     ----------
     shape : Any
-        The geometrical shape whose name to set
-    name  : str
-        The name to assign to the shape
+        The geometrical shape whose name to set.
+    name : str
+        The name to assign to the shape.
     """
     shape.SetName(name)
 

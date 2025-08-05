@@ -29,39 +29,36 @@ from glow.support.types import CellType, GeometryType, PropertyType
 @dataclass
 class Region():
     """
-    Grouping information regarding a generic region of the cell
-    technological geometry.
-
-    Attributes
-    ----------
-    - cdg           : Union[Any, None] = field(init=False)
-                      A GEOM vertex object representing the cell region
-                      CDG, if any has been set
-    - face          : Any = None
-                      A GEOM face object of the cell region
-    - face_entry_id : Union[str, None] = None
-                      The ID of the cell region used in the current SALOME
-                      study
-    - inner_point   : Union[Any, None] = None
-                      A GEOM vertex object representing a point within
-                      the cell region
-    - name          : Union[str, None] = None
-                      The name associated to the cell region used in the
-                      current SALOME study
-    - properties    : Union[Dict[PropertyType, str], None] = None
-                      A dictionary of property types and names associated
-                      to the cell region
-    - colors        : Union[Dict[PropertyType, Tuple[int, int, int]], None]
-                      A dictionary associating an RGB color to each property
-                      type of the cell region
+    Grouping information regarding a generic region of the cell's or the
+    lattice's geometry layout.
     """
     cdg: Union[Any, None] = field(init=False)
+    """
+    A vertex object representing the GDG of the cell's region, if any region
+    has been set.
+    """
     face: Any = None
+    """The face object of the cell's region."""
     face_entry_id: Union[str, None] = None
+    """The ID of the cell's region used in the current SALOME study."""
     inner_point: Union[Any, None] = None
+    """A vertex object representing a point within the cell's region."""
     name: Union[str, None] = None
+    """
+    The name associated to the cell's region used in the current SALOME
+    study.
+    """
     properties: Union[Dict[PropertyType, str], None] = None
+    """
+    A dictionary of property types and value names associated to the
+    cell's region.
+    """
     color: Tuple[int, int, int] = field(init=False)
+    """
+    A tuple indicating the RGB color associated to the cell's region
+    according to the value of the ``PropertyType`` being shown in the SALOME
+    viewer.
+    """
 
     def __post_init__(self) -> None:
         """
@@ -74,13 +71,8 @@ class Region():
         """
         self.cdg = self.__calculate_cdg()
         self.color = (167, 167, 167)
-        # # Associate a color to each property type, if any has been set
-        # if self.properties:
-        #     rgb_colors = [(255, 0, 0)] * len(self.properties.keys())
-        #     # Associate the same color for each property type
-        #     self.colors = dict(zip(self.properties.keys(), rgb_colors))
 
-    def __calculate_cdg(self) -> Union[Any, None]:
+    def __calculate_cdg(self) -> Any | None:
         """
         Method for calculating the CDG of the face this sector is referring
         to. If no face has been set yet, the CDG, as a GEOM vertex object,
@@ -88,30 +80,29 @@ class Region():
 
         Returns
         -------
-        A GEOM point object representing the face CDG, if any face has been
-        set; None otherwise.
+        Any | None
+            A GEOM point object representing the face CDG, if any face has
+            been set; ``None`` otherwise.
         """
         if not self.face:
             return None
         return make_cdg(self.face)
 
-    def reset_color_to_default(self):
+    def reset_color_to_default(self) -> None:
         """
         Method for resetting the region color to the (167, 167, 167) RGB
         value, which corresponds to light grey.
         """
         self.color = (167, 167, 167)
 
-    def set_property_color(self,
-                           color: Tuple[int, int, int]) -> None:
+    def set_property_color(self, color: Tuple[int, int, int]) -> None:
         """
         Method for associating a specific RGB color to the region.
 
         Parameters
         ----------
-        color     : color: Tuple[int, int, int]
-                    RGB values identifying the color to associate to the
-                    region
+        color : Tuple[int, int, int]
+            RGB values identifying the color to associate to the region.
         """
         # Check the given color
         if not color or not isinstance(color, Tuple) or len(color) != 3 or \
@@ -127,57 +118,69 @@ class Cell(ABC):
     Abstract class for representing any cell characterized in terms of its
     geometric layout and the properties associated to its regions.
 
+    The cell geometry layout can be represented in terms of its technological
+    geometry, representing the different zone associated with a material
+    property. Regions can be identified by overlapping circles at any position
+    within the cell's borders.
+    Typically, they are concentric when representing a fuel pin cell, but no
+    limitation on their positioning is present, provided their radii are
+    compatible with the dimensions of the cell.
+    The technological geometry can be sectorized, i.e. subdivision points
+    on the inner circles can be defined in order to partition the face
+    into subfaces defining the cell sectors.
+    Properties of the technological geometry zones are associated to each
+    of the corresponding sectors.
+
     Parameters
     ----------
-    center  : Tuple[float, float, float]
-        The X-Y-Z coordinates of the cell center
-    figure  : Surface
-        The figure representing the cell shape
-    name    : str
-        The name of the cell to be used in the current study
+    center : Tuple[float, float, float]
+        The X-Y-Z coordinates of the cell center.
+    figure : Surface
+        The figure representing the cell shape.
+    name : str
+        The name of the cell to be used in the current study.
 
     Attributes
     ----------
-    cell_type       : Union[CellType, None]
-        The type of cell expressed as a value of the 'CellType' enumeration
-    face            : Any
-        The face object providing the cell technological geometry
-        representation
-    face_entry_id   : Union[str, None]
-        The ID of the cell face object used in the current study
-    figure          : Surface
-        The figure representing the cell shape
-    inner_circles   : List[Circle]
-        The list of 'Circle' objects representing the cell concentric circles
+    cell_type : Union[CellType, None]
+        The type of cell expressed as a value of the ``CellType`` enumeration.
+    face : Any
+        The face object representing the cell's technological geometry.
+    face_entry_id : Union[str, None]
+        The ID of the cell face object used in the current SALOME study.
+    figure : Surface
+        The instance of any of the ``Surface`` subclasses representing the
+        cell's main shape.
+    inner_circles : List[Circle]
+        The list of ``Circle`` objects representing any circular region in
+        the cell's technological geometry.
     is_windmill_applied : bool
-        Boolean flag stating if the windmill sectorization is applied
-    name            : str
-        The name of the cell to be used in the current study
-    regions         : List[Region]
-        The list of 'Region' objects storing information about either the
-        regions of the cell technological geometry or the ones resulting from
-        its sectorization
-    rotation        : float
-        The rotation angle of the cell expressed in radians
+        Boolean flag stating if the `windmill` sectorization is applied.
+    name : str
+        The name of the cell to be used in the current SALOME study.
+    regions : List[Region]
+        The list of ``Region`` objects storing information about either the
+        regions of the cell's technological geometry or the ones resulting
+        from its sectorization.
+    rotation : float
+        The rotation angle of the cell, expressed in radians.
     sectorized_face : Any
-        The face object providing the cell sectorized geometry representation
-        (used for calculations)
+        The face object providing the cell sectorized geometry representation.
     tech_geom_props : Dict[Any, Dict[PropertyType, str]]
-        A dictionary between the regions of the cell technological geometry
-        VS the dictionary of property types VS value associated to each zone
+        A dictionary between the regions of the cell's technological geometry
+        and the dictionary of property types VS value associated to each zone.
     tech_geom_sect_opts : Dict[Any, Tuple[int, float]]
-        A dictionary between the regions of the cell technological geometry
-        VS the tuple identifying the associated sectorization options
-
-    VALID_SECTOR_NO_VS_ANGLE  : Dict[int, List[float]]
-        Dictionary providing the number of valid sectors each cell zone
-        could be subdivided VS the accepted angles the sectorization can
-        start from.
+        A dictionary between the regions of the cell's technological geometry
+        and the tuple identifying the associated sectorization options.
+    displayed_geom : GeometryType
+        The type of geometry currently displayed in the SALOME viewer.
     """
-    # Number of valid sectors each cell zone could be subdivided VS the
-    # accepted angles the sectorization can start from. Values are
-    # specific to the cell type
     VALID_SECTOR_NO_VS_ANGLE: Dict[int, List[float]] = {}
+    """
+    Dictionary providing the number of valid sectors each cell zone could
+    be subdivided VS the accepted angles the sectorization can start from.
+    Values are specific for each type of cell.
+    """
 
     def __init__(self, figure: Surface, name: str) -> None:
         super().__init__()
@@ -190,19 +193,18 @@ class Cell(ABC):
         # Store the geometrical figure this cell represents
         self.figure: Surface = figure
         # Initialize the cell-related instance attributes
-        self.sectorized_face: Union[Any, None] = None
+        self.cell_type: Union[CellType, None] = None
         self.face: Any
+        self.face_entry_id: Union[str, None] = None
         self.inner_circles: List[Circle]
+        self.is_windmill_applied: bool = False
+        self.name: str = name
+        self.regions: List[Region] = []
+        self.rotation: float = 0.0
+        self.sectorized_face: Union[Any, None] = None
         self.tech_geom_props: Dict[Any, Dict[PropertyType, str]]
         self.tech_geom_sect_opts: Dict[Any, Tuple[int, float]]
-        self.name: str = name
-        self.face_entry_id: Union[str, None] = None
-        self.rotation: float = 0.0
-        self.regions: List[Region] = []
-        self.cell_type: Union[CellType, None] = None
-        self.is_windmill_applied: bool = False
         self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
-        self.added_edges: List[Any] = []
         self.__initialize_cell()
         self._initialize_specific_cell()
 
@@ -224,9 +226,8 @@ class Cell(ABC):
 
         Parameters
         ----------
-        radius  : float
-                  The radius of the circle to check against the cell
-                  dimensions
+        radius : float
+            The radius of the circle to check against the cell dimensions.
         """
 
     def extract_subfaces(self) -> List[Any]:
@@ -236,11 +237,14 @@ class Cell(ABC):
         geometry.
         In addition, the list is ordered in terms of the distances of each
         subface from the cell center, in ascending order.
+        If no subfaces are found, the entire face of the cell is returned.
 
         Returns
         -------
-        A list of all the subfaces that comprise the cell face, sorted in
-        ascending order by means of their distance from the cell center.
+        List[Any]
+            A list of all the subfaces that comprise the cell face, sorted in
+            ascending order by means of their distance from the cell center,
+            or the entire cell's face, if no subfaces are present.
         """
         subfaces = self.__extract_subfaces_from_face(self.face)
         if not subfaces:
@@ -256,13 +260,15 @@ class Cell(ABC):
 
         Parameters
         ----------
-        face  : Any
-                A face object the subfaces have to be extracted from
+        face : Any
+            A face object the subfaces have to be extracted from.
 
         Returns
         -------
-        A list of all the subfaces that comprise the given cell face, sorted
-        in ascending order by means of their distance from the cell center.
+        List[Any]
+            A list of all the subfaces that comprise the given cell face,
+            sorted in ascending order by means of their distance from the
+            cell center.
         """
         subfaces = extract_sub_shapes(face, ShapeType.FACE)
         return sorted(subfaces,
@@ -274,24 +280,24 @@ class Cell(ABC):
             radius: float = 1.0,
             position: Union[Tuple[float, float, float], None] = None) -> None:
         """
-        Method that allows to add a circle to the cell technological geometry
-        only, if not already present.
+        Method that allows to add a circle to the cell's technological
+        geometry only, if not already present.
         Given the radius, a corresponding face object is built in the given
         position within the cell, if any is specified; otherwise the circle
         is added in the cell center.
-        In any case, a partition operation between the cell face and the new
+        In any case, a partition operation between the cell's face and the new
         circle is performed. The result is a geometric surface that comprises
         both faces.
-        In addition, the dictionaries associating the regions of the cell
+        In addition, the dictionaries associating the regions of the cell's
         technological geometry with the properties and with the sectorization
         options respectively are updated.
 
         Parameters
         ----------
         radius : float
-            The radius of the circle to add
+            The radius of the circle to add.
         position : Union[Tuple[float, float, float], None]
-            The X-Y-Z coordinates of the center of the circle to add
+            The X-Y-Z coordinates of the center of the circle to add.
         """
         # Check if the given radius is acceptable, i.e. the resulting
         # circle is within the cell
@@ -310,19 +316,19 @@ class Cell(ABC):
 
     def __add_circle_to_pos(self, circle: Circle) -> None:
         """
-        Method for adding the given 'Circle' object to the cell at any
-        position (indicated by the 'Circle' attribute) within the cell.
-        A partition operation between the cell face and the circle one
+        Method for adding the given ``Circle`` object to the cell at any
+        position (indicated by the corresponding attribute) within the cell.
+        A partition operation between the cell's face and the circle's one
         is performed. The result is a geometric surface that comprises
         both faces.
         In addition, the dictionaries associating the regions of the
-        cell technological geometry with the properties and with the
+        cell's technological geometry with the properties and with the
         sectorization options respectively are updated.
 
         Parameters
         ----------
-        circle  : Circle
-            The 'Circle' object to add to the cell technological geometry
+        circle : Circle
+            The ``Circle`` object to add to the cell's technological geometry.
         """
         # Add the 'Circle' object to the list storing the circles within
         # the cell
@@ -358,22 +364,22 @@ class Cell(ABC):
             radius: float,
             position: Union[Tuple[float, float, float], None] = None) -> None:
         """
-        Method that allows to remove a cell-centered circle from the cell
-        technological geometry, given the radius.
+        Method that allows to remove a cell-centered circle from the cell's
+        technological geometry, given the radius and the position of its
+        center.
         All references to the circle in the cell are removed, which means
-        that the corresponding 'Circle' object is removed from the
-        'inner_circles' list attribute and the whole face object of the
-        cell is re-built.
-        The dictionaries associating the regions of the cell technological
+        that the corresponding ``Circle`` object is removed from the attribute
+        ``inner_circles`` and the whole face object of the cell is re-built.
+        The dictionaries associating the regions of the cell's technological
         geometry with the properties and with the sectorization options
         respectively are updated as well.
 
         Parameters
         ----------
         radius : float
-            The radius of the circle to remove
+            The radius of the circle to remove.
         position : Union[Tuple[float, float, float], None]
-            The X-Y-Z coordinates of the center of the circle to remove
+            The X-Y-Z coordinates of the center of the circle to remove.
         """
         # Raise an exception if no circles are present
         if not self.inner_circles:
@@ -417,8 +423,9 @@ class Cell(ABC):
 
         Returns
         -------
-        A list of face objects belonging to the regions of the cell's
-        technological geometry that are centered in the cell's center.
+        List[Any]
+            A list of face objects belonging to the regions of the cell's
+            technological geometry that are centered in the cell's center.
         """
         # Assemble the cell's figure with the cell's centered circles only
         centered_regions = extract_sub_shapes(
@@ -447,7 +454,7 @@ class Cell(ABC):
         Parameters
         ----------
         to_skip : bool
-            If True, skip sectorization operation
+            If ``True``, skip sectorization operation.
         """
         # If no sectorization has been applied yet, return
         if not self.sectorized_face:
@@ -468,11 +475,6 @@ class Cell(ABC):
         self._sectorize_cell([value[0] for value in sectors_angles],
                              [value[1] for value in sectors_angles],
                              self.is_windmill_applied)
-        # Partition the sectorization result with the externally added
-        # edges, if any
-        if self.added_edges:
-            self.sectorized_face = make_partition(
-                [self.sectorized_face], self.added_edges, ShapeType.FACE)
 
     def __update_regions_association(self,
                                      tech_regions: List[Any],
@@ -488,15 +490,15 @@ class Cell(ABC):
 
         Parameters
         ----------
-        tech_regions  : List[Any]
-            The list of face objects extracted from the cell technological
-            geometry
-        regions_dict  : Dict
-            The dictionary associating the cell regions to the specific
-            option type
+        tech_regions : List[Any]
+            The list of face objects extracted from the cell's technological
+            geometry.
+        regions_dict : Dict
+            The dictionary associating the cell's regions to the specific
+            option type.
         default_value : Any
             A default value to use for defining an entry in the given
-            dictionary
+            dictionary.
         """
         # Declare a support dictionary
         support_dict = {}
@@ -532,14 +534,15 @@ class Cell(ABC):
         Parameters
         ----------
         radius : float
-            The radius of the circle to look for
+            The radius of the circle to look for.
         position : Tuple[float, float, float]
-            The XYZ coordinates of the center of the circle to look for
+            The XYZ coordinates of the center of the circle to look for.
 
         Returns
         -------
-        An integer representing the index of the found circle in the list
-        or None, if none could be found.
+        int | None
+            An integer representing the index of the found circle in the list
+            or ``None``, if none could be found.
         """
         for indx, circle in enumerate(self.inner_circles):
             if (math.isclose(circle.radius, radius) and
@@ -549,18 +552,18 @@ class Cell(ABC):
 
     def rotate(self, angle: float) -> None:
         """
-        Method that rotates all the geometrical elements the cell is made of
+        Method that rotates all the geometric elements the cell is made of
         by a given angle in degrees.
-        The cell face object is rebuild from the rotated base elements it is
-        it is made of.
-        The dictionaries associating the cell regions to the properties and
-        the sectorization options are updated with the rotated versions of
-        the regions themselves.
+        The cell's face object is rebuild from the rotated base elements it
+        is made of.
+        The dictionaries associating the cell's regions with the properties
+        and with the sectorization options are updated with the rotated
+        versions of the regions themselves.
 
         Parameters
         ----------
         angle : float
-                The angle of rotation in degree
+            The angle of rotation in degrees.
         """
         # Get the cell center coordinates
         center = get_point_coordinates(self.figure.o)
@@ -575,18 +578,18 @@ class Cell(ABC):
         """
         Method that rotates all the geometrical elements the cell is made of
         by a given angle in degrees around the given axis object.
-        The cell face object is rebuild from the rotated base elements it is
-        it is made of.
-        The dictionaries associating the cell regions to the properties and
-        the sectorization options are updated with the rotated versions of
-        the regions themselves.
+        The cell's face object is rebuild from the rotated base elements it is
+        made of.
+        The dictionaries associating the cell's regions with the properties
+        and with the sectorization options are updated with the rotated
+        versions of the regions themselves.
 
         Parameters
         ----------
         angle : float
-                The angle of rotation in degree
-        axis  : Any
-                The axis object around which the rotation takes place
+            The angle of rotation in degrees.
+        axis : Any
+            The vector object representing the rotation axis.
         """
         rotation = math.radians(angle)
         # Rotate the cell basic elements around the given axis
@@ -624,20 +627,23 @@ class Cell(ABC):
 
     def translate(self, new_pos: Tuple[float, float, float]) -> Self:
         """
-        Method that builds a copy of this class translated with respect to
-        the current cell center position.
-        All the geometrical elements describing the cell geometry, both its
-        technological and its sectorized one, are translated accordingly.
+        Method that builds a copy of the ``Cell`` instace calling this method;
+        this copy is translated with respect to the current position of the
+        cell center.
+        All the geometric elements describing the cell's geometry layout are
+        translated accordingly.
 
         Parameters
         ----------
         new_pos : Tuple[float, float, float]
-                  The new position where the cell has to be moved
+            The new position where the cell has to be moved.
 
         Returns
         -------
-        A copy of this class instance with all the geometrical elements
-        describing the cell geometry have been moved to the new position.
+        Self
+            A copy of this class instance with all the geometric elements
+            describing the cell's geometry layout moved accordingly with the
+            new cell center position.
         """
         # Deep copy of this class instance
         cell = deepcopy(self)
@@ -681,10 +687,10 @@ class Cell(ABC):
 
     def __build_regions(self) -> None:
         """
-        Method that builds the 'Region' objects that corresponds to the
-        regions coming from the cell technological geometry.
-        These objects store information about the face object and associated
-        properties.
+        Method that builds the ``Region`` objects that corresponds to the
+        regions coming from the cell's technological geometry.
+        These objects store information about the face objects and associated
+        properties of each region of the cell.
         """
         # Re-initialize the list of 'Region' objects
         self.regions.clear()
@@ -704,21 +710,22 @@ class Cell(ABC):
         """
         Method that builds a list of points resulting from the intersection
         of two lines.
-        For each element of the two given list of GEOM line objects, the
-        corresponding intersection point, as a GEOM vertex object is built,
-        if any can be found.
+        For each element of the two given list of line objects, the
+        corresponding intersection point, as a vertex object is built, if
+        any can be found.
 
         Parameters
         ----------
-        lines1  : List[Any]
-            The first list of line objects
-        lines2  : List[Any]
-            The second list of line objects
+        lines1 : List[Any]
+            The first list of line objects.
+        lines2 : List[Any]
+            The second list of line objects.
 
         Returns
         -------
-        A list of GEOM vertex objects representing the intersection points
-        found between all the two lists of lines.
+        List[Any]
+            A list of vertex objects representing the intersection points
+            that have found between the two lists of lines.
         """
         # Initialize the list of intersection points
         intersections = []
@@ -743,25 +750,26 @@ class Cell(ABC):
     def sectorize(
         self, sectors_no: List[int], angles: List[float], **kwargs) -> None:
         """
-        Abstract method that subdivides the cell into sectors. Given the
-        number of sectors for each cell zone and the values of the angles
-        to start the sectorization from, points are built on the geometric
-        surfaces of the cell.
-        Lines are drawn between those points to define the sectors and the
-        corresponding subfaces are extracted.
+        Abstract method to be implemented in subclasses to subdivide the cell
+        technological geometry into sectors.
+        Given the number of sectors for each cell zone and the values of the
+        angles to start the sectorization from, points are built on the
+        geometric surfaces of the cell.
+        Lines are drawn between those points to define the sectors.
+        A partition operation between the cell's technological geometry and
+        the built lines provides the cell's sectorized geometry.
 
         Parameters
         ----------
-        sectors_no  : List[int]
-                      List of integers representing the number of subdivision
-                      for each cell zone coming from the technological geometry
-        angles      : List[float]
-                      List of angles (in degree) the sectorization should start
-                      from for each cell zone coming from the technological
-                      geometry
-        kwargs      : Any
-                      Additional parameters specific to the type of cell to be
-                      sectorized
+        sectors_no : List[int]
+            List of integers representing the number of subdivision for each
+            cell zone coming from the technological geometry.
+        angles : List[float]
+            List of angles (in degrees) the sectorization should start from
+            for each cell's zone coming from the technological geometry.
+        kwargs : Any
+            Additional parameters specific to the type of cell to be
+            sectorized.
         """
 
     def _sectorize_cell(self,
@@ -774,21 +782,21 @@ class Cell(ABC):
         Given the number of sectors for each cell zone and the values of the
         angles to start the sectorization from, points are built on the
         geometric surfaces of the cell.
-        Lines are drawn between those points to define the sectors and the
-        corresponding subfaces are extracted.
+        Lines are drawn between those points to define the sectors.
+        A partition operation between the cell's technological geometry and
+        the built lines provides the cell's sectorized geometry.
 
         Parameters
         ----------
-        sectors_no  : List[int]
-                      List of integers representing the number of subdivision
-                      for each cell zone coming from the technological geometry
-        angles      : List[float]
-                      List of angles (in degree) the sectorization should start
-                      from for each cell zone coming from the technological
-                      geometry
-        windmill    : bool = False
-                      Flag indicating if a windmill sectorization of the cell
-                      needs to be considered
+        sectors_no : List[int]
+            List of integers representing the number of subdivision for each
+            cell's zone coming from the technological geometry.
+        angles : List[float]
+            List of angles (in degree) the sectorization should start from
+            for each cell's zone coming from the technological geometry.
+        windmill : bool = False
+            Flag indicating if a `windmill` sectorization of the cell needs
+            to be considered.
         """
         # Check the correctness of the lists storing the information for
         # performing the sectorization
@@ -837,24 +845,25 @@ class Cell(ABC):
         - the cell borders;
         - the sectors between consecutive circles;
         - the circles themselves;
-        - the lines connecting consecutive intersection points (if the
-          'windmill' option is active)
+        - the lines connecting consecutive intersection points for the
+          outmost region (if the ``windmill`` flag is ``True``).
 
         Parameters
         ----------
-        sectors_no  : List[int]
+        sectors_no : List[int]
             List of integers representing the number of subdivision for
-            each cell zone coming from the technological geometry
-        angles      : List[float]
+            each cell's zone coming from the technological geometry.
+        angles : List[float]
             List of angles (in degree) the sectorization should start
-            from for each cell zone coming from the technological geometry
-        windmill    : bool = False
-            Flag indicating if a windmill sectorization of the cell needs
-            to be considered
+            from for each cell's zone coming from the technological geometry.
+        windmill : bool = False
+            Flag indicating if a `windmill` sectorization of the cell needs
+            to be considered.
 
         Returns
         -------
-        A list of edge objects resulting from the sectorization operation.
+        List[Any]
+            A list of edge objects resulting from the sectorization operation.
         """
         # -------------------------------------------------------------
         # Initialization of support lists (containing the sectorization
@@ -954,30 +963,30 @@ class Cell(ABC):
         # Return the built list of edges
         return edges
 
-    def __handle_windmill_sectorization(self,
-                                        sector: int,
-                                        angle: float,
-                                        sbdv_pnts_cur: List[Any]) -> List[Any]:
+    def __handle_windmill_sectorization(
+            self, sector: int, angle: float, sbdv_pnts_cur: List[Any]
+        ) -> List[Any]:
         """
         Method that builds the wings of the windmill sectorization, if needed.
         The method connects two successive intersection points (on adjacent
         cell borders), if the number of sectors for the outmost region of the
-        cartesian cell technological geometry is 8 or 16.
+        cartesian cell technological geometry is ``8`` or ``16``.
 
         Parameters
         ----------
-        sector        : int
+        sector : int
             The number of sector for the current region of the cartesian cell
-            technological geometry
-        angle         : float
-            The starting angle of the sectorization
+            technological geometry.
+        angle : float
+            The starting angle of the sectorization.
         sbdv_pnts_cur : List[Any]
-            The list of vertex objects to connect
+            The list of vertex objects to connect.
 
         Returns
         -------
-        The list of line objects built on the subdivision point, if required,
-        otherwise an empty list.
+        List[Any]
+            The list of edge objects built on the subdivision point, if
+            required, otherwise an empty list.
         """
         # Build a list of line object giving the windmill wings
         if sector == 8 and angle == 22.5:
@@ -997,23 +1006,24 @@ class Cell(ABC):
         """
         Method that builds a list of vertex objects on the given circle
         object, each on a different position given by the sector index,
-        the starting angle and the rotation parameter.
+        the starting angle and the ``rotation`` parameter.
 
         Parameters
         ----------
-        circle          : Any
-            The circle object on which points have to be built
-        starting_angle  : float
-            The angle (in degrees) from which to build points
-        no_sectors      : int
-            The number of subdivision pointds to build
-        rotation        : float
-            A parameter in the [0-1] range identifying where to built
-            a point. It based on the rotation of the cell
+        circle : Any
+            The circle object on which points have to be built.
+        starting_angle : float
+            The angle (in degrees) from which to build points.
+        no_sectors : int
+            The number of subdivision pointds to build.
+        rotation : float
+            A parameter in the [0-1] range identifying where to built a point.
+            It is based on the ``rotation`` parameter.
 
         Returns
         -------
-        A list of vertex objects subdividing the given circle.
+        List[Any]
+            A list of vertex objects subdividing the given circle.
         """
         return [
             make_vertex_on_curve(
@@ -1026,23 +1036,22 @@ class Cell(ABC):
                                            sectors_no_len: int,
                                            angles_len: int) -> None:
         """
-        Method for checking the correctness of the lenght of the lists
-        for the sectorization operation. It is verified that:
-        - the lists length is the same;
+        Method for checking the correctness of the length of the lists
+        for the sectorization operation. It verifies that:
+        - the length of the lists is the same;
         - their size coincides with the number of cell zones coming from
-          the cell technological geometry.
+          the cell's technological geometry.
 
         Parameters
         ----------
-        no_regions      : int
-                          The number of regions of the cell technological
-                          geometry
+        no_regions : int
+            The number of regions of the cell's technological geometry.
         sectors_no_len  : int
-                          The length of the list providing the number of
-                          sectors each cell zone has to be subdivided into
-        angles_len      : int
-                          The length of the list providing the angle the
-                          sectorization starts from
+            The length of the list providing the number of sectors each
+            cell's zone has to be subdivided into.
+        angles_len : int
+            The length of the list providing the angle the sectorization
+            starts from.
         """
         # Check that the number of sectors and angles is the same
         if not sectors_no_len == angles_len:
@@ -1057,15 +1066,15 @@ class Cell(ABC):
 
     def __check_sectors_no(self, sectors_no: List[int]) -> None:
         """
-        Method that checks if the number of sectors each cell zone has
-        to be subdivided is valid according to the specific cell type.
+        Method that checks if the number of sectors each cell's zone has
+        to be subdivided into is valid according to the specific cell type.
         An exception is raised if an invalid number is found.
 
         Parameters
         ----------
-        sectors_no  : List[int]
-                      List of integers identifying the number of sectors
-                      each cell zone has to be subdivided
+        sectors_no : List[int]
+            List of integers identifying the number of sectors each cell's
+            zone has to be subdivided into.
         """
         for i, sec_no in enumerate(sectors_no):
             if sec_no not in self.VALID_SECTOR_NO_VS_ANGLE:
@@ -1078,19 +1087,17 @@ class Cell(ABC):
                                     sectors_no: List[int]) -> None:
         """
         Method that checks if the angle the sectorization starts from for
-        each cell zone is valid according to the specific cell type and
+        each cell's zone is valid according to the specific cell type and
         to the given number of sectors.
-
         An exception is raised if an invalid value is found.
 
         Parameters
         ----------
-        angles      : List[float]
-                      List of angles the sectorization starts from for each
-                      cell zone
-        sectors_no  : List[int]
-                      List of integers identifying the number of sectors
-                      each cell zone has to be subdivided
+        angles : List[float]
+            List of angles the sectorization starts from for each cell's zone.
+        sectors_no : List[int]
+            List of integers identifying the number of sectors each cell's
+            zone has to be subdivided into.
         """
         for i, (angle, sec_no) in enumerate(zip(angles, sectors_no)):
             if not angle in self.VALID_SECTOR_NO_VS_ANGLE[sec_no]:
@@ -1103,18 +1110,17 @@ class Cell(ABC):
             self, properties: Dict[PropertyType, List[str]]) -> None:
         """
         Method that allows to set the properties for all the zones the cell
-        is made of (technological geometry).
+        is made of (i.e. the technological geometry).
         The accepted convention considers that the elements in the list for
         each property represent the values associated to the regions starting
-        from the inner circle to the last element (space between last circle
-        and cell borders).
+        from the inmost cell-centered region to the outmost one.
 
         Parameters
         ----------
-        properties  : Dict[PropertyType, List[str]]
-                      Dictionary collecting the properties for each cell
-                      region; different types, provided by the 'PropertyType'
-                      enumeration, can be provided
+        properties : Dict[PropertyType, List[str]]
+            Dictionary collecting the properties for each cell's region;
+            different types, given by the ``PropertyType`` enumeration,
+            can be provided.
         """
         # Extract the subfaces identifying the cell technological geometry
         tech_geom_faces = self.extract_subfaces()
@@ -1144,11 +1150,11 @@ class Cell(ABC):
 
     def __build_sector_regions(self) -> None:
         """
-        Method for building the 'Region' objects that corresponds to the
-        cell regions after applying a sectorization operation.
+        Method for building the ``Region`` objects that corresponds to the
+        cell's regions after applying a sectorization operation.
         By comparing the distance between a point on each sector face and
         the regions coming from the techonological geometry, the associated
-        properties are assigned to the newly built 'Region' instance.
+        properties are assigned to the newly built ``Region`` instance.
         """
         if not self.sectorized_face:
             raise RuntimeError("No sectorization has been applied: regions "
@@ -1189,24 +1195,30 @@ class Cell(ABC):
              geometry_type_to_show: GeometryType = GeometryType.TECHNOLOGICAL,
              update_view: bool = True) -> None:
         """
-        Method that shows the cell and its regions to the current SALOME
+        Method that shows the cell and its regions in the current SALOME
         study.
-        Given the property type, the viewe shows the region with a color
-        that has been associated to the property type of the region. If
-        None is provided, the regions are shown without any color.
+        Given the property type, the viewer shows the regions with a color
+        that has been associated to the value of the property type each
+        region has. If ``None`` is provided, the regions are shown without
+        any color.
+        By specyfing a type of geometry (as item of the enumeration
+        ``GeometryType``), the corresponding cell's regions are displayed.
+        By default those of the cell's technological geometry are shown.
+        If specified, the cell's regions are simply added to the SALOME study
+        without displaying them in the 3D viewer.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         property_type_to_show : Union[PropertyType, None] = None
-            The type of property to show for each cell region; the viewer
-            shows them in terms of a spefic color that each region associates
-            to the indicated type
+            The type of property to show for each cell's region; the viewer
+            shows them in terms of a spefic color associated to the property
+            value each region has.
         geometry_type_to_show : GeometryType = GeometryType.TECHNOLOGICAL
             The type of geometry to show: regions are shown accordingly
-            with the selected type
-        update_view           : bool
+            with the selected type.
+        update_view : bool
             Flag stating if the viewer should be updated by displaying the
-            cell regions
+            cell's regions.
         """
         # Erase all objects from the current view
         clear_view()
@@ -1256,15 +1268,15 @@ class Cell(ABC):
     def __associate_colors_to_regions(
             self, property_type: Union[PropertyType, None]) -> None:
         """
-        Method that assign the same color to all the regions having the same
+        Method that assigns the same color to all the regions having the same
         value for the given property type.
 
         Parameters
         ----------
         property_type : Union[PropertyType, None]
             The type of property for which colors must be assigned to regions
-            having the same property type value. If None, the regions color
-            is reset to its default value
+            with the same value of that property. If ``None``, the regions
+            color is reset to its default value.
         """
         # If no colorset to display, reset the region colors
         if not property_type:
@@ -1316,9 +1328,8 @@ class Cell(ABC):
 
     def get_regions_info(self) -> None:
         """
-        Method for retrieving descriptive information about any of the cell
-        regions whose corresponding object has been selected in the SALOME
-        study.
+        Method that retrieves descriptive information about the cell's region
+        currently selected in the SALOME study.
         """
         # Extract the geometrical object currently selected in the current
         # SALOME study, if any
@@ -1334,17 +1345,18 @@ class Cell(ABC):
             value: str,
             region: Any | None = None) -> None:
         """
-        Method that allows to set a value of a given type of property for
-        the cell region, passed as input, or the one currently selected
-        in the SALOME study, if none is provided as input.
+        Method that enables setting the value of a given property type for
+        the cell region passed as an input or the currently selected one in
+        the SALOME study. If none is provided as an input, the currently
+        selected one is used.
 
         Parameters
         ----------
         property_type : PropertyType
-            The value of the 'PropertyType' enumeration indicating which
-            type of property to assign to the selected region
+            The value of the ``PropertyType`` enumeration indicating which
+            type of property to assign to the selected region.
         value : str
-            The value of the property type to assign to the selected region
+            The value of the property type to assign to the selected region.
         region : Any | None = None
             The cell's region of the technological geometry whose property
             to change. When not provided, the region currently selected is
@@ -1353,10 +1365,12 @@ class Cell(ABC):
         Raises
         ------
         RuntimeError
-            - If the displayed geometry is not the `TECHNOLOGICAL` one.
-            - When no region, or more than one, is selected.
-            - If the indicated region cannot be found among the ones stored
-              in the properties dictionary.
+            If the displayed geometry is not the ``TECHNOLOGICAL`` one.
+        RuntimeError
+            When no region, or more than one, is selected.
+        RuntimeError
+            If the indicated region cannot be found among the ones stored in
+            the properties dictionary.
         """
         # Check which cell geometry type is currently shown; if different
         # from the TECHNOLOGICAL one, raise an exception
@@ -1413,8 +1427,9 @@ class Cell(ABC):
 
     def update_geometry(self) -> None:
         """
-        Method for updating the cell geometry layout, present in the SALOME
-        study, with the one currently selected in the SALOME object browser.
+        Method for updating the cell's geometry layout shown in the SALOME
+        study, with the geometric object currently selected in the SALOME
+        Object Browser.
         """
         # Get the geometric object selected in the SALOME object browser
         shape = get_selected_object()
@@ -1424,22 +1439,26 @@ class Cell(ABC):
         # Update the currently displayed geometry with the selected shape
         self.update_geometry_from_face(self.displayed_geom, shape)
 
-    def update_geometry_from_face(self,
-                                  geo_type: GeometryType,
-                                  shape: Any) -> None:
+    def update_geometry_from_face(
+            self, geo_type: GeometryType, shape: Any) -> None:
         """
-        Method for updating the cell geometry layout, whose type is provided
+        Method for updating the cell's geometry layout, whose type is provided
         as first argument, with the geometric shape passed as second argument.
         A different treatment is provided according to the type of geometry to
-        update.
+        update:
+
+        - ``geo_type = GeometryType.SECTORIZED`` - the sectorized geometry
+          layout is updated only;
+        - ``geo_type = GeometryType.TECHNOLOGICAL`` - both technological
+          and sectorized geometry layouts are updated.
 
         Parameters
         ----------
         geo_type : GeometryType
-            The cell type of geometry to update, as value of the
-            'GeometryType' enumeration
+            The cell type of geometry to update, as item of the
+            ``GeometryType`` enumeration.
         shape : Any
-            The geometric object to update the cell with
+            The geometric object to update the cell's layout with.
         """
         match geo_type:
             case GeometryType.SECTORIZED:
@@ -1485,10 +1504,11 @@ class Cell(ABC):
         storing the cell's regions VS the corresponding properties and
         sectorization options respectively.
         The following operations are performed:
-        - the face is set to the one of the 'Surface' used at instantiation;
-        - the list storing the cell's 'Circle' objects is initialized with
+        - the face is set to the one of the ``Surface`` used at instantiation;
+        - the list storing the cell's ``Circle`` objects is initialized with
           an empty list;
-        - the property dictionaries are initialized with default values.
+        - the property and sectorization dictionaries are initialized with
+          default values.
         """
         # Initialize the face object with the main shape
         self.__initialize_geometry(self.figure.face)
@@ -1497,13 +1517,13 @@ class Cell(ABC):
     def __initialize_geometry(self, face: Any) -> None:
         """
         Method that initializes the cell geometry layout with the given face
-        object. The list storing the cell's `Circle` objects is initialized
+        object. The list storing the cell's ``Circle`` objects is initialized
         to an empty list.
 
         Parameters
         ----------
         face : Any
-            The face object to initialize the cell's one with
+            The face object to initialize the cell's one with.
         """
         # Initialize the face object with the given shape
         self.face = face
@@ -1514,7 +1534,7 @@ class Cell(ABC):
 
     def __initialize_region_dicts(self) -> None:
         """
-        Method that initializes the dictionaries associating cell regions
+        Method that initializes the dictionaries associating cell's regions
         to their properties and sectorization options with default values
         for each region of the cell's face.
         """
@@ -1536,18 +1556,18 @@ class Cell(ABC):
 
     def __update_cell_with_edges(self, shape: Any) -> None:
         """
-        Method for updating the cell geometry layout with the edges found in
-        the given shape.
-        For any edge representing a circle, the corresponding 'Circle' object
-        is added; the same goes for an arc of a circle, where only one is
-        considered.
+        Method for updating the cell's geometry layout with the edges found
+        in the given shape.
+        For any edge representing a circle, the corresponding ``Circle``
+        object is added; the same goes for an arc of a circle, where only
+        one is considered.
         Any edge representing a segment is collected in a list to perform a
         final partition operation with the built cell face.
 
         Parameters
         ----------
         shape : Any
-            The geometric object to update the cell with
+            The geometric object to update the cell with.
         """
         # Loop through all the edge objects of the cell to identify
         # the presence of any added edges, excluding the ones of the
@@ -1594,14 +1614,14 @@ class Cell(ABC):
 
     def get_centered_circles(self) -> List[Circle]:
         """
-        Method that returns a list of the cell-centered `Circle` objects of
+        Method that returns a list of the cell-centered ``Circle`` objects of
         the cell.
 
         Returns
         -------
         List[Circle]:
-            A list of `Circle` objects whose centers coincide with the cell's
-            one.
+            A list of ``Circle`` objects whose centers coincide with the
+            cell's one.
         """
         return [circle for circle in self.inner_circles \
                 if get_min_distance(circle.o, self.figure.o) < 1e-5]
@@ -1611,10 +1631,14 @@ class RectCell(Cell):
     """
     Class providing the means for building a cartesian (i.e. rectangular)
     cell.
-    This cell can be characterised by a specified number of concentric
-    circles, each one associated with a different property, to represent
-    the different zones of a fuel pin cell.
-    This technological geometry can be sectorized, i.e. subdivision points
+    The cell geometry layout can be represented in terms of its technological
+    geometry, representing the different zone associated with a material
+    property. Regions can be identified by overlapping circles at any position
+    within the cell's borders.
+    Typically, they are concentric when representing a fuel pin cell, but no
+    limitation on their positioning is present, provided their radii are
+    compatible with the dimensions of the cell.
+    The technological geometry can be sectorized, i.e. subdivision points
     on the inner circles can be defined in order to partition the face
     into subfaces defining the cell sectors.
     Properties of the technological geometry zones are associated to each
@@ -1622,64 +1646,65 @@ class RectCell(Cell):
 
     Parameters
     ----------
-    center          : Union[Tuple[float, float, float], None] = None
-                      The X-Y-Z coordinates of the cell center
-    height_x_width  : Tuple[float, float] = (1, 1)
-                      A tuple providing the cell height and width
+    center : Union[Tuple[float, float, float], None] = None
+        The X-Y-Z coordinates of the cell's center.
+    height_x_width : Tuple[float, float] = (1, 1)
+        A tuple providing the cell height and width.
     rounded_corners : Union[List[Tuple[int, float]], None]
-                      A list of tuples providing the corner index and the
-                      curvature radius of the same corner
-    name            : str = "Cell"
-                      The cell name in the current SALOME study
+        A list of tuples providing the corner index and the curvature radius
+        of the same corner.
+    name : str = "Cell"
+        The cell name in the current SALOME study.
 
     Attributes
     ----------
-    cell_type       : Union[CellType, None]
-        The type of cell expressed as a value of the 'CellType' enumeration
-    face            : Any
+    cell_type : Union[CellType, None]
+        The type of cell expressed as a value of the ``CellType`` enumeration.
+    face : Any
         The face object providing the cell technological geometry
-        representation
-    face_entry_id   : Union[str, None]
-        The ID of the cell face object used in the current study
-    figure          : Surface
-        The figure representing the cell shape
-    height              : float
-        The cell height
-    inner_circles   : List[Circle]
-        The list of 'Circle' objects representing the cell concentric circles
+        representation.
+    face_entry_id : Union[str, None]
+        The ID of the cell face object used in the current SALOME study.
+    figure : Surface
+        The instance of any of the ``Surface`` subclasses representing the
+        cell's main shape.
+    height : float
+        The cell's height.
+    inner_circles : List[Circle]
+        The list of ``Circle`` objects representing any circular region in
+        the cell's technological geometry.
     is_windmill_applied : bool
-        Boolean flag stating if the windmill sectorization is applied
-    name            : str
-        The name of the cell to be used in the current study
-    regions         : List[Region]
-        The list of 'Region' objects storing information about either the
-        regions of the cell technological geometry or the ones resulting from
-        its sectorization
-    rotation        : float
-        The rotation angle of the cell expressed in radians
+        Boolean flag stating if the `windmill` sectorization is applied.
+    name : str
+        The name of the cell to be used in the current SALOME study.
+    regions : List[Region]
+        The list of ``Region`` objects storing information about either the
+        regions of the cells' technological geometry or the ones resulting
+        from its sectorization.
+    rotation : float
+        The rotation angle of the cell, expressed in radians.
     sectorized_face : Any
-        The face object providing the cell sectorized geometry representation
-        (used for calculations)
+        The face object providing the cell sectorized geometry representation.
     tech_geom_props : Dict[Any, Dict[PropertyType, str]]
-        A dictionary between the regions of the cell technological geometry
-        VS the dictionary of property types VS value associated to each zone
+        A dictionary between the regions of the cell's technological geometry
+        and the dictionary of property types VS value associated to each zone.
     tech_geom_sect_opts : Dict[Any, Tuple[int, float]]
-        A dictionary between the regions of the cell technological geometry
-        VS the tuple identifying the associated sectorization options
-    width               : float
-        The cell width
-
-    VALID_SECTOR_NO_VS_ANGLE  : Dict[int, List[float]]
-        Dictionary providing the number of valid sectors each cell zone
-        could be subdivided VS the accepted angles the sectorization can
-        start from.
+        A dictionary between the regions of the cell's technological geometry
+        and the tuple identifying the associated sectorization options.
+    displayed_geom : GeometryType
+        The type of geometry of the cell currently displayed.
+    width : float
+        The cell's width.
     """
-    # Number of valid sectors each cell zone could be subdivided VS the
-    # accepted angles the sectorization can start from
     VALID_SECTOR_NO_VS_ANGLE: Dict[int, List[float]] = {1 : [0],
                                                         4 : [0, 45],
                                                         8 : [0, 22.5],
                                                         16: [0]}
+    """
+    Dictionary providing the number of valid sectors each cell zone could
+    be subdivided VS the accepted angles the sectorization can start from.
+    Values are specific for a cartesian cell.
+    """
 
     def __init__(self,
                  center: Union[Tuple[float, float, float], None] = None,
@@ -1707,7 +1732,7 @@ class RectCell(Cell):
 
     def _check_radius_vs_cell_dim(self, radius: float) -> None:
         """
-        Method for assessing if the circle, whose radius is given as input,
+        Method that assesses if the circle, whose radius is given as input,
         can be added to the cell. The radius is checked against the width
         and height of the cell.
         In case the radius is greater than the cell characteristic dimensions,
@@ -1715,13 +1740,19 @@ class RectCell(Cell):
 
         Parameters
         ----------
-        radius  : float
-                  The radius of the circle to check against the cell
-                  dimensions
+        radius : float
+            The radius of the circle to check against the cell dimensions.
+
+        Raises
+        ------
+        RuntimeError
+            If the dimension of circle exceedes the cell characteristic
+            dimensions.
         """
         if 2*radius > self.width or 2*radius > self.height:
-            raise RuntimeError("The circle cannot be added to the cell as its "
-                               "dimensions exceedes the ones of the cell.")
+            raise RuntimeError(
+                "The circle cannot be added to the cell as its dimensions "
+                "exceedes the ones of the cell.")
 
     def sectorize(
         self, sectors_no: List[int], angles: List[float], **kwargs) -> None:
@@ -1730,21 +1761,21 @@ class RectCell(Cell):
         sectors for each cell zone and the values of the angles to start
         the sectorization from, points are built on the geometric surfaces
         of the cell.
-        Lines are drawn between those points to define the sectors and the
-        corresponding subfaces are extracted.
+        Lines are drawn between those points to define the sectors.
+        A partition operation between the cell's technological geometry and
+        the built lines provides the cell's sectorized geometry.
 
         Parameters
         ----------
-        sectors_no  : List[int]
-                      List of integers representing the number of subdivision
-                      for each cell zone coming from the technological geometry
-        angles      : List[float]
-                      List of angles (in degree) the sectorization should start
-                      from for each cell zone coming from the technological
-                      geometry
-        kwargs      : Any
-                      Additional parameters specific to the cartesian cell type
-                      to be sectorized (e.g., windmill)
+        sectors_no : List[int]
+            List of integers representing the number of subdivision for each
+            cell's zone coming from the technological geometry.
+        angles : List[float]
+            List of angles (in degrees) the sectorization should start from
+            for each cell's zone coming from the technological geometry.
+        kwargs : Any
+            Additional parameters specific to the cartesian cell type to be
+            sectorized (e.g., windmill).
         """
         # Check if the 'windmill' flag, stating that a windmill sectorization
         # of the cell needs to be considered, has been passed. If not, 'False'
@@ -1753,18 +1784,19 @@ class RectCell(Cell):
             self._sectorize_cell(sectors_no, angles, False)
         else:
             self._sectorize_cell(sectors_no, angles, kwargs['windmill'])
-        # Clear the externally added edges as calling this method resets any
-        # previously applied sectorization
-        self.added_edges.clear()
 
 
 class HexCell(Cell):
     """
     Class providing the means for building an hexagonal cell.
-    This cell can be characterised by a specified number of concentric
-    circles, each one associated with a different property, to represent
-    the different zones of a fuel pin cell.
-    This technological geometry can be sectorized, i.e. subdivision points
+    The cell geometry layout can be represented in terms of its technological
+    geometry, representing the different zone associated with a material
+    property. Regions can be identified by overlapping circles at any position
+    within the cell's borders.
+    Typically, they are concentric when representing a fuel pin cell, but no
+    limitation on their positioning is present, provided their radii are
+    compatible with the dimensions of the cell.
+    The technological geometry can be sectorized, i.e. subdivision points
     on the inner circles can be defined in order to partition the face
     into subfaces defining the cell sectors.
     Properties of the technological geometry zones are associated to each
@@ -1772,63 +1804,59 @@ class HexCell(Cell):
 
     Parameters
     ----------
-    center      : Union[Tuple[float, float, float], None] = None
-                  The X-Y-Z coordinates of the cell center
+    center : Union[Tuple[float, float, float], None] = None
+        The X-Y-Z coordinates of the cell's center.
     edge_length : float = 1.0
-                  The length of the hexagonal cell edge
-    name        : str = "Hexagon"
-                  The cell name in the current SALOME study
+        The length of the hexagonal cell's edge.
+    name : str = "Hexagon"
+        The cell's name in the current SALOME study.
 
     Attributes
     ----------
-    apothem         : float
-        The length of the hexagonal cell apothem
-    cell_type       : Union[CellType, None]
-        The type of cell expressed as a value of the 'CellType' enumeration
-    edge_length     : float
-        The length of the hexagonal cell edge
-    face            : Any
-        The face object providing the cell technological geometry
-        representation
-    face_entry_id   : Union[str, None]
-        The ID of the cell face object used in the current study
-    figure          : Surface
-        The figure representing the cell shape
-    height              : float
-        The cell height
-    inner_circles   : List[Circle]
-        The list of 'Circle' objects representing the cell concentric circles
+    apothem : float
+        The length of the hexagonal cell's apothem.
+    cell_type : Union[CellType, None]
+        The type of cell expressed as a value of the ``CellType`` enumeration.
+    edge_length : float
+        The length of the hexagonal cell's edge.
+    face : Any
+        The face object representing the cell's technological geometry.
+    face_entry_id : Union[str, None]
+        The ID of the cell face object used in the current SALOME study.
+    figure : Surface
+        The instance of any of the ``Surface`` subclasses representing the
+        cell's main shape.
+    inner_circles : List[Circle]
+        The list of ``Circle`` objects representing any circular region in
+        the cell's technological geometry.
     is_windmill_applied : bool
-        Boolean flag stating if the windmill sectorization is applied
-    name            : str
-        The name of the cell to be used in the current study
-    regions         : List[Region]
-        The list of 'Region' objects storing information about either the
-        regions of the cell technological geometry or the ones resulting from
-        its sectorization
-    rotation        : float
-        The rotation angle of the cell expressed in radians
+        Boolean flag stating if the `windmill` sectorization is applied.
+    name : str
+        The name of the cell to be used in the current SALOME study.
+    regions : List[Region]
+        The list of ``Region`` objects storing information about either the
+        regions of the cell's technological geometry or the ones resulting
+        from its sectorization.
+    rotation : float
+        The rotation angle of the cell, expressed in radians.
     sectorized_face : Any
-        The face object providing the cell sectorized geometry representation
-        (used for calculations)
+        The face object providing the cell sectorized geometry representation.
     tech_geom_props : Dict[Any, Dict[PropertyType, str]]
-        A dictionary between the regions of the cell technological geometry
-        VS the dictionary of property types VS value associated to each zone
+        A dictionary between the regions of the cell's technological geometry
+        and the dictionary of property types VS value associated to each zone.
     tech_geom_sect_opts : Dict[Any, Tuple[int, float]]
-        A dictionary between the regions of the cell technological geometry
-        VS the tuple identifying the associated sectorization options
-    width               : float
-        The cell width
-
-    VALID_SECTOR_NO_VS_ANGLE  : Dict[int, List[float]]
-        Dictionary providing the number of valid sectors each cell zone
-        could be subdivided VS the accepted angles the sectorization can
-        start from.
+        A dictionary between the regions of the cell's technological geometry
+        and the tuple identifying the associated sectorization options.
+    displayed_geom : GeometryType
+        The type of geometry of the cell currently displayed.
     """
-    # Number of valid sectors each cell zone could be subdivided VS the
-    # accepted angles the sectorization can start from
     VALID_SECTOR_NO_VS_ANGLE: Dict[int, List[float]] = {1 : [0],
                                                         6 : [0, 30]}
+    """
+    Dictionary providing the number of valid sectors each cell zone could
+    be subdivided VS the accepted angles the sectorization can start from.
+    Values are specific for a hexagonal cell.
+    """
 
     def __init__(self,
                  center: Union[Tuple[float, float, float], None] = None,
@@ -1845,13 +1873,13 @@ class HexCell(Cell):
     def _initialize_specific_cell(self) -> None:
         """
         Method for initializing instance attributes that are specific for
-        the hexagonal cell.
-        Up to now, nothing needs to be performed here.
+        the hexagonal cell. Nothing needs to be performed here.
         """
+        pass
 
     def _check_radius_vs_cell_dim(self, radius: float) -> None:
         """
-        Method for assessing if the circle, whose radius is given as input,
+        Method that assesses if the circle, whose radius is given as input,
         can be added to the cell. The radius is checked against the apothem
         of the hexagonal cell.
         In case the radius is greater than the cell characteristic dimension,
@@ -1859,9 +1887,14 @@ class HexCell(Cell):
 
         Parameters
         ----------
-        radius  : float
-                  The radius of the circle to check against the cell
-                  dimensions
+        radius : float
+            The radius of the circle to check against the cell dimensions.
+
+        Raises
+        ------
+        RuntimeError
+            If the dimension of circle exceedes the cell characteristic
+            dimensions.
         """
         if radius > self.apothem:
             raise RuntimeError("The circle cannot be added to the cell as "
@@ -1874,86 +1907,97 @@ class HexCell(Cell):
         sectors for each cell zone and the values of the angles to start
         the sectorization from, points are built on the geometric surfaces
         of the cell.
-        Lines are drawn between those points to define the sectors and the
-        corresponding subfaces are extracted.
+        Lines are drawn between those points to define the sectors.
+        A partition operation between the cell's technological geometry and
+        the built lines provides the cell's sectorized geometry.
 
         Parameters
         ----------
-        sectors_no  : List[int]
-                      List of integers representing the number of subdivision
-                      for each cell zone coming from the technological geometry
-        angles      : List[float]
-                      List of angles (in degree) the sectorization should start
-                      from for each cell zone coming from the technological
-                      geometry
-        kwargs      : Any
-                      Additional parameters specific to the hexagonal cell type
-                      to be sectorized. Up to now, nothing is passed
+        sectors_no : List[int]
+            List of integers representing the number of subdivision for each
+            cell's zone coming from the technological geometry.
+        angles : List[float]
+            List of angles (in degrees) the sectorization should start from
+            for each cell's zone coming from the technological geometry.
+        kwargs : Any
+            Additional parameters specific to the hexagonal cell type to be
+            sectorized. Nothing should be passed for a hexagonal cell.
         """
         # Since the hexagonal cell type does not come with a 'windmill'
         # sectorization, 'False' is passed to the method that performs
         # the cell sectorization
         self._sectorize_cell(sectors_no, angles, False)
-        # Clear the externally added edges as calling this method resets any
-        # previously applied sectorization
-        self.added_edges.clear()
 
 
 class GenericCell(Cell):
     """
     Class providing the means for interacting with a generic cell built from
     within SALOME using its GEOM module.
-    Given the face or the compound object currently selected in the SALOME
-    study, the cell is initialized with the provided shape and all the needed
-    information is extracted.
-    This cell can be characterised by a specified number of concentric
-    circles, each one associated with a different property, to represent
-    the different zones of a fuel pin cell.
-    This technological geometry can be sectorized, i.e. subdivision points
+    Given the face or the compound object either provided when instantiating
+    this class or the one currently selected in the SALOME study, the cell is
+    initialized with the provided shape and all the needed information is
+    extracted.
+
+    The cell geometry layout can be represented in terms of its technological
+    geometry, representing the different zone associated with a material
+    property. Regions can be identified by overlapping circles at any position
+    within the cell's borders.
+    Typically, they are concentric when representing a fuel pin cell, but no
+    limitation on their positioning is present, provided their radii are
+    compatible with the dimensions of the cell.
+    The technological geometry can be sectorized, i.e. subdivision points
     on the inner circles can be defined in order to partition the face
     into subfaces defining the cell sectors.
     Properties of the technological geometry zones are associated to each
     of the corresponding sectors.
 
+    Parameters
+    ----------
+    shape : Union[Any, None] = None
+        The geometric shape the cell is based on. Its type must be either
+        ``ShapeType.COMPOUND`` or ``ShapeType.FACE``.
+
     Attributes
     ----------
-    cell_type       : Union[CellType, None]
-        The type of cell expressed as a value of the 'CellType' enumeration
-    face            : Any
-        The face object providing the cell technological geometry
-        representation
-    face_entry_id   : Union[str, None]
-        The ID of the cell face object used in the current study
-    figure          : Surface
-        The figure representing the cell shape
-    inner_circles   : List[Circle]
-        The list of 'Circle' objects representing the cell concentric circles
+    cell_type : Union[CellType, None]
+        The type of cell expressed as a value of the ``CellType`` enumeration.
+    face : Any
+        The face object representing the cell's technological geometry.
+    face_entry_id : Union[str, None]
+        The ID of the cell face object used in the current SALOME study.
+    figure : Surface
+        The instance of any of the ``Surface`` subclasses representing the
+        cell's main shape.
+    inner_circles : List[Circle]
+        The list of ``Circle`` objects representing any circular region in
+        the cell's technological geometry.
     is_windmill_applied : bool
-        Boolean flag stating if the windmill sectorization is applied
-    name            : str
-        The name of the cell to be used in the current study
-    regions         : List[Region]
-        The list of 'Region' objects storing information about either the
-        regions of the cell technological geometry or the ones resulting from
-        its sectorization
-    rotation        : float
-        The rotation angle of the cell expressed in radians
+        Boolean flag stating if the `windmill` sectorization is applied.
+    name : str
+        The name of the cell to be used in the current SALOME study.
+    regions : List[Region]
+        The list of ``Region`` objects storing information about either the
+        regions of the cell's technological geometry or the ones resulting
+        from its sectorization.
+    rotation : float
+        The rotation angle of the cell, expressed in radians.
     sectorized_face : Any
-        The face object providing the cell sectorized geometry representation
-        (used for calculations)
+        The face object providing the cell sectorized geometry representation.
     tech_geom_props : Dict[Any, Dict[PropertyType, str]]
-        A dictionary between the regions of the cell technological geometry
-        VS the dictionary of property types VS value associated to each zone
+        A dictionary between the regions of the cell's technological geometry
+        and the dictionary of property types VS value associated to each zone.
     tech_geom_sect_opts : Dict[Any, Tuple[int, float]]
-        A dictionary between the regions of the cell technological geometry
-        VS the tuple identifying the associated sectorization options
-
-    VALID_SECTOR_NO_VS_ANGLE  : Dict[int, List[float]]
-        Dictionary providing the number of valid sectors each cell zone
-        could be subdivided VS the accepted angles the sectorization can
-        start from.
+        A dictionary between the regions of the cell's technological geometry
+        and the tuple identifying the associated sectorization options.
+    displayed_geom : GeometryType
+        The type of geometry of the cell currently displayed.
     """
     VALID_SECTOR_NO_VS_ANGLE: Dict[int, List[float]] = {1 : [0]}
+    """
+    Dictionary providing the number of valid sectors each cell zone could
+    be subdivided VS the accepted angles the sectorization can start from.
+    Values are specific for each type of cell.
+    """
 
     def __init__(self, shape: Union[Any, None] = None) -> None:
         # Get the shape currently selected in the SALOME study
@@ -1971,11 +2015,24 @@ class GenericCell(Cell):
         # Call the superclass constructor
         super().__init__(GenericSurface(self.face), get_shape_name(self.face))
 
-    def _check_radius_vs_cell_dim(self, radius: float):
+    def _check_radius_vs_cell_dim(self, radius: float) -> None:
         """
-        Method for assessing if the circle, whose radius is given as input,
-        can be added to the cell. No implementation is needed for this method
-        as the cell surface is generic.
+        Method that assesses if the circle, whose radius is given as input,
+        can be added to the cell by checking its dimensions against the
+        XY dimensions of the cell's bounding box.
+        In case the radius is greater than the cell characteristic dimension,
+        an exception is raised.
+
+        Parameters
+        ----------
+        radius : float
+            The radius of the circle to check against the cell dimensions.
+
+        Raises
+        ------
+        RuntimeError
+            If the dimension of circle exceedes the cell characteristic
+            dimensions.
         """
         # Get the min-max dimensions of the cell
         x_min, x_max, y_min, y_max = get_bounding_box(self.face)
@@ -1987,9 +2044,9 @@ class GenericCell(Cell):
     def _initialize_specific_cell(self):
         """
         Method for initializing instance attributes that are specific for
-        the hexagonal cell. Up to now, nothing needs to be performed here.
+        the generic cell. Nothing needs to be performed here.
         """
-        return
+        pass
 
     def sectorize(self,
                   sectors_no: List[int],
@@ -1999,26 +2056,27 @@ class GenericCell(Cell):
         sectors for each cell zone and the values of the angles to start
         the sectorization from, points are built on the geometric surfaces
         of the cell.
-        Lines are drawn between those points to define the sectors and the
-        corresponding subfaces are extracted.
+        Lines are drawn between those points to define the sectors.
+        A partition operation between the cell's technological geometry and
+        the built lines provides the cell's sectorized geometry.
 
         Parameters
         ----------
-        sectors_no  : List[int]
+        sectors_no : List[int]
             List of integers representing the number of subdivision for each
-            cell zone coming from the technological geometry
-        angles      : List[float]
-            List of angles (in degree) the sectorization should start from
-            for each cell zone coming from the technological geometry
+            cell's zone coming from the technological geometry.
+        angles : List[float]
+            List of angles (in degrees) the sectorization should start from
+            for each cell's zone coming from the technological geometry.
         """
         self._sectorize_cell(sectors_no, angles, False)
 
 
 def check_cell_circle_are_cut(cell: Cell) -> bool:
     """
-    Function that verifies if any of the circular regions of the given `Cell`
-    object have been cut as a result of a modification to the cell's geometry
-    layout.
+    Function that verifies if any of the circular regions of the given
+    ``Cell`` object have been cut as a result of a modification to the
+    cell's geometry layout.
     A cut operation between the compound made by the cell's centered circular
     regions and the current state of the cell's face determines if any
     circular region has been cut. If the result does not have any face object,
@@ -2027,13 +2085,13 @@ def check_cell_circle_are_cut(cell: Cell) -> bool:
     Parameters
     ----------
     cell : Cell
-        The `Cell` object to check if its circular regions have been cut in
+        The ``Cell`` object to check if its circular regions have been cut in
         the cell's geometry layout.
 
     Returns
     -------
     bool
-        `True`, if the cell's circular regions have been cut, `False`
+        ``True``, if the cell's circular regions have been cut, ``False``
         otherwise.
     """
     # Go to the next cell if no inner circles are present
@@ -2058,7 +2116,7 @@ def check_cell_circle_are_cut(cell: Cell) -> bool:
 def get_region_info(shape: Any, regions: List[Region]) -> str:
     """
     Function that, given the shape, retrieves the name of the corresponding
-    `Region` object and the values of its associated properties, if any is
+    ``Region`` object and the values of its associated properties, if any is
     present.
 
     Parameters
@@ -2066,7 +2124,7 @@ def get_region_info(shape: Any, regions: List[Region]) -> str:
     shape : Any
         The geometrical shape to retrieve info about.
     regions : List[Region]
-        A list of `Region` object to search the shape among.
+        A list of ``Region`` objects to search the shape among.
 
     Returns
     -------
@@ -2077,7 +2135,7 @@ def get_region_info(shape: Any, regions: List[Region]) -> str:
     Raises
     ------
     RuntimeError
-        If the provided shape does not have any corresponding `Region`
+        If the provided shape does not have any corresponding ``Region``
         object.
     """
     # Get the region that corresponds to the given shape
@@ -2091,37 +2149,3 @@ def get_region_info(shape: Any, regions: List[Region]) -> str:
     else:
         raise RuntimeError("The indicated region could be found among "
                             "the cell's ones.")
-
-
-if __name__ == "__main__":
-    # -----------------------------------
-    # Testing the module functionalities.
-    # -----------------------------------
-    # Build a cartesian cell
-    cell = RectCell(name="Cartesian cell")
-    # Add three inner circles to the first cell
-    radii = [0.65/2, 0.3, 0.75/2]
-    for r in radii:
-        cell.add_circle(r)
-    # Add both cell base types to the SALOME study
-    cell.show()
-
-    # Assign the materials to each zone in the cell
-    cell.set_properties({
-        PropertyType.MATERIAL: ["TSTR.'TMIL_MOC'.'COMB0201'.1",
-                                "TSTR.'TMIL_MOC'.'COMB0201'.2",
-                                "TSTR.'TMIL_MOC'.'COMB0201'.3",
-                                "TSTR.'TMIL_MOC'.'MODEXTCRAYON'"]
-    })
-
-    # Build the cell sectorization and show it in the 3D viewer
-    cell.sectorize([4, 1, 8, 16], [0, 0, 22.5, 0], windmill=True)
-    cell.show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
-    # Print the properties assigned to each cell sector
-    print("No. regions after sectorization:", len(cell.regions))
-    for region in cell.regions:
-        print(f"Sector face {region.face_entry_id}, {region.name}, "
-              f"{region.properties}")
-
-    # Show everything on the SALOME application
-    update_salome_study()

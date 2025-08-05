@@ -31,52 +31,45 @@ class TdtData():
     and boundaries of the geometry layout, as well as other data providing
     the type of geometry, of symmetry, and the properties associated to the
     regions of the geometry.
-
-    Attributes
-    ----------
-    filename : str
-        Name of the file in the TDT format to be generated (without the `.dat`
-        extension).
-    edges : List[Edge]
-        List of the geometry layout edges, as `Edge` objects.
-    faces : List[Face]
-        List of the geometry layout regions, as `Face` objects.
-    boundaries : List[Boundary]
-        List of the geometry layout borders, as `Boundary` objects.
-    type_geo : LatticeGeometryType
-        The type of geometry applied to the geometry layout, as element
-        of the `LatticeGeometryType` enumeration.
-    type_sym : SymmetryType
-        The type of the symmetry applied to the geometry layout, as element
-        of the `SymmetryType` enumeration.
-    impressions : Tuple[int, int]
-        Options for printing the geometric data.
-    precisions : Tuple[float, float]
-        Options for the geometric precision of the data.
-    properties : List[str]
-        List of the names of the properties the regions of the geometry layout
-        are associated with.
-    property_ids : List[int]
-        List of the IDs of the properties in the geometry layout.
-    nb_folds : int
-        The number of times the geometry layout has to be unfolded to
-        replicate the full geometry, if any symmetry is applied.
-    albedo : float | None
-        Identifying the value for the albedo applied to the lattice's BCs.
     """
-    filename      : str = os.path.join(Path(__file__).resolve().parent.parent,
+    filename: str = os.path.join(Path(__file__).resolve().parent.parent,
                                        "tdt_lattice.dat")
-    edges         : List[Edge] = field(default_factory=list)
-    faces         : List[Face] = field(default_factory=list)
-    boundaries    : List[Boundary] = field(default_factory=list)
-    type_geo      : LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
-    type_sym      : SymmetryType = SymmetryType.FULL
-    albedo        : float | None = None
-    impressions   : Tuple[int, int] = (0, 0)
-    precisions    : Tuple[float, float] = (1e-5, 1e-5)
-    properties    : List[str] = field(init=False)
+    """Name of the file in the TDT format to be generated (without the `.dat`
+        extension)."""
+    edges: List[Edge] = field(default_factory=list)
+    """List of the geometry layout edges, as ``Edge`` objects."""
+    faces: List[Face] = field(default_factory=list)
+    """List of the geometry layout regions, as ``Face`` objects."""
+    boundaries: List[Boundary] = field(default_factory=list)
+    """List of the geometry layout borders, as ``Boundary`` objects."""
+    type_geo: LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
+    """
+    The type of geometry applied to the geometry layout, as element of the
+    ``LatticeGeometryType`` enumeration.
+    """
+    type_sym: SymmetryType = SymmetryType.FULL
+    """
+    The type of the symmetry applied to the geometry layout, as element of
+    the ``SymmetryType`` enumeration.
+    """
+    albedo: float | None = None
+    """Identifying the value for the `albedo` applied to the lattice's BCs."""
+    impressions: Tuple[int, int] = (0, 0)
+    """Options for printing the geometric data."""
+    precisions: Tuple[float, float] = (1e-5, 1e-5)
+    """Options for the geometric precision of the data."""
+    properties: List[str] = field(init=False)
+    """
+    List of the names of the properties the regions of the geometry layout
+    are associated with.
+    """
     property_ids : List[int] = field(init=False)
+    """List of the IDs of the properties in the geometry layout."""
     nb_folds      : int = field(init=False)
+    """
+    The number of times the geometry layout has to be unfolded to replicate
+    the full geometry, if any symmetry is applied.
+    """
 
     def __post_init__(self) -> None:
         """
@@ -144,7 +137,7 @@ def write_tdt_file(tdt_data: TdtData) -> None:
     Parameters
     ----------
     tdt_data  : TdtData
-        The instance of the `TdtData` class storing the information of
+        The instance of the ``TdtData`` class storing the information of
         the lattice geometry.
     """
     # Open the file for writing the geometry information in the TDT format
@@ -175,7 +168,7 @@ def _write_header(file: TextIOWrapper, tdt_data: TdtData) -> None:
     file : TextIOWrapper
         Handle for the opened file to write.
     tdt_data : TdtData
-        The instance of the `TdtData` class storing the information of
+        The instance of the ``TdtData`` class storing the information of
         the lattice geometry.
     """
     # Declare the number of nodes and regions as equal to the faces number
@@ -209,7 +202,7 @@ def _write_regions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     file : TextIOWrapper
         Handle for the opened file to write.
     tdt_data : TdtData
-        The instance of the `TdtData` class storing the information of
+        The instance of the ``TdtData`` class storing the information of
         the lattice geometry.
     """
     # Declare the number of regions to be equal to the number of faces
@@ -244,7 +237,7 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
     file : TextIOWrapper
         Handle for the opened file to write.
     tdt_data : TdtData
-        The instance of the `TdtData` class storing the information of
+        The instance of the ``TdtData`` class storing the information of
         the lattice geometry.
     """
     # Write the header line for this section
@@ -317,7 +310,7 @@ def _write_boundary_conditions(
     file : TextIOWrapper
         Handle for the opened file to write.
     tdt_data : TdtData
-        The instance of the `TdtData` class storing the information of
+        The instance of the ``TdtData`` class storing the information of
         the lattice geometry.
     """
     # Write the header line for this section
@@ -373,7 +366,7 @@ def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     file : TextIOWrapper
         Handle for the opened file to write.
     tdt_data : TdtData
-        The instance of the `TdtData` class storing the information of
+        The instance of the ``TdtData`` class storing the information of
         the lattice geometry.
     """
     # Write the names of the properties that are present in the lattice prior

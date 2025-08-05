@@ -39,14 +39,15 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
 
     Returns
     -------
-    bool:
-        `True` if the two shapes are considered the same (i.e., they have
+    bool
+        ``True`` if the two shapes are considered the same (i.e., they have
         the same geometric properties and the cut result does not contain
-        any sub-shapes of the specified type), `False` otherwise.
+        any sub-shapes of the specified type), ``False`` otherwise.
 
     Raises
     ------
-    RuntimeError: If the two shapes are not of the same type.
+    RuntimeError
+        If the two shapes are not of the same type.
     """
     # Check whether the two shapes have the same type
     if get_shape_type(shape1) != get_shape_type(shape2):
@@ -67,17 +68,25 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
 
 def build_compound_borders(cmpd: Any) -> List[Any]:
     """
-    Function that extracts the external boundary of the given compound object
+    Function that extracts the external borders of the given compound object
     and returns them as a list of edge objects.
 
     Parameters
     ----------
     cmpd : Any
-        The compound object whose borders to extract
+        The compound object whose borders to extract.
 
     Returns
     -------
-    A list of edge objects representing the given compound external boundary.
+    List[Any]
+        A list of edge objects representing the given compound external
+        boundary.
+
+    Raises
+    ------
+    RuntimeError
+        If no closed boundaries could be extracted from the given compound
+        object.
     """
     # Extract a list of closed boundaries from the given compound object
     closed_boundaries = get_closed_free_boundary(cmpd)
@@ -116,6 +125,14 @@ def build_contiguous_edges(vertices: List[Any]) -> List[Any]:
     -------
     List[Any]
         The list of contiguous edge objects.
+
+    Raises
+    ------
+    RuntimeError
+        If less than 3 vertices are provided.
+    RuntimeError
+        If two consecutive vertices in the list are the same, as no edge
+        could be built from them.
     """
     # Check if the number of vertices is enough to build a closed path
     if len(vertices) < 3:
@@ -161,7 +178,8 @@ def check_shape_expected_types(shape: Any,
 def compute_point_by_reference(
         point: Any,
         ref_point: Any,
-        new_ref_coords: Tuple[float, float, float]) -> Tuple:
+        new_ref_coords: Tuple[float, float, float]
+    ) -> Tuple[float, float, float]:
     """
     Function that calculates the new coordinates of the given vertex object
     so that it keeps the same relative vector (i.e., same distance and
@@ -206,8 +224,9 @@ def generate_unique_random_colors(
 
     Returns
     -------
-    A list of tuples, each providing the 3 integer values identifying an
-    RGB color.
+    List[Tuple[int, int, int]]
+        A list of tuples, each providing the 3 integer values identifying an
+        RGB color.
 
     Raises
     ------
@@ -227,25 +246,27 @@ def generate_unique_random_colors(
     # Return 'no_colors'-number of unique colors
     return random.sample(RGB_COLORS, no_colors)
 
+
 def get_id_from_name(name: str) -> int:
     """
     Function that extracts the index of the shape whose name is provided.
-    The shape's name must be defined as `<name>_<id>`.
+    The shape's name must be defined as ``<name>_<id>``.
 
     Parameters
     ----------
     name : str
-        The name of the shape in the SALOME viewer
+        The name of the shape in the SALOME viewer.
 
     Raises
     ------
     RuntimeError
-        If no integer index can be extracted from the given name
+        If no integer index can be extracted from the given name.
 
     Returns
     -------
-    An integer being the global index associated to the shape whose name
-    is given as input.
+    int
+        An integer being the global index associated to the shape whose name
+        is given as input.
     """
     try:
         return int(name.split('_')[1])
@@ -257,7 +278,7 @@ def get_id_from_name(name: str) -> int:
 def get_id_from_shape(shape: Any) -> int:
     """
     Function that extracts the index of the given shape from its name.
-    The shape's name must have been previously assigned as `<name>_<id>`.
+    The shape's name must have been previously assigned as ``<name>_<id>``.
 
     Parameters
     ----------
@@ -272,7 +293,8 @@ def get_id_from_shape(shape: Any) -> int:
 
     Returns
     -------
-    An integer being the global index associated to the given shape.
+    int
+        An integer being the global index associated to the given shape.
     """
     # Get the number of the edge directly from the name attribute of the
     # corresponding GEOM edge object
@@ -293,6 +315,11 @@ def retrieve_selected_object(error_msg: str) -> Any:
     error_msg : str
         The error message to display when the incorrect number of shapes
         is selected.
+
+    Returns
+    -------
+    Any
+        The GEOM object currently selected in the SALOME study.
     """
     if not is_gui_available():
         raise RuntimeError(
@@ -315,17 +342,18 @@ def translate_wrt_reference(
     Parameters
     ----------
     shape : Any
-        The geometric shape to be translated
+        The geometric shape to be translated.
     old_ref_point : Any
-        A vertex object identifying the previous reference point of the shape
+        A vertex object identifying the previous reference point of the shape.
     new_ref_coords : Tuple[float, float, float]
         The coordinates of the reference point for the shape after its
-        translation
+        translation.
 
     Returns
     -------
-    The given shape translated so that it keeps its relative distance from
-    the new reference point.
+    Any
+        The given shape translated so that it keeps its relative distance from
+        the new reference point.
     """
     # Build a vertex identifying the shape CDG
     cdg = make_cdg(shape)

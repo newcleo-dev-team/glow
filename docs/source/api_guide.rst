@@ -2,7 +2,7 @@
 API guide
 =========
 
-A detailed description of the implementation of the |TOOL| application is here
+A detailed description of the implementation of the |TOOL| package is here
 provided.
 
 .. toctree::

@@ -147,6 +147,8 @@ class TestLattice(unittest.TestCase):
         # Instantiate the lattice with only a central hexagonal cell
         cell = self.hex_cells[0]
         self.lattice = Lattice([cell])
+        # Verify an exception is raised with ring index 0
+        self.__assess_add_rings_of_cells(cell, ring_no=0)
         # Add 2 rings of cells at once
         self.__assess_add_rings_of_cells(
             cell,
@@ -208,7 +210,7 @@ class TestLattice(unittest.TestCase):
         )
         # Verify an exception is raised when applying a symmetry to the
         # lattice of hexagonal cells without enclosing it in a box
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(RuntimeError):
             self.lattice.apply_symmetry(SymmetryType.SIXTH)
         # Enclose the lattice in a box
         self.lattice.build_lattice_box([0.075])
