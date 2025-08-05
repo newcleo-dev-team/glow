@@ -68,18 +68,22 @@ The project is organized according to the following folder structure:
     ├── glow/
     ├── resources/
     ├── tests/
+    ├── tutorials/
     ├── LICENSE
     └── README.rst
 
 
 - ``docs``: contains the files for generating the project documentation with
-  *Sphinx*;
+  Sphinx;
 - ``glow``: contains all the modules that provide the functionalities
   implemented by |TOOL|;
 - ``resources``: contains files that support the configuration and operation
   of |TOOL|;
-- ``tests``: contains Python scripts that provide examples showing how to use
-  the |TOOL| functionalities, as well as unit and functional tests.
+- ``tests``: contains both unittests and functional tests, the former to ensure
+  the correctness of individual code units, the latter to ensure the overall
+  functionalities behave as expected;
+- ``tutorials``: contains Python scripts that provide use cases showing how to
+  use the |TOOL| functionalities for building different geometry layouts.
 
 Dependencies
 ------------
@@ -152,7 +156,7 @@ Documentation
 -------------
 
 The Sphinx documentation can be built both in *html* and *LaTeX* formats by
-executing the following command in the folder ``docs/``:
+executing the following command in the folder ``docs``:
 
   .. code-block:: bash
 
