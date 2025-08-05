@@ -1,10 +1,23 @@
-import subprocess
-from pathlib import Path
 import hashlib
 import os
+import subprocess
 
-# Function to compute the SHA256 hash of a file
-def compute_hash(file_path):
+from pathlib import Path
+
+def compute_hash(file_path: Path) -> str:
+    """
+    Function to compute the SHA256 hash of a file.
+
+    Parameters
+    ----------
+    file_path : Path
+        The ``Path`` object of the file to process.
+
+    Returns
+    -------
+    str
+        The SHA256 hash of a given file.
+    """
     sha256 = hashlib.sha256()
     with open(file_path, "rb") as f:
         for block in iter(lambda: f.read(4096), b""):
@@ -86,5 +99,3 @@ print(f"Passed:              {passed}")
 print(f"Failed:              {failed}")
 print(f"Skipped (no ref):    {skipped}")
 print("────────────────────────────\n")
-    
-

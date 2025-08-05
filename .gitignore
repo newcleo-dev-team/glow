@@ -5,6 +5,7 @@ glow/__pycache__/
 .venv/
 tests/outputs
 docs/_build
+build
 
 # Ignore other common Python artifacts
 *.pyc

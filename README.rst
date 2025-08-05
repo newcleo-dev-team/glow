@@ -107,13 +107,26 @@ dependencies must be satisfied:
 How to Install
 --------------
 
-To install the |TOOL| application, please check that all the dependencies
-are met, and then clone the repository at
+To install the |TOOL| application, clone the repository at
 https://github.com/newcleo-dev-team/glow using the following command:
 
   .. code-block:: bash
 
     git clone https://github.com/newcleo-dev-team/glow
+
+Now, from the root folder of |TOOL| the following command can be run to
+automatically install all the needed dependencies:
+
+  .. code-block:: bash
+
+      pip install .
+
+To upgrade the |TOOL| package, please type the ``install`` command along with
+the ``--upgrade`` or ``-U`` flag:
+
+  .. code-block:: bash
+
+      pip install --upgrade .
 
 Since |TOOL| exploits the *GEOM* module of *SALOME*, a correct installation
 of *SALOME* is required. Please, refer to the *Building and installing* section
@@ -126,8 +139,16 @@ itself.
 How to Use
 ----------
 
-|TOOL| can be used directly by writing down a Python script that exploits the
-provided classes and methods to:
+|TOOL| can be used directly by writing down a Python script where the single
+needed modules can be imported; alternatively, users can import all the modules
+at once to have them available by setting the following import instruction:
+
+.. code-block:: python
+
+  from glow import *
+
+Given that, classes and methods are directly accessible and users can exploit
+them to:
 
 - assemble the geometry;
 - assign properties to regions;

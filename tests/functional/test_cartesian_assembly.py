@@ -3,15 +3,8 @@ Testing the construction of a lattice made by cartesian cells. The 'MATERIAL'
 property is assigned to each region of the cell technological geometry.
 A lattice is built by including 9 of the built cells.
 """
-
 import os
 import sys
-
-file_path = os.path.abspath(__file__)
-glow_path = os.path.abspath(os.path.join(file_path, "..", "..", ".."))  
-
-if glow_path not in sys.path:
-    sys.path.insert(0, glow_path)
 
 from glow.geometry_layouts.cells import RectCell
 from glow.support.types import *
