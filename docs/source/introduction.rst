@@ -47,8 +47,8 @@ Geometries for fuel assemblies are typically structured in terms of repeated
 fuel pin cells to form specific patterns, or lattices, on a Cartesian grid or
 a hexagonal one (as in fast reactors).
 *DRAGON5* can natively handle the generation of simple geometry layouts by means
-of the *GEO* module; to perform a tracking they need to be translated into a
-description file by the *G2S* module.
+of the *GEO* module. To perform a tracking using the *SALT* module, however,
+the layouts need to be translated into a description file using the *G2S* module.
 However, complex layouts in reactors, require to rely on boolean operations
 among geometrical shapes that are offered by *Constructive Solid Geometry*
 (*CSG*) tools.
