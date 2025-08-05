@@ -2,13 +2,26 @@
 Application configuration
 =========================
 
-To install the |TOOL| application, please check that all the dependencies
-are met, and then clone the repository at
+To install the |TOOL| application, clone the repository at
 https://github.com/newcleo-dev-team/glow using the following command:
 
   .. code-block:: bash
 
     git clone https://github.com/newcleo-dev-team/glow
+
+Now, from the root folder of |TOOL| the following command can be run to
+automatically install all the needed dependencies:
+
+  .. code-block:: bash
+
+      pip install .
+
+To upgrade the |TOOL| package, please type the ``install`` command along with
+the ``--upgrade`` or ``-U`` flag:
+
+  .. code-block:: bash
+
+      pip install --upgrade .
 
 Since |TOOL| exploits the *GEOM* module of *SALOME*, a correct installation
 of the *SALOME* platform is required.

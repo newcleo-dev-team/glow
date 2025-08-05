@@ -1,21 +1,10 @@
 """
-Hexagonal Assembly made of a central pin fuel cell sorrounded by 
-6 rings of pin fuel cells. Symmetry is exploited, one-sixth of 
+Hexagonal Assembly made of a central pin fuel cell sorrounded by
+6 rings of pin fuel cells. Symmetry is exploited, one-sixth of
 the complete hexagon is considered.
 """
-
 import os
 import sys
-
-try:
-    file_path = os.path.abspath(__file__)
-    glow_path = os.path.abspath(os.path.join(file_path, "..", "..", ".."))
-
-    if glow_path not in sys.path:
-       sys.path.insert(0, glow_path)
-
-except NameError:
-    pass
 
 from glow.geometry_layouts.cells import *
 from glow.geometry_layouts.lattices import *
@@ -65,7 +54,3 @@ lattice.apply_symmetry(SymmetryType.SIXTH)
 # Perform the lattice faces and edges analysis and generate the output
 # TDT file
 analyse_and_generate_tdt(lattice, os.path.join(os.path.dirname(sys.argv[0]),'test_hex_assembly_sixth'))
-
-
-
-

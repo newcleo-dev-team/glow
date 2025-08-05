@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "GLOW"
+version = "1.0.0"
+description = "Geometry Layout Oriented Workflow"
+authors = [
+    { name = "Davide Manzione", email = "davide.manzione@newcleo.com" },
+    { name = "Daniele Tomatis", email = "daniele.tomatis@newcleo.com" },
+]
+license = {file = "LICENSE"}
+readme = "README.rst"
+keywords = [
+    "unstructured geometry",
+    "surface geometry",
+    "tracking",
+    "DRAGON5",
+    "SALT",
+    "lattice",
+    "assembly"
+]
+classifiers = [
+    "Programming Language :: Python",
+    "Natural Language :: English"
+]
+requires-python = ">=3.11"
+dependencies = [
+    "typing-extensions >= 4.12.2",
+    "PyQt5 >= 5.15.11",
+    "psutil >= 7.0.0",
+    "sphinx >= 8.2.3",
+    "sphinx-rtd-theme >= 3.0.2",
+    "sphinxcontrib-bibtex >= 2.6.3",
+    "myst-parser >= 4.0.1"
+]
+
+[tool.setuptools.packages]
+find = {namespaces = false}
+
+[tool.setuptools.dynamic]
+version = {attr = "glow.__version__"}

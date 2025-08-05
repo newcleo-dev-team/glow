@@ -1,20 +1,9 @@
 """
-Modelling of a Hexagonal Assembly made of a central pin fuel 
+Modelling of a Hexagonal Assembly made of a central pin fuel
 cell sorrounded by 6 rings of pin fuel cells. The hexagon is complete.
 """
-
 import os
 import sys
-
-try:
-    file_path = os.path.abspath(__file__)
-    glow_path = os.path.abspath(os.path.join(file_path, "..", "..", ".."))
-
-    if glow_path not in sys.path:
-       sys.path.insert(0, glow_path)
-
-except NameError:
-    pass
 
 from glow.geometry_layouts.cells import *
 from glow.geometry_layouts.lattices import *
@@ -23,10 +12,10 @@ from glow.generator.generator import *
 
 # Declare the values of the hexagonal cells geometrical characteristics
 edge_length = 0.7852193995
-radii_f=[0.1, 0.45, 0.465, 0.525] 
+radii_f = [0.1, 0.45, 0.465, 0.525]
 
 #Build two types of hexagonal cells
-fuel_cell= HexCell(edge_length=edge_length,
+fuel_cell = HexCell(edge_length=edge_length,
                     name="Fuel Cell")
 # Rotate the cells
 fuel_cell.rotate(90)
@@ -61,7 +50,3 @@ lattice.type_geo = LatticeGeometryType.HEXAGON_TRAN
 # Perform the lattice faces and edges analysis and generate the output
 # TDT file
 analyse_and_generate_tdt(lattice, os.path.join(os.path.dirname(sys.argv[0]),'test_hex_assembly'))
-
-
-
-

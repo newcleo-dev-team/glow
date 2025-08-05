@@ -1360,8 +1360,16 @@ generated. Its structure consists of five sections, that are:
 Usage
 -----
 
-|TOOL| can be used directly by writing down a Python script that exploits the
-provided classes and methods to:
+|TOOL| can be used directly by writing down a Python script where the single
+needed modules can be imported; alternatively, users can import all the modules
+at once to have them available by setting the following import instruction:
+
+.. code-block:: python
+
+  from glow import *
+
+Given that, classes and methods are directly accessible and users can exploit
+them to:
 
 - assemble the geometry;
 - assign properties to regions;
