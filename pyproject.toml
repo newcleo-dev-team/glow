@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "GLOW"
 version = "1.0.0"
-description = "Geometry Layout Oriented Workflow"
+description = "Geometry Layout Oriented Workflows"
 authors = [
     { name = "Davide Manzione", email = "davide.manzione@newcleo.com" },
     { name = "Daniele Tomatis", email = "daniele.tomatis@newcleo.com" },
