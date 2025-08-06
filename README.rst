@@ -18,14 +18,13 @@
 Introduction
 ------------
 
-|TOOL| (*Geometry Layout Oriented Workflows*) is a Python application
-intended for providing the `DRAGON5 <http://merlin.polymtl.ca/version5.htm>`_
-lattice code with a tool for building 2D unstructured geometries for performing
-tracking analyses.
+|TOOL| (*Geometry Layout Oriented Workflow*) is a Python package
+providing 2D unstructured geometries to the `DRAGON5 <http://merlin.polymtl.ca/version5.htm>`_
+lattice transport computer code.
 
-Natively, *DRAGON5* can handle the generation of simple geometry layouts, in
-terms of lattices made up of cells, which represent the base unit of an
-assembly. This is performed by the *GEO* module: however, this cannot exploit
+Natively, *DRAGON5* handles the generation of simple geometry layouts in
+terms of lattices made up of cells, which represent the base unit of a fuel
+assembly. This is performed by the *GEO* module. However, this cannot exploit
 any of the boolean operations among geometrical shapes that are offered by
 *Constructive Solid Geometry* (*CSG*) tools.
 
@@ -33,28 +32,32 @@ any of the boolean operations among geometrical shapes that are offered by
 functionalities needed to assemble complex geometry layouts. It relies on the
 APIs of the *GEOM* module of the `SALOME <https://www.salome-platform.org/>`_
 platform, an open-source environment offering 2D/3D CAD modelling capabilities.
-|TOOL| supports **transformation** (e.g. translation, rotation, etc.) and
-**boolean** operations, as well as applying specific types of symmetry depending
-on the type of lattice, i.e.:
+|TOOL| supports euclidean geometric **transformation**, such as translation and
+rotation, and **boolean** operations.
+
+|TOOL| can operate cuts to extract parts out of an existing layout, thus
+focusing on the minimum portion of the geometry that can reproduce the whole
+motif by unfolding symmetries. Calculations on smaller geometries are
+expected to be computationally cheaper. The application of special symmetries
+to the main lattice types are implemented:
 
   - *Cartesian* lattice - half, quarter and eighth symmetries.
   - *Hexagonal* lattice - third, sixth and twelfth symmetries.
 
-|TOOL| also relies on the *SALOME* graphical user interface (*GUI* module) to
-visualize each geometrical object built with |TOOL| in the 3D viewer of *SALOME*.
+The geometries built with |TOOL| can be visualized in the 3D viewer of *SALOME*
+through the graphical user interface (*GUI* module).
 
-Tracking analyses in *DRAGON5* requires a the description file of the geometry
-to analyse: |TOOL| allows to export the surface geometry representation to a
-*.dat* file in the *TDT* *APOLLO2* format.
+|TOOL| can export geometry layouts to *.dat* files using the *TDT* format of
+*APOLLO2* where the cells mesh boundaries are given by surface equations.
 
-|TOOL| is developed by the **Codes & Methods** group of |newcleo| and it is
+|TOOL| is developed by the **Codes & Methods** Department of |newcleo| and it is
 released under the |LICENSE| **License**.
 
-**DISCLAIMER:**
+.. admonition:: DISCLAIMER
 
-  - The *DRAGON5* lattice code is not distributed with |TOOL|. Please, refer
-    to `<http://merlin.polymtl.ca/version5.htm>`_ for downloading the latest
-    version and for the installation instructions.
+   The *DRAGON5* lattice code is not distributed with |TOOL|. Please, refer
+   to `<http://merlin.polymtl.ca/version5.htm>`_ for downloading the latest
+   version and for the installation instructions.
 
 Project Structure
 -----------------
@@ -152,8 +155,18 @@ them to:
 
 - assemble the geometry;
 - assign properties to regions;
-- visualize the result in the *SALOME* 3D viewer;
+- visualize the result in the *SALOME* 3D viewer (see :numref:`example-glow`);
 - perform the geometry analysis and the output *TDT* file generation.
+
+.. _example-glow:
+.. figure:: resources/example_glow_geometry.png
+   :alt: Cartesian lattice after applying an eighth symmetry
+   :width: 400px
+   :align: center
+
+   Cartesian lattice after applying the :py:attr:`EIGHTH<glow.support.types.SymmetryType.EIGHTH>`
+   type of symmetry. The image is the result of displaying the geometry layout
+   in the 3D viewer of *SALOME*.
 
 To run this script, users can:
 
@@ -203,5 +216,6 @@ to this
 Acknowledgements
 ----------------
 
-|newcleo| is thankful to prof. Alain Hébert and the whole *DRAGON5* development
-team of the **Polytechnique of Montreal** for their constant support.
+|newcleo| is thankful to Professor Alain Hébert and the entire *DRAGON5*
+development team at the **Polytechnique of Montreal**, Canada, for their
+constant support.

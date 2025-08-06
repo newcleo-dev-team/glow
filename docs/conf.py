@@ -34,8 +34,7 @@ project = "GLOW"
 authors = "Davide Manzione"
 version = "1.0"
 date = "See signature"
-doc_title = "GLOW: Generator of Unstructured, Non-Native Geometries for \
-Tracking Analyses in DRAGON5"
+doc_title = "GLOW: Generator of Unstructured, Non-Native Geometries for DRAGON5"
 id_no = "0"
 reference_code = "XXX-YYY-ZZZ-???"
 revision_no = "1"
@@ -44,13 +43,14 @@ modif_descr = "First Release"
 abstract = "This document is the reference manual for the \
 \\sphinxstyleemphasis{GLOW} \
 (\\sphinxstylestrong{G}eometry \\sphinxstylestrong{L}ayout \
-\\sphinxstylestrong{O}riented \\sphinxstylestrong{W}orkflows) Python package, \
-which implements a generator of unstructured, non-native geometries to be used \
-for tracking analyses in \\sphinxstyleemphasis{DRAGON5}. \
-It uses the APIs of \\sphinxstyleemphasis{SALOME} to provide the functionalities \
-to build and visualize the geometry layout, and to generate the corresponding surface \
-geometry representation according to the \\sphinxstyleemphasis{APOLLO2} TDT \
-format which \\sphinxstyleemphasis{DRAGON5} uses in tracking analyses."
+\\sphinxstylestrong{O}riented \\sphinxstylestrong{W}orkflow) Python package, \
+providing 2D unstructured geometries to the \\sphinxstyleemphasis{DRAGON5} \
+lattice transport computer code. \
+\\sphinxstyleemphasis{GLOW} uses the APIs of \\sphinxstyleemphasis{SALOME} \
+to provide the functionalities to build and visualize the geometry layout, \
+and to generate the corresponding representation according to the \
+\\sphinxstyleemphasis{TDT} format of \\sphinxstyleemphasis{APOLLO2}, \
+where the cells mesh boundaries are given by surface equations."
 reviewers = "Gabriele Ottino"
 approvers = "Daniele Tomatis"
 doc_purpose = "1"

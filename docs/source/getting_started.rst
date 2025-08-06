@@ -6,8 +6,7 @@ This section presents all the information the user should know to make the best
 use of |TOOL|.
 Details about the available functionalities are provided to guide users in
 setting up a geometry layout, assigning properties to its regions, and
-exporting the layout in the *TDT* format, used by *DRAGON5* for tracking
-analyses.
+exporting the layout in the *TDT* format.
 The following sections include images to graphically present the results of
 applying the described functionalities of |TOOL|. All of the images represent
 geometry layouts generated in *SALOME* and displayed in its 3D viewer.
@@ -971,12 +970,13 @@ colorset is shown in :numref:`lattice-set-props`.
 Applying Symmetries
 """""""""""""""""""
 
-Tracking analyses on a full geometry layout of a fuel assembly can be
-computationally expensive, in particular if containing lots of rings of cells.
-To speed up the calculations, users can rely on symmetries to reduce the
-geometric domain of calculus.
-|TOOL| supports the application of different types of symmetries according to
-the type of cells in the lattice; in particular, we can have:
+Trackings on a full geometry layout of a fuel assembly can be computationally
+expensive, in particular if containing lots of rings of cells.
+To speed up the calculations, users can rely on cuts to extract parts out of
+the existing layout, thus focusing on the minimum portion of the geometry that
+can reproduce the whole motif by unfolding symmetries.
+|TOOL| supports the application of specific types of symmetries to the lattice.
+According to the type of cells in the lattice, we can have:
 
   - Full, half, quarter, and eighth symmetries for a cartesian lattice;
   - Full, third, sixth and twelfth symmetries for a hexagonal lattice.
@@ -1166,8 +1166,8 @@ Lattice Analysis and Export
 
 The aim of |TOOL| is to provide neutronics experts with a tool that allows them
 to create geometry layouts and export the surface geometry representation to a
-file. This file can then be used to perform tracking analyses with the *SALT*
-module of *DRAGON5*.
+file. This file can then be used to perform a tracking with the *SALT* module
+of *DRAGON5*.
 The generated file is in the format *APOLLO2* requires for its *TDT* solver.
 
 To meet this requirement, |TOOL| comes with a functionality for extracting the
