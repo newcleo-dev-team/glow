@@ -2,8 +2,7 @@
 glow/__pycache__/
 
 # Ignore specific directories
-.venv/
-tests/outputs
+*venv/
 docs/_build
 build
 
