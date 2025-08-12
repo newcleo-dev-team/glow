@@ -158,10 +158,13 @@ them to:
 - visualize the result in the *SALOME* 3D viewer (see image below);
 - perform the geometry analysis and generate the output *TDT* file.
 
-![Cartesian lattice after applying a one-eighth symmetry](resources/example_glow_geometry.png)
+.. figure:: resources/example_glow_geometry.png
+   :alt: Cartesian lattice after applying a eighth symmetry
+   :width: 400px
+   :align: center
 
-The above image shows the resulting geometry layout obtained by applying a
-symmetry that extracts a eighth of the entire Cartesian lattice.
+The above image shows an example of a geometry layout obtained by applying a
+symmetry that extracts a eighth of an entire Cartesian lattice.
 
 To run any script using the |TOOL| functionalities, users can:
 
