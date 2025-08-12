@@ -82,7 +82,7 @@ The project is organized according to the following folder structure:
   implemented by |TOOL|;
 - ``resources``: contains files that support the configuration and operation
   of |TOOL|;
-- ``tests``: contains both unittests and functional tests, the former to ensure
+- ``tests``: contains both unit tests and functional tests, the former to ensure
   the correctness of individual code units, the latter to ensure the overall
   functionalities behave as expected;
 - ``tutorials``: contains Python scripts that provide use cases showing how to
@@ -155,20 +155,17 @@ them to:
 
 - assemble the geometry;
 - assign properties to regions;
-- visualize the result in the *SALOME* 3D viewer (see :numref:`example-glow`);
-- perform the geometry analysis and the output *TDT* file generation.
+- visualize the result in the *SALOME* 3D viewer (see image below);
+- perform the geometry analysis and generate the output *TDT* file.
 
-.. _example-glow:
-.. figure:: resources/example_glow_geometry.png
-   :alt: Cartesian lattice after applying an eighth symmetry
-   :width: 400px
-   :align: center
+<div align="center">
+  <img src="resources/example_glow_geometry.png" alt="artesian lattice after applying a one-eighth symmetry" width="400">
+</div>
 
-   Cartesian lattice after applying the :py:attr:`EIGHTH<glow.support.types.SymmetryType.EIGHTH>`
-   type of symmetry. The image is the result of displaying the geometry layout
-   in the 3D viewer of *SALOME*.
+The above image shows the resulting geometry layout obtained by applying a
+symmetry that extracts a eighth of the entire Cartesian lattice.
 
-To run this script, users can:
+To run any script using the |TOOL| functionalities, users can:
 
 - provide it as argument when running *SALOME*;
 
