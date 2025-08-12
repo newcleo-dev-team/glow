@@ -18,43 +18,50 @@
 Introduction
 ------------
 
-|TOOL| (*Geometry Layout Oriented Workflows*) is a Python application
-intended for providing the `DRAGON5 <http://merlin.polymtl.ca/version5.htm>`_
-lattice code with a tool for building 2D unstructured geometries for performing
-tracking analyses.
+|TOOL| (*Geometry Layout Oriented Workflow*) is a Python package
+providing 2D unstructured geometries to the `DRAGON5 <http://merlin.polymtl.ca/version5.htm>`_
+lattice transport computer code.
 
-Natively, *DRAGON5* can handle the generation of simple geometry layouts, in
-terms of lattices made up of cells, which represent the base unit of an
-assembly. This is performed by the *GEO* module: however, this cannot exploit
-any of the boolean operations among geometrical shapes that are offered by
-*Constructive Solid Geometry* (*CSG*) tools.
+*DRAGON5* can natively handle the generation of simple geometry layouts that are
+structured according to repeated patterns of Cartesian or hexagonal cells by
+the *GEO* module.
+
+Even though *DRAGON5* can track any 2D geometries without concavities, it can
+natively only handle the generation of simple geometry layouts that are
+structured according to repeated patterns. This is done with the *GEO* module
+where the *G2S* module converts the geometry layout to a *.dat* description file
+used by the *SALT* tracking module. More complex layout cases made by boolean
+operations among geometrical shapes are not handled.
 
 |TOOL| was developed with the purpose of offering a tool that includes all the
 functionalities needed to assemble complex geometry layouts. It relies on the
 APIs of the *GEOM* module of the `SALOME <https://www.salome-platform.org/>`_
 platform, an open-source environment offering 2D/3D CAD modelling capabilities.
-|TOOL| supports **transformation** (e.g. translation, rotation, etc.) and
-**boolean** operations, as well as applying specific types of symmetry depending
-on the type of lattice, i.e.:
+|TOOL| supports euclidean geometric **transformation**, such as translation and
+rotation, and **boolean** operations.
+
+|TOOL| can operate cuts to extract parts out of an existing layout, thus
+focusing on the minimum portion of the geometry required to describe the entire
+pattern. Calculations on smaller geometries are expected to be computationally
+cheaper. Special symmetries according to the main lattice types are implemented:
 
   - *Cartesian* lattice - half, quarter and eighth symmetries.
   - *Hexagonal* lattice - third, sixth and twelfth symmetries.
 
-|TOOL| also relies on the *SALOME* graphical user interface (*GUI* module) to
-visualize each geometrical object built with |TOOL| in the 3D viewer of *SALOME*.
+The geometries built with |TOOL| can be visualized in the 3D viewer of *SALOME*
+through the graphical user interface (*GUI* module).
 
-Tracking analyses in *DRAGON5* requires a the description file of the geometry
-to analyse: |TOOL| allows to export the surface geometry representation to a
-*.dat* file in the *TDT* *APOLLO2* format.
+|TOOL| can export geometry layouts to *.dat* files in the format of the *TDT*
+solver of *APOLLO2*.
 
-|TOOL| is developed by the **Codes & Methods** group of |newcleo| and it is
+|TOOL| is developed by the **Codes & Methods** Department of |newcleo| and it is
 released under the |LICENSE| **License**.
 
-**DISCLAIMER:**
+.. admonition:: DISCLAIMER
 
-  - The *DRAGON5* lattice code is not distributed with |TOOL|. Please, refer
-    to `<http://merlin.polymtl.ca/version5.htm>`_ for downloading the latest
-    version and for the installation instructions.
+   The *DRAGON5* lattice code is not distributed with |TOOL|. Please, refer
+   to `<http://merlin.polymtl.ca/version5.htm>`_ for downloading the latest
+   version and for the installation instructions.
 
 Project Structure
 -----------------
@@ -79,7 +86,7 @@ The project is organized according to the following folder structure:
   implemented by |TOOL|;
 - ``resources``: contains files that support the configuration and operation
   of |TOOL|;
-- ``tests``: contains both unittests and functional tests, the former to ensure
+- ``tests``: contains both unit tests and functional tests, the former to ensure
   the correctness of individual code units, the latter to ensure the overall
   functionalities behave as expected;
 - ``tutorials``: contains Python scripts that provide use cases showing how to
@@ -152,10 +159,18 @@ them to:
 
 - assemble the geometry;
 - assign properties to regions;
-- visualize the result in the *SALOME* 3D viewer;
-- perform the geometry analysis and the output *TDT* file generation.
+- visualize the result in the *SALOME* 3D viewer (see image below);
+- perform the geometry analysis and generate the output *TDT* file.
 
-To run this script, users can:
+.. figure:: resources/example_glow_geometry.png
+   :alt: Cartesian lattice after applying a eighth symmetry
+   :width: 400px
+   :align: center
+
+The above image shows an example of a geometry layout obtained by applying a
+symmetry that extracts a eighth of an entire Cartesian lattice.
+
+To run any script using the |TOOL| functionalities, users can:
 
 - provide it as argument when running *SALOME*;
 
@@ -203,5 +218,6 @@ to this
 Acknowledgements
 ----------------
 
-|newcleo| is thankful to prof. Alain Hébert and the whole *DRAGON5* development
-team of the **Polytechnique of Montreal** for their constant support.
+|newcleo| is thankful to Professor Alain Hébert and the entire *DRAGON5*
+development team at the **Polytechnique of Montreal**, Canada, for their
+constant support.

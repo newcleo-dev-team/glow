@@ -32,8 +32,8 @@ EPSILON = 1e-05
 @dataclass(order=True)
 class Face():
     """
-    Providing a data representation for a subface of the lattice, which
-    represents a calculation zone containing a list of properties.
+    Class that provides a data representation for a subface of the lattice,
+    which represents a calculation zone containing a list of properties.
     This dataclass can be ordered on the basis of the ``no`` attribute, which
     provides a global index for the faces in the lattice.
     """

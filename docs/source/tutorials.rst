@@ -6,7 +6,8 @@ Tutorials
 
 To fully exploit the functionalities offered by |TOOL|, several examples are
 provided. They can be found in the ``tutorials`` folder. In the following,
-they are presented and detailed showing for each the resulting geometry layout.
+they are presented and explained in detail, showing for each the resulting
+geometry layout as displayed in the 3D viewer of *SALOME*.
 
 Hexagonal Cell
 --------------
@@ -42,11 +43,12 @@ the cell's technological geometry is shown in the *SALOME* viewer (see
    Hexagonal cell's technological geometry built by adding three circular
    regions.
 
-Materials can be assigned to the four regions of the cell by setting the
-:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` type of property,
-using the method :py:meth:`set_properties()<glow.geometry_layouts.cells.Cell.set_properties>`
-by keeping in mind to provide the names of the materials in order from the region
-closest to the cell's centre to the farthest one.
+Materials can be assigned to the four regions of the cell's technological geometry
+by providing a value for the property type :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
+to each.
+The assignement is performed using the method :py:meth:`set_properties()<glow.geometry_layouts.cells.Cell.set_properties>`.
+The names of the materials should be provided in order from the region closest
+to the cell's centre to the farthest one.
 Regions can now be shown with the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
 colorset by specifying it in the arguments of the method :py:meth:`show()<glow.geometry_layouts.cells.Cell.show>`
 (see :numref:`cell-colorset`).
@@ -72,8 +74,8 @@ colorset by specifying it in the arguments of the method :py:meth:`show()<glow.g
 
 Having a refined geometry layout can provide better tracking results; hence, a
 sectorization can be applied with the method :py:meth:`sectorize()<glow.geometry_layouts.cells.Cell.sectorize>`.
-It requires two lists, the number of sectors to subdivide each region into and
-the angle the sectorization starts from.
+It requires two lists, one with the number of sectors that each region is
+subdivided into and one with the angle that each sectorization starts from.
 The refined geometry can be shown even with the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
 colorset by specifying it among the arguments of the method :py:meth:`show()<glow.geometry_layouts.cells.Cell.show>`
 together with the :py:attr:`SECTORIZED<glow.support.types.GeometryType.SECTORIZED>`
@@ -94,8 +96,8 @@ type of geometry (see :numref:`cell-sect`).
    :align: center
 
    Hexagonal cell's sectorized geometry shown by applying a colorset that
-   highlights the type of property :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
-   applied to the different regions resulting from the sectorization.
+   highlights the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
+   property type applied to the different regions resulting from the sectorization.
 
 Cartesian Cell With Custom Geometry Layout
 ------------------------------------------
@@ -106,12 +108,13 @@ of the module :mod:`glow.interface.geom_interface` that wrap the ones of the
 *GEOM* module of *SALOME*.
 
 The goal is to instantiate a cartesian cell with a square shape whose edge is
-``1.0`` long. The cell is subdivided into four regions by means of three circles
-to delimit the different regions, each attributed to a specific material.
-The cell's technological geometry definition follows the same instructions
-shown in the previous case. In addition, the type of property
-:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` is assigned to
-the different regions of the cartesian cell.
+``1.0`` long. The cell is subdivided into four regions by means of three circles;
+a specific material is assigned to each of the regions of the resulting
+technological geometry.
+The characterization of the cell's technological geometry follows the same
+instructions as shown in the previous case. In addition, the
+:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` property type is
+assigned to the different regions of the technological geometry of the cell.
 
 .. code-block:: python
 
@@ -152,19 +155,20 @@ the borders of the cell (see :numref:`cell-windmill`).
    applied to the different regions resulting from the sectorization.
 
 The methods offered by the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
-for setting up the technological geometry cover the addition and removal of
-circular regions only; the sectorization subdivides the technological geometry
-into sectors by drawing lines.
-When a specific customization of the geometry is needed, users can make full use
-of the functions in the :mod:`glow.interface.geom_interface` module to build
-the layout of need and then update the cell's one with the methods
+for setting up the technological geometry only cover the addition and removal
+of circular regions. The sectorized geometry can be characterized by subdividing
+the technological geometry into sectors by drawing lines.
+If a customisation of any of the two available geometry layouts is required,
+users can make use of the functions in the :mod:`glow.interface.geom_interface`
+module to build the *GEOM face* or *GEOM compound* of need. The methods
 :py:meth:`update_geometry()<glow.geometry_layouts.cells.Cell.update_geometry>`
-and :py:meth:`update_geometry_from_face()<glow.geometry_layouts.cells.Cell.update_geometry_from_face>`.
-These functions in the :mod:`glow.interface.geom_interface` module wrap the
-corresponding ones of the *GEOM* module of *SALOME*.
-Here, a customization of the cell is provided by updating the sectorized geometry
-with one costituted by more circles between the regions of the technological
-geometry. Users should note that the previously set sectorization geometry is
+and :py:meth:`update_geometry_from_face()<glow.geometry_layouts.cells.Cell.update_geometry_from_face>`
+can be used to update either the technological or the sectorized geometry layout
+with the built *GEOM* object.
+This tutorial demonstrates how to customise the cell by updating the sectorized
+geometry with a *GEOM compound* containing more circles between two adjacent
+regions of the technological geometry.
+Users should note that the previously set sectorization geometry is
 substituted by the new one. The result of the following code is shown in
 :numref:`cell-update`.
 
@@ -203,15 +207,16 @@ Cartesian Assembly With Symmetry
 --------------------------------
 
 The use case ``cartesian_assembly.py`` shows the steps required to declare an
-assembly made by several rings of the same cartesian cell.
+assembly made by a central cell (of cartesian type) around which several rings
+of the same cell are placed.
 This type of geometry layout can be tracked by the *SALT* module of *DRAGON5*
-using an eighth symmetry as this is representative enough for the entire
-layout of the assembly.
+using an eighth symmetry as this is the minimum portion of the geometry that
+can describe the entire layout of the assembly.
 
 The first step for assembling this use case geometry is to instantiate the
 cartesian cell (i.e. object of the class
-:py:class:`RectCell<glow.geometry_layouts.cells.RectCell>`) the lattice is made
-by.
+:py:class:`RectCell<glow.geometry_layouts.cells.RectCell>`) which constitutes
+the lattice.
 The instructions that follow build a cartesian cell with a square shape whose
 edge is ``1.0`` long; the cell is subdivided into four regions by means of
 three circles and the type of property
@@ -233,17 +238,17 @@ enabled.
   # Apply the cell's sectorization
   cell.sectorize([1, 1, 4, 8], [0, 0, 0, 22.5], windmill=True)
 
-The successive step is to declare the instance of the class
+The subsequent step is to declare the instance of the class
 :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` and add the cells
-it is made by.
-The following code shows that a single cell is provided when instantiating the
-lattice; this cell is placed at the centre of the lattice as both the cell and
-the lattice share the same coordinates of their centres.
+it is made of.
+A single cell is provided when instantiating the lattice; this cell is placed
+at the centre of the lattice since the cell and the lattice share the same
+coordinates for their centres.
 To add several rings of the same cell, the method
 :py:meth:`add_rings_of_cells()<glow.geometry_layouts.lattices.Lattice.add_rings_of_cells>`
-is used: the instance of the :py:class:`RectCell<glow.geometry_layouts.cells.RectCell>`
-class, previously declared, is provided together with the number of rings to
-add. The lattice's technological geometry resulting from assembling all the
+is provided with the instance of the :py:class:`RectCell<glow.geometry_layouts.cells.RectCell>`
+class, previously declared, and the number of rings to add.
+The lattice's technological geometry resulting from assembling all the
 rings of cells is shown in :numref:`lattice-tech`.
 
 .. code-block:: python
@@ -264,21 +269,22 @@ rings of cells is shown in :numref:`lattice-tech`.
    of property :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
    applied to the different regions of its cells.
 
-An assembly requires the lattice to be framed into a box. This can be performed
-in different ways in |TOOL|, either by calling the method
+To replicate a fuel assembly, the lattice needs to be framed into a box. This
+can be performed in different ways in |TOOL|, either by calling the method
 :py:meth:`build_lattice_box()<glow.geometry_layouts.lattices.Lattice.build_lattice_box>`
 that automatically builds a rectangular box with layers of the indicated
 thicknesses or by instantiating a :py:class:`RectCell<glow.geometry_layouts.cells.RectCell>`
 object and assigning it to the
 :py:attr:`lattice_box<glow.geometry_layouts.lattices.Lattice.lattice_box>`
 property.
-In the following, the second option is shown; the cell is build from the XY
-dimensions of the lattice and the thickness of the layers so that the box
-cuts the outmost ring of cells. In addition, the box is subdivided by means
-of squares placed at the corners of the box, having the length of their edges
-equal to the thickness of the box layer.
+In the following, the second option is shown. The cell is built from the XY
+dimensions of the lattice and the thickness of the layers. In this specific
+use case, the box cuts the *GEOM compound* of the cells located on the outermost
+ring, i.e. the cells farthest from the centre of the lattice.
+In addition, the geometric shape of the box's single layer is subdivided
+in rectangular sub-shapes.
 The lattice's technological geometry resulting from assembling the box with the
-cells is shown in :numref:`lattice-boxed`.
+lattice is shown in :numref:`lattice-boxed`.
 
 .. code-block:: python
 
@@ -328,8 +334,8 @@ cells is shown in :numref:`lattice-boxed`.
 
 A symmetry can be applied to the lattice's geometry layout. For the specific
 layout of this use case, the :py:attr:`EIGHTH<glow.support.types.SymmetryType.EIGHTH>`
-type of symmetry can be used in tracking calculations as representative of the
-whole geometry.
+type of symmetry can be used in tracking calculations since it is the minimum
+portion that can represent the entire geometry layout of the lattice.
 The result of applying the above mentioned type of symmetry is shown in
 :numref:`lattice-eighth`.
 
@@ -350,14 +356,15 @@ The result of applying the above mentioned type of symmetry is shown in
    in a box and applying the :py:attr:`EIGHTH<glow.support.types.SymmetryType.EIGHTH>`
    type of symmetry.
 
-The just built geometry layout of the assembly can be exported to the output
-TDT file by calling the function :py:func:`analyse_and_generate_tdt<glow.main.analyse_and_generate_tdt>`.
-It is possible to indicate which type of geometry of the cells to use in the
-analysis that |TOOL| performs to generate the output TDT file. In the following,
-the instance of the dataclass :py:class:`TdtSetup<glow.main.TdtSetup>` is provided
-specifying the :py:attr:`SECTORIZED<glow.support.types.GeometryType.SECTORIZED>`
-type of geometry. The resulting geometry upon which the *SALT* module of *DRAGON5*
-will perform the tracking calculations is shown in :numref:`lattice-g2s`.
+This geometry layout for the assembly can be exported to the output *TDT* file
+by calling the function :py:func:`analyse_and_generate_tdt()<glow.main.analyse_and_generate_tdt>`.
+It is possible to indicate which :py:class:`GeometryType<glow.support.types.GeometryType>`
+of the cells to use in the analysis that |TOOL| performs to generate the output
+*TDT* file. In the following, the instance of the dataclass :py:class:`TdtSetup<glow.main.TdtSetup>`
+is provided specifying the :py:attr:`SECTORIZED<glow.support.types.GeometryType.SECTORIZED>`
+type of geometry.
+The resulting geometry, which the *SALT* module of *DRAGON5* can perform tracking
+calculations on, is shown in :numref:`lattice-g2s`.
 
 .. code-block:: python
 
@@ -373,22 +380,24 @@ will perform the tracking calculations is shown in :numref:`lattice-g2s`.
    :align: center
 
    Cartesian lattice's geometry layout that the *SALT* module of *DRAGON5*
-   uses to perform the tracking analysis.
+   uses to perform the tracking.
+
+.. _tutorial-overlap:
 
 Hexagonal Assembly With Different Cells
 ---------------------------------------
 
 The use case ``hexagonal_assembly.py`` shows the steps required to declare an
-assembly made by several rings of the same hexagonal cell.
-In addition, a hexagonal cell having different dimension, layout and materials
-combination is positioned in different XYZ coordinates in the lattice.
+assembly made by several rings of the same hexagonal cell framed in a hexagonal
+box. In addition, a hexagonal cell having different dimension, layout and materials
+combination is positioned at different XYZ coordinates within the lattice.
 
-The first step for assembling the use case geometry is to instantiate the
-hexagonal cell (i.e. object of the class
+The first step in assembling the use case geometry is to instantiate the
+hexagonal cell (i.e. the object of the class
 :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>`) the lattice is made
-by.
-The instructions that follow build the two hexagonal cells that characterise
-the lattice, whose edges are ``1.0`` and ``2.0`` long respectively.
+out of.
+The two hexagonal cells that characterise the lattice are built with edges
+``1.0`` and ``2.0``.
 The former cell, which constitutes the main pattern of the geometry layout,
 is subdivided into five regions by means of four circles; the latter has a
 different layout characterized by two circular regions.
@@ -420,12 +429,12 @@ is assigned to the regions of each cell.
       {PropertyType.MATERIAL: ['COOLANT', 'CLADDING', 'COOLANT']}
   )
 
-The successive step is to declare the instance of the class
+The subsequent step is to declare the instance of the class
 :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` and add the cells
-it is made by.
-The following code shows that a single cell (the one with smaller size) is
-provided when instantiating the lattice; this cell is placed at the centre of
-the lattice as they both have the same coordinates of the centre.
+it is made of.
+A single cell (the one with smaller size) is provided when instantiating the
+lattice. This cell is placed at the centre of the lattice as they both have
+the same coordinates of the centre.
 Several rings of the same cell are then added with the method
 :py:meth:`add_rings_of_cells()<glow.geometry_layouts.lattices.Lattice.add_rings_of_cells>`:
 the instance of the :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>`
@@ -435,9 +444,14 @@ To complete the lattice's geometry layout, the cell with greater size is added
 at specific coordinates using the method
 :py:meth:`add_cell()<glow.geometry_layouts.lattices.Lattice.add_cell>`.
 The resulting geometry layout (see :numref:`hex-lattice-overlap-cells`) shows
+that larger cells overlap smaller cells because they have been placed in a
+higher layer. Consequently,
+
+The resulting geometry layout (see :numref:`hex-lattice-overlap-cells`) shows
 that cells of greater size overlap the others, as they have been placed into a
-higher layer than the smaller cells. As a consequence, the layout of the
-overlapped cells appears cut by the layer above.
+higher layer than the smaller cells. As a consequence, the *GEOM compound* of
+each cell in the upper layer is cut out of the *GEOM compound* of the cells in
+the lower layer.
 
 .. code-block:: python
 
@@ -469,16 +483,15 @@ overlapped cells appears cut by the layer above.
    is applied to the different regions of the lattice's cells.
 
 The current lattice's geometry layout shown in :numref:`hex-lattice-overlap-cells`
-presents a situation where the physical part of the smaller cells is cut.
+presents a situation where the structural parts (e.g. regions associated with
+a fuel material) of the smaller cells are cut.
 Since this scenario cannot happen in real-life situations, these cells need to
-be restored by removing any circular region associated with physical elements.
-This is done by using in conjunction the function
-:py:func:`get_changed_cells()<glow.geometry_layouts.lattices.get_changed_cells>`,
-to retrieve the cut cells, and the method
-:py:meth:`restore_cells()<glow.geometry_layouts.lattices.Lattice.restore_cells>`,
+be restored by removing any circular region.
+This is done by using the function :py:func:`get_changed_cells()<glow.geometry_layouts.lattices.get_changed_cells>`,
+to retrieve the cut cells, and the method :py:meth:`restore_cells()<glow.geometry_layouts.lattices.Lattice.restore_cells>`,
 to restore the geometry layout and assign a value for the provided types of
-property. :numref:`hex-lattice-restored` shows the result of restoring the
-cut cells.
+property. :numref:`hex-lattice-restored` shows the result of restoring the cut
+cells.
 
 .. code-block:: python
 
@@ -502,15 +515,14 @@ cut cells.
 
 An assembly requires the lattice to be framed into a box. In this use case
 the method :py:meth:`build_lattice_box()<glow.geometry_layouts.lattices.Lattice.build_lattice_box>`
-is used: it automatically builds an X-oriented hexagonal box with layers of
+is used. It automatically builds an X-oriented hexagonal box with layers of
 the indicated thicknesses.
-The the type of property :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
+The type of property :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
 is assigned to the different regions of the hexagonal box by means of the
-method :py:meth:`set_lattice_box_properties()<glow.geometry_layouts.lattices.Lattice.set_lattice_box_properties>`;
-the values are assigned according to the distance of the regions from the
+method :py:meth:`set_lattice_box_properties()<glow.geometry_layouts.lattices.Lattice.set_lattice_box_properties>`
+with the values assigned according to the distance of the regions from the
 centre of the box.
-The resulting assembly made by assembling the lattice's cells with the box is
-show in :numref:`hex-lattice-boxed` .
+The resulting assembly is shown in :numref:`hex-lattice-boxed`.
 
 .. code-block:: python
 
@@ -531,7 +543,7 @@ show in :numref:`hex-lattice-boxed` .
    into a box.
 
 If the just built geometry layout of the assembly is exported to the output
-TDT file by calling the function :py:func:`analyse_and_generate_tdt<glow.main.analyse_and_generate_tdt>`,
+*TDT* file by calling the function :py:func:`analyse_and_generate_tdt()<glow.main.analyse_and_generate_tdt>`,
 the resulting surface representation will be characterised by ``typgeo=0``,
 which implies a uniform tracking type (i.e. *TISO*) in the ``ALBE 1.0``
 condition for its boundaries.
@@ -542,7 +554,7 @@ BC type applied to the lattice's boundaries. To do so, the lattice's property
 set to :py:attr:`HEXAGON_TRAN<glow.support.types.LatticeGeometryType.HEXAGON_TRAN>`.
 This setting generates a surface representation that must be tracked by a cyclic
 method (i.e. *TSPC*).
-After changing the lattice type of geometry, the output TDT file can be
+After changing the lattice type of geometry, the output *TDT* file can be
 generated.
 
 .. code-block:: python

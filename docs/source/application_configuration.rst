@@ -16,8 +16,8 @@ automatically install all the needed dependencies:
 
       pip install .
 
-To upgrade the |TOOL| package, please type the ``install`` command along with
-the ``--upgrade`` or ``-U`` flag:
+To upgrade the |TOOL| package, type the ``install`` command along with the
+``--upgrade`` or ``-U`` flag:
 
   .. code-block:: bash
 

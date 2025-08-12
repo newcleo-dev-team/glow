@@ -8,4 +8,4 @@ Release Notes
 
 This is the first release of the |TOOL| application. To access the full issue
 history, as well as comments and commits associated with each issue, please
-refer the github webpage `<https://github.com/newcleo-dev-team/glow/issues>`_.
+refer to the github webpage `<https://github.com/newcleo-dev-team/glow/issues>`_.

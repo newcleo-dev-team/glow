@@ -4,7 +4,7 @@ Welcome to the |TOOL| documentation!
 
 .. only:: html
 
-   **G**\ eometry **L**\ ayout **O**\ riented **W**\ orkflows
+   **G**\ eometry **L**\ ayout **O**\ riented **W**\ orkflow
 
 .. toctree::
    :maxdepth: 3

@@ -1,132 +1,75 @@
-Contributor Code of Conduct
-===========================
+Contributing guidelines
+=======================
 
-Our Pledge
-----------
+| This guide gives an overview of the project's contribution workflow.
+| Thank you from the outset for your interest and time in contributing to the
+  |TOOL| project!
 
-We as members, contributors, and leaders pledge to make participation in our
-community a harassment-free experience for everyone, regardless of age, body
-size, visible or invisible disability, ethnicity, sex characteristics, gender
-identity and expression, level of experience, education, socio-economic status,
-nationality, personal appearance, race, caste, color, religion, or sexual
-identity and orientation.
-We pledge to act and interact in ways that contribute to an open, welcoming,
-diverse, inclusive, and healthy community.
+Issues and feature requests
+---------------------------
 
-Our Standards
--------------
+| If you find a problem with the project or if you have a feature request, you
+  can open a new issue by clicking on the *New issue* button in the top menu
+  bar at this `web page <https://github.com/newcleo-dev-team/glow/issues>`_.
+| If you find an issue or feature request at this
+  `web page <https://github.com/newcleo-dev-team/glow/issues>`_ that you are
+  interested in and would like to help solve or implement, please contact the
+  authors by emailing them.
 
-Examples of behavior that contributes to a positive environment for our
-community include:
+Contribution process
+--------------------
 
-- Demonstrating empathy and kindness toward other people;
-- Being respectful of differing opinions, viewpoints, and experiences;
-- Giving and gracefully accepting constructive feedback;
-- Accepting responsibility and apologizing to those affected by our mistakes,
-  and learning from the experience;
-- Focusing on what is best not just for us as individuals, but for the overall
-  community.
+| **Authors acceptance**: Your request of contribution will be carefully
+  analysed by the authors of |TOOL|; upon their approval, you will be added
+  to the developers' group;
+| **Clone the Project**: Next, clone the project to your local machine. This
+  allows you to make changes to the code;
+| **Create a New Branch**: Before making any change, create a new branch in
+  your local project. This helps isolate your changes and makes it easier to
+  submit a merge request later. Use a descriptive name for your branch: the
+  name of the branch is suggested to start with the index that identifies the
+  issue you will be working on;
+| **Make Your Changes**: Now you're ready to make your changes. Make sure you
+  follow the project's coding standards and guidelines.
+| **Test Your Changes**: Before pushing a change, check it with the tests
+  contained in the
+  `folder <https://github.com/newcleo-dev-team/glow/tree/master/tests>`_.
+  They contain both unit tests, based on the ``unittest`` framework, and
+  functional tests devoted to verify that all the functionalities work together
+  correctly to replicate the intended geometry layout.
+| **Commit Your Changes**: After making your changes, commit them to your
+  local project. Write a clear and concise commit message describing what
+  you've done.
+| **Push Your Changes**: Push your changes and the new branch to the remote
+  project.
+| **Submit a Merge Request**: Finally, navigate to the
+  `project <https://github.com/newcleo-dev-team/glow>`_ on GitHub and click
+  on the *Pull request* button in the top menu bar. Fill out the form and
+  submit your merge request. In case of merge conflicts, please try to reduce
+  them as much as possibile.
+|
+| **Remember**: Pull regularly from the original project to keep your local
+  copy up to date. This helps avoid merge conflicts.
 
-Examples of unacceptable behavior include:
+Review process
+--------------
 
-- The use of sexualized language or imagery, and sexual attention or advances
-  of any kind;
-- Trolling, insulting or derogatory comments, and personal or political
-  attacks;
-- Public or private harassment;
-- Publishing others' private information, such as a physical or email address,
-  without their explicit permission;
-- Other conduct which could reasonably be considered inappropriate in a
-  professional setting.
+Once you've submitted a merge request, it goes through a review process.
+Here's what to expect:
 
-Enforcement Responsibilities
-----------------------------
+| **Maintainer Review**: The project's maintainers will review your merge
+  request. They may provide feedback and request changes. Please, respond to
+  comments and make the requested changes, if any.
+| **Revision**: If changes are requested, make the changes in your branch and
+  commit them. GitHub will automatically update the merge request with your
+  new commits.
+| **Approval**: Once the maintainers are satisfied with the changes, they will
+  approve the merge request.
+| **Merge**: After approval, the maintainers will merge your changes into the
+  main project. Your contribution is now part of the project!
+|
+| **Remember**: The review process can take time. Please, be patient and
+  respectful of the maintainers' time.
 
-Project's owners and mantainers are responsible for clarifying and enforcing
-our standards of acceptable behavior and will take appropriate and fair
-corrective action in response to any behavior that they deem inappropriate,
-threatening, offensive, or harmful.
-Project's owners and mantainers have the right and responsibility to remove,
-edit, or reject comments, commits, code, issues, and other contributions that
-are not aligned to this Code of Conduct, and will communicate reasons for
-moderation decisions when appropriate.
-
-Scope
------
-
-This Code of Conduct applies within this project's repository, and also
-applies when an individual is officially representing this project in public
-spaces.
-
-Enforcement
------------
-
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project's owners and mantainers by emailing them.
-All complaints will be reviewed and investigated promptly and fairly.
-All project's owners and mantainers are required to respect the privacy and
-security of the reporter of any incident.
-
-Project's Repository Impact Guidelines
---------------------------------------
-
-Project's owners and mantainers will follow these Project's Repository Impact
-Guidelines in determining the consequences for any action they deem in
-violation of this Code of Conduct:
-
-1. **Correction**
-
-    | **Project Impact**: Use of inappropriate language or other behavior
-      deemed unprofessional or unwelcome in the project's repository.
-    | **Consequence**: A private, written warning from project's owners and
-      mantainers, providing clarity around the nature of the violation and an
-      explanation of why the behavior was inappropriate. A public apology may
-      be requested.
-
-2. **Warning**
-
-    | **Project Impact**: A violation through a single incident or series of
-      actions.
-    | **Consequence**: A warning with consequences for continued behavior. No
-      interaction with the people involved, including unsolicited interaction
-      with those enforcing the Code of Conduct, for a specified period of
-      time. This includes avoiding interactions in community spaces as well as
-      external channels like social media. Violating these terms may lead to a
-      temporary or permanent ban.
-
-3. **Temporary Ban**
-
-    | **Project Impact**: A serious violation of project's repository
-      standards, including sustained inappropriate behavior.
-    | **Consequence**: A temporary ban from any sort of interaction or public
-      communication with the community for a specified period of time. No
-      public or private interaction with the people involved, including
-      unsolicited interaction with those enforcing the Code of Conduct, is
-      allowed during this period. Violating these terms may lead to a
-      permanent ban.
-
-4. **Permanent Ban**
-
-    | **Project Impact**: Demonstrating a pattern of violation of project's
-      repository standards, including sustained inappropriate behavior,
-      harassment of an individual, or aggression toward or disparagement of
-      classes of individuals.
-    | **Consequence**: A permanent ban from any sort of public interaction
-      within the project's repository.
-
-Attribution
------------
-
-This Code of Conduct is adapted from the Contributor Covenant, version 2.1,
-available at
-https://www.contributor-covenant.org/version/2/1/code_of_conduct.html.
-
-Project's Repository Impact Guidelines were inspired by Mozilla's code of
-conduct enforcement ladder, available at
-https://github.com/mozilla/inclusion.
-
-For answers to common questions about this code of conduct, see the FAQ at
-https://www.contributor-covenant.org/faq.
-
-Translations are available at
-https://www.contributor-covenant.org/translations.
+These contributing guidelines have been adapted from
+https://gitlab.com/jtagusari/hrisk-noisemodelling.

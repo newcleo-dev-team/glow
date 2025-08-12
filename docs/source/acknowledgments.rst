@@ -2,5 +2,6 @@
 Acknowledgments
 ===============
 
-|newcleo| is thankful to prof. Alain Hébert and the whole *DRAGON5* development
-team of the **Polytechnique of Montreal** for their constant support.
+|newcleo| is thankful to Professor Alain Hébert and the entire *DRAGON5*
+development team of the **Polytechnique of Montreal**, Canada, for their
+constant support.
