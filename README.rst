@@ -22,11 +22,16 @@ Introduction
 providing 2D unstructured geometries to the `DRAGON5 <http://merlin.polymtl.ca/version5.htm>`_
 lattice transport computer code.
 
-Natively, *DRAGON5* handles the generation of simple geometry layouts in
-terms of lattices made up of cells, which represent the base unit of a fuel
-assembly. This is performed by the *GEO* module. However, this cannot exploit
-any of the boolean operations among geometrical shapes that are offered by
-*Constructive Solid Geometry* (*CSG*) tools.
+*DRAGON5* can natively handle the generation of simple geometry layouts that are
+structured according to repeated patterns of Cartesian or hexagonal cells by
+the *GEO* module.
+
+Even though *DRAGON5* can track any 2D geometries without concavities, it can
+natively only handle the generation of simple geometry layouts that are
+structured according to repeated patterns. This is done with the *GEO* module
+where the *G2S* module converts the geometry layout to a *.dat* description file
+used by the *SALT* tracking module. More complex layout cases made by boolean
+operations among geometrical shapes are not handled.
 
 |TOOL| was developed with the purpose of offering a tool that includes all the
 functionalities needed to assemble complex geometry layouts. It relies on the
@@ -36,10 +41,9 @@ platform, an open-source environment offering 2D/3D CAD modelling capabilities.
 rotation, and **boolean** operations.
 
 |TOOL| can operate cuts to extract parts out of an existing layout, thus
-focusing on the minimum portion of the geometry that can reproduce the whole
-motif by unfolding symmetries. Calculations on smaller geometries are
-expected to be computationally cheaper. The application of special symmetries
-to the main lattice types are implemented:
+focusing on the minimum portion of the geometry required to describe the entire
+pattern. Calculations on smaller geometries are expected to be computationally
+cheaper. Special symmetries according to the main lattice types are implemented:
 
   - *Cartesian* lattice - half, quarter and eighth symmetries.
   - *Hexagonal* lattice - third, sixth and twelfth symmetries.
@@ -47,8 +51,8 @@ to the main lattice types are implemented:
 The geometries built with |TOOL| can be visualized in the 3D viewer of *SALOME*
 through the graphical user interface (*GUI* module).
 
-|TOOL| can export geometry layouts to *.dat* files using the *TDT* format of
-*APOLLO2* where the cells mesh boundaries are given by surface equations.
+|TOOL| can export geometry layouts to *.dat* files in the format of the *TDT*
+solver of *APOLLO2*.
 
 |TOOL| is developed by the **Codes & Methods** Department of |newcleo| and it is
 released under the |LICENSE| **License**.

@@ -10,7 +10,6 @@ For further information on the package installation, its usage, or for any
 suggestion of new development, please contact:
 
 - Davide Manzione (davide.manzione@newcleo.com)
-- Daniele Tomatis (daniele.tomatis@newcleo.com)
 
 +++++++++++++++++
 How to contribute

@@ -22,7 +22,7 @@ The project is organized according to the following folder structure:
   implemented by |TOOL|;
 - ``resources``: contains files that support the configuration and operation
   of |TOOL|;
-- ``tests``: contains both unittests and functional tests, the former to ensure
+- ``tests``: contains both unit tests and functional tests, the former to ensure
   the correctness of individual code units, the latter to ensure the overall
   functionalities behave as expected;
 - ``tutorials``: contains Python scripts that provide use cases showing how to

@@ -34,7 +34,7 @@ project = "GLOW"
 authors = "Davide Manzione"
 version = "1.0"
 date = "See signature"
-doc_title = "GLOW: Generator of Unstructured, Non-Native Geometries for DRAGON5"
+doc_title = "GLOW\\\Generator of Unstructured Geometries for DRAGON5 lattice calculations"
 id_no = "0"
 reference_code = "XXX-YYY-ZZZ-???"
 revision_no = "1"
@@ -46,21 +46,24 @@ abstract = "This document is the reference manual for the \
 \\sphinxstylestrong{O}riented \\sphinxstylestrong{W}orkflow) Python package, \
 providing 2D unstructured geometries to the \\sphinxstyleemphasis{DRAGON5} \
 lattice transport computer code. \
+DRAGON5 can use the files produced by GLOW to solve the Boltzmann equation on \
+complex heterogeneous geometries by the \\sphinxstyleemphasis{Method of Characteristics} \
+(MOC) or by the \\sphinxstyleemphasis{Collision Probability Method} (CPM). \
 \\sphinxstyleemphasis{GLOW} uses the APIs of \\sphinxstyleemphasis{SALOME} \
-to provide the functionalities to build and visualize the geometry layout, \
-and to generate the corresponding representation according to the \
-\\sphinxstyleemphasis{TDT} format of \\sphinxstyleemphasis{APOLLO2}, \
-where the cells mesh boundaries are given by surface equations."
-reviewers = "Gabriele Ottino"
+to build and visualize the geometry layout, and to generate the \
+representation according to the corresponding \\sphinxstyleemphasis{TDT} \
+format of \\sphinxstyleemphasis{APOLLO2}, where the cell mesh boundaries \
+are given by surface equations."
+reviewers = "Matteo Falabino, Sigtryggur Hauksson"
 approvers = "Daniele Tomatis"
-doc_purpose = "1"
+doc_purpose = "2"
 business_mark = "1"
-exprt_ctrl = "3"
+exprt_ctrl = "1"
 national_sec = {"country": "4", "sec_level": "1", }
 itns = "1"
-distribution_list = "@newcleo all"
+distribution_list = "C\&M all, Luciano Cinotti, ECD/Massimo Ciambrella"
 bibtex_bibfiles = [os.path.join(SOURCE_DIR_NAME, 'glow.bib')]
-latex_theme_to_use = "manual"
+latex_theme_to_use = "nwcldocs"
 
 
 # -- Global substitutions ----------------------------------------------------
@@ -206,8 +209,8 @@ makeindex_nwcldocs = "\\usepackage[columns=1,totoc]{idxlayout}\\makeindex"
 date_nwcldocs = date
 
 # Extract the list of reviewers and approvers
-reviewers_list = [str(item) + 3*r"\break " for item in reviewers.split(",")]
-approvers_list = [str(item) + 3*r"\break " for item in approvers.split(",")]
+reviewers_list = [str(item) + 4*r"\break " for item in reviewers.split(",")]
+approvers_list = [str(item) + 4*r"\break " for item in approvers.split(",")]
 
 # date_nwcldocs = date_object.strftime("%d/%m/%Y")
 atendofbody_nwcldocs = {
