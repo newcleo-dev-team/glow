@@ -80,4 +80,4 @@ lattice.show(PropertyType.MATERIAL)
 # Perform the geometry analysis and export the TDT file of the surface
 # geometry
 analyse_and_generate_tdt(
-    lattice, "cartesian_lattice", TdtSetup(GeometryType.SECTORIZED))
+    [lattice], "cartesian_lattice", TdtSetup(GeometryType.SECTORIZED))

@@ -98,7 +98,11 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
         shapes =  []
         for wire in closed_boundaries:
             wire_mod = fuse_edges_in_wire(wire)
-            shapes.append(make_face(wire_mod))
+            face = make_face(wire_mod)
+            if get_shape_type(face) == ShapeType.COMPOUND:
+                shapes.extend(extract_sub_shapes(face, ShapeType.FACE))
+            else:
+                shapes.append(make_face(wire_mod))
         # Fuse all the faces into a single shape
         shape = make_fuse(shapes)
         # Return the edges of the fused shape

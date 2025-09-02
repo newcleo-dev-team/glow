@@ -3,6 +3,7 @@ import os
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, List
 
 from glow.support.types import GeometryType, PropertyType
 from glow.geometry_layouts.lattices import Lattice
@@ -53,15 +54,16 @@ class TdtSetup:
 
 
 def analyse_and_generate_tdt(
-        lattice: Lattice,
+        lattices: List[Lattice],
         filename: str,
         tdt_config: TdtSetup = TdtSetup(
             GeometryType.TECHNOLOGICAL,
             PropertyType.MATERIAL,
-            None)
+            None),
+        compound_to_export: Any | None = None
     ) -> None:
     """
-    Function that analyses the given lattice, as instance of the ``Lattice``
+    Function that analyses the given lattices, as instance of the ``Lattice``
     class, to extract information about the characteristics of its geometry
     and the properties associated to its regions.
     A TDT file, whose name is provided as second parameter, is generated,
@@ -74,16 +76,23 @@ def analyse_and_generate_tdt(
       default value that corresponds to the lattice's geometry type is
       adopted.
 
+    If the ``compound_to_export`` parameter is provided, it will be the one
+    to be analysed and exported, according to the information stored in the
+    provided lattices. In this way, a colorset of the lattices can be treated.
+
     Parameters
     ----------
-    lattice : Lattice
+    lattices : List[Lattice]
         The object storing the information about the geometry and the
-        properties of the lattice.
+        properties of the lattices.
     filename : str
         The name of the output TDT file.
     tdt_config : TdtSetup
         Dataclass providing the settings for exporting the TDT representation
         of the geometry layout of the lattice.
+    compound_to_export: Any | None = None
+        The compound object to analyse and export to TDT, if present. If
+        ``None`` is given, the lattices are considered instead.
     """
     # Import the 'time' module for evaluating the analysis performance
     import time
@@ -96,7 +105,7 @@ def analyse_and_generate_tdt(
 
     # Perform the lattice faces and edges analysis for the given geometry and
     # property types
-    data_extractor = analyse_lattice(lattice, tdt_config)
+    data_extractor = analyse_lattice(lattices, tdt_config, compound_to_export)
 
     t1 = time.time()
     print(f"--- Lattice analysis executed in {t1 - start_time} seconds ---")
@@ -108,8 +117,8 @@ def analyse_and_generate_tdt(
                   edges=data_extractor.edges,
                   faces=data_extractor.subfaces,
                   boundaries=data_extractor.boundaries,
-                  type_geo=data_extractor.lattice.type_geo,
-                  type_sym=data_extractor.lattice.symmetry_type,
+                  type_geo=data_extractor.lattices[0].type_geo,
+                  type_sym=data_extractor.lattices[0].symmetry_type,
                   albedo=tdt_config.albedo)
 
     print("--- TdtData class instantiation executed in " + \

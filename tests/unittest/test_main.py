@@ -100,7 +100,7 @@ class TestMainFunction(unittest.TestCase):
         """
         # Call the function to test
         analyse_and_generate_tdt(
-            lattice=self.lattice,
+            lattices=[self.lattice],
             filename=self.file_name.split('.')[0],
             tdt_config=TdtSetup(
                 self.geom_type, self.prop_type, 0.0

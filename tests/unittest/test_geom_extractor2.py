@@ -136,13 +136,13 @@ class TestLatticeDataExtractor(unittest.TestCase):
             _ = LatticeDataExtractor(Lattice(), GeometryType.TECHNOLOGICAL)
 
         # Instantiate the 'LatticeDataExtractor' class
-        lde = LatticeDataExtractor(self.lattice, GeometryType.TECHNOLOGICAL)
+        lde = LatticeDataExtractor([self.lattice], GeometryType.TECHNOLOGICAL)
         # Verify the correct attributes assignment
-        self.assertEqual(len(lde.lattice.lattice_cells),
+        self.assertEqual(len(lde.lattices[0].lattice_cells),
                          len(self.lattice.lattice_cells))
         # Translate the lattice so that the lower-left corner is in the origin
         self.lattice.translate((1.5, 1.5, 0.0))
-        self.assertIsNone(lde.lattice.lattice_box)
+        self.assertIsNone(lde.lattices[0].lattice_box)
         self.assertTrue(
             are_same_shapes(
                 make_face(lde.borders),
@@ -172,7 +172,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         # 'ISOTROPIC'
         self.lattice.type_geo = LatticeGeometryType.ISOTROPIC
         lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
-        lde.lattice = deepcopy(self.lattice)
+        lde.lattices = [deepcopy(self.lattice)]
         lde.boundaries = []
         lde.build_boundaries()
         self.assertEqual(len(lde.boundaries), 0)
@@ -284,7 +284,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         # Instantiate the 'LatticeDataExtractor' class without attributes
         # and only initialize the needed attributes
         lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
-        lde.lattice = deepcopy(self.lattice)
+        lde.lattices = [deepcopy(self.lattice)]
         lde.subfaces = []
 
         # Verify an exception is raised if building the 'Face' objects from
@@ -293,22 +293,23 @@ class TestLatticeDataExtractor(unittest.TestCase):
         # N.B. Since only the 'PropertyType.MATERIAL' is present, it is not
         # possible to test the case where calling the method with a different
         # 'PropertyType' element.
-        lde.lattice.build_regions(GeometryType.TECHNOLOGICAL)
+        lattice = lde.lattices[0]
+        lattice.build_regions(GeometryType.TECHNOLOGICAL)
         with self.assertRaises(RuntimeError):
             lde.build_faces(PropertyType.MATERIAL)
-        for region in lde.lattice.regions:
+        for region in lattice.regions:
             region.properties = {PropertyType.MATERIAL: ""}
         with self.assertRaises(RuntimeError):
             lde.build_faces(PropertyType.MATERIAL)
 
         # Assign the values for the 'PropertyType.MATERIAL' and call
         # the method
-        for region in lde.lattice.regions:
+        for region in lattice.regions:
             region.properties = {PropertyType.MATERIAL: "MAT"}
         lde.build_faces(PropertyType.MATERIAL)
 
         # Verify the 'Face' objects have been correctly generated
-        self.assertEqual(len(lde.subfaces), len(lde.lattice.regions))
+        self.assertEqual(len(lde.subfaces), len(lattice.regions))
         for i, face in enumerate(lde.subfaces):
             self.assertEqual(face.no, i+1)
 
@@ -577,7 +578,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         geom_type : GeometryType = GeometryType.TECHNOLOGICAL
             The type of geometry for the lattice's cells.
         """
-        lde.lattice = deepcopy(lattice)
+        lde.lattices = [deepcopy(lattice)]
         # Call the private method
         lde._LatticeDataExtractor__preprocess(geom_type)
         cmpd = (lattice.lattice_cmpd
@@ -610,7 +611,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         geom_type : GeometryType = GeometryType.TECHNOLOGICAL
             The type of geometry for the lattice's cells.
         """
-        lde.lattice = deepcopy(lattice)
+        lde.lattices = [deepcopy(lattice)]
         # Call the private method
         lde._LatticeDataExtractor__preprocess(geom_type)
         cmpd = (lattice.lattice_cmpd
@@ -651,7 +652,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
             A compound object from which edges are extracted and compared
             with those stored during the preprocess activities.
         """
-        self.assertEqual(len(lde.lattice.regions), no_regions)
+        self.assertEqual(len(lde.lattices[0].regions), no_regions)
         self.assertTrue(
             are_same_shapes(
                 make_face(lde.borders),
