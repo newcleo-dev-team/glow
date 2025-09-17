@@ -598,6 +598,8 @@ class LatticeDataExtractor():
     compound_to_analyse: Any | None = None
         The compound object to analyse, if present. If ``None`` is given, the
         lattices are considered instead.
+    type_geo : LatticeGeometryType
+        Identifying the value for the typegeo related to the layout.
 
     Attributes
     ----------
@@ -619,6 +621,8 @@ class LatticeDataExtractor():
         edge objects.
     lattice_edges : List[Any]
         The list of the edge objects contained in the lattice.
+    type_geo : LatticeGeometryType
+        Identifying the value for the typegeo related to the layout.
     """
     CASES_FOR_TRANSLATION = {
         CellType.RECT: [SymmetryType.FULL, SymmetryType.HALF],
@@ -633,7 +637,8 @@ class LatticeDataExtractor():
             self,
             lattices: List[Lattice],
             geom_type: GeometryType,
-            compound_to_analyse: Any | None) -> None:
+            compound_to_analyse: Any | None,
+            type_geo: LatticeGeometryType) -> None:
         # Raise an exception if the lattice does not have any cell
         if any(not lattice.lattice_cells for lattice in lattices):
             raise RuntimeError("No data extraction can be performed from "
@@ -653,6 +658,8 @@ class LatticeDataExtractor():
         self.id_vs_edge: Dict[str, Any] = classify_lattice_edges(
             self.lattice_edges)
 
+        self.type_geo: LatticeGeometryType = type_geo
+
     def build_boundaries(self) -> None:
         """
         Method that constructs a list of ``Boundary`` objects representing
@@ -663,7 +670,7 @@ class LatticeDataExtractor():
         # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
         # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
         lattice = self.lattices[0]
-        if lattice.type_geo == LatticeGeometryType.ISOTROPIC:
+        if self.type_geo == LatticeGeometryType.ISOTROPIC:
             return
         # Initialize the list of 'Boundary' objects
         boundary_edges = []
@@ -685,7 +692,7 @@ class LatticeDataExtractor():
             # Build an object of the 'Boundary' class
             boundary = Boundary(
                 border=border,
-                type_geo=lattice.type_geo,
+                type_geo=self.type_geo,
                 lattice_o=lattice.lattice_center,
                 dimensions=(lattice.lx, lattice.ly))
             # Store all the indices of the edges belonging to the border
@@ -1107,6 +1114,7 @@ class LatticeDataExtractor():
             ShapeType.EDGE)
 
         add_to_study(make_compound(self.lattice_edges), "EDGES TO ANALYSE")
+        add_to_study(make_compound(self.borders), "BOUNDARIES TO ANALYSE")
         add_to_study(lattice_cmpd, "CMPD TO ANALYSE")
         update_salome_study()
 
@@ -1180,7 +1188,10 @@ def analyse_lattice(
     # Instantiate the class for extracting the geometric data from the lattice
     # according to the given type of geometry
     data_extractor = LatticeDataExtractor(
-        lattices, tdt_config.geom_type, compound_to_analyse)
+        lattices,
+        tdt_config.geom_type,
+        compound_to_analyse,
+        tdt_config.type_geo)
     # Call its method for performing the analysis
     data_extractor.build_faces(tdt_config.property_type)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()

@@ -265,10 +265,16 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
         if type_indx == EdgeType.SEGMENT:
             # Extract the edge data as 'x1, y1, z1, x2, y2, z2'
             x1, y1, _, x2, y2, _ = edge.data[1:]
+            dx = x2-x1
+            dy = y2-y1
+            if abs(dx) < 1e-7:
+                dx = 0.0
+            if abs(dy) < 1e-7:
+                dy = 0.0
             # Write the info about the X-Y coordinates of the first point
             # and the X-Y distances between the segment vertices
             file.write(f"  {FORMAT.format(x1)}, {FORMAT.format(y1)}, " + \
-                       f"{FORMAT.format(x2-x1)}, {FORMAT.format(y2-y1)}\n")
+                       f"{FORMAT.format(dx)}, {FORMAT.format(dy)}\n")
             continue
         if type_indx == EdgeType.CIRCLE:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R'
@@ -289,6 +295,8 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             # Since it is necessary to have positive value for the angles
             # difference, the absolute value is considered
             delta_angle = (angle_2 - angle_1) % 360
+            if abs(delta_angle) < 1e-7:
+                delta_angle = 0.0
 
             # Write the info about the X-Y coordinates of the arc circle
             # center, its radius, the angle of the first point of the arc

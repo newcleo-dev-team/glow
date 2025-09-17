@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List
 
-from glow.support.types import GeometryType, PropertyType
+from glow.support.types import GeometryType, LatticeGeometryType, \
+    PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 
 
@@ -30,6 +31,10 @@ class TdtSetup:
     """Identifying the type of property associated to lattice's regions."""
     albedo: float | None = None
     """Identifying the value for the albedo applied to the lattice's BCs."""
+    type_geo: LatticeGeometryType = LatticeGeometryType.ISOTROPIC
+    """Identifying the value for the typegeo related to the layout."""
+    symmetry_type: SymmetryType = SymmetryType.FULL
+    """Identifying the value for the symmetry type applied to the lattice."""
 
     def __post_init__(self) -> None:
         """
@@ -117,8 +122,8 @@ def analyse_and_generate_tdt(
                   edges=data_extractor.edges,
                   faces=data_extractor.subfaces,
                   boundaries=data_extractor.boundaries,
-                  type_geo=data_extractor.lattices[0].type_geo,
-                  type_sym=data_extractor.lattices[0].symmetry_type,
+                  type_geo=tdt_config.type_geo,
+                  type_sym=tdt_config.symmetry_type,
                   albedo=tdt_config.albedo)
 
     print("--- TdtData class instantiation executed in " + \

@@ -7,12 +7,11 @@ import random
 from typing import Any, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
-    extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
+    extract_sub_shapes, fuse_edges_in_wire, get_angle_between_shapes, \
     get_basic_properties, get_closed_free_boundary, get_min_distance, \
-    get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_gui_available, make_cdg, make_cut, make_edge, \
-    make_face, make_fuse, make_translation, make_vector_from_points, \
-    make_vertex
+    get_point_coordinates, get_selected_object, get_shape_name, get_shape_type, \
+    is_gui_available, make_cdg, make_cut, make_edge, make_face, make_fuse, \
+    make_partition, make_translation, make_vector_from_points, make_vertex
 
 
 # List of the RGB color codes taken by varying each RGB value with steps of 10
@@ -97,21 +96,38 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
         # fusing adjacent edges
         shapes =  []
         for wire in closed_boundaries:
-            wire_mod = fuse_edges_in_wire(wire)
-            face = make_face(wire_mod)
+            face = make_face(fuse_edges_in_wire(wire))
             if get_shape_type(face) == ShapeType.COMPOUND:
                 shapes.extend(extract_sub_shapes(face, ShapeType.FACE))
             else:
-                shapes.append(make_face(wire_mod))
+                shapes.append(face)
         # Fuse all the faces into a single shape
         shape = make_fuse(shapes)
         # Return the edges of the fused shape
-        return extract_sorted_sub_shapes(shape, ShapeType.EDGE)
+        return extract_sub_shapes(shape, ShapeType.EDGE)
 
     # Suppress vertices internal to the edges of the wire
     borders_wire = fuse_edges_in_wire(closed_boundaries[0])
-    # Extract the edge objects of the border wire
-    return extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE)
+    # Sort the vertices along the borders so that they replicate a contiguous
+    # path
+    vertices = sort_vertices_radially(
+        extract_sub_shapes(borders_wire, ShapeType.VERTEX))
+    edges = build_contiguous_edges(vertices)
+    # Get the sub-edges that should not result in the borders of the shape:
+    # they are collinear edges identified as the ones having a shared angle
+    # of 0° or 180°
+    edges_to_remove = set()
+    for i in range(len(edges)-1):
+        angle = get_angle_between_shapes(edges[i+1], edges[i])
+        if (math.isclose(angle, 0.0, abs_tol=1e-5) or
+            math.isclose(angle, math.pi, abs_tol=1e-5)):
+            edges_to_remove.add(edges[i])
+            edges_to_remove.add(edges[i+1])
+    # Keep only the non-collinear edges
+    edges = make_partition(
+        [e for e in edges if e not in edges_to_remove], [], ShapeType.EDGE)
+    # Build the contiguous edges from the vertices of the remaining edges
+    return build_contiguous_edges(extract_sub_shapes(edges, ShapeType.VERTEX))
 
 
 def build_contiguous_edges(vertices: List[Any]) -> List[Any]:
@@ -251,6 +267,29 @@ def generate_unique_random_colors(
     return random.sample(RGB_COLORS, no_colors)
 
 
+def get_angle_between_points(
+        point1: Tuple[float, float, float],
+        point2: Tuple[float, float, float]) -> float:
+    """
+    Function that, given two points, calculates the angle between the line
+    connecting the two points and the X-axis.
+
+    Parameters
+    ----------
+    point1 : Tuple[float, float, float]
+        First point.
+    point2: Tuple[float, float, float]
+        Second point.
+
+    Returns
+    -------
+    float
+        The angle, in radians, between the line connecting the two points
+        and the X-axis.
+    """
+    return math.atan2(point1[1] - point2[1], point1[0] - point2[0])
+
+
 def get_id_from_name(name: str) -> int:
     """
     Function that extracts the index of the shape whose name is provided.
@@ -332,6 +371,35 @@ def retrieve_selected_object(error_msg: str) -> Any:
     if not shape:
         raise RuntimeError(error_msg)
     return shape
+
+
+def sort_vertices_radially(vertices) -> List[Any]:
+    """
+    Function that sorts a list of vertices in radial order around their
+    centroid.
+    The function computes the centroid of the given vertices, then sorts them
+    based on the angle each vertex makes with respect to the centroid.
+
+    Parameters
+    ----------
+    vertices : list
+        A list of vertex objects to be sorted.
+
+    Returns
+    -------
+    List[Any]
+        A list of vertex objects sorted in radial order around the centroid.
+    """
+    # Compute the centroid X-Y coordinates
+    coords = [get_point_coordinates(v) for v in vertices]
+    cx = sum(p[0] for p in coords) / len(coords)
+    cy = sum(p[1] for p in coords) / len(coords)
+    # Sort vertices according to the angle wrt to the centroid
+    return sorted(
+        vertices,
+        key=lambda v: get_angle_between_points(get_point_coordinates(v),
+                                               (cx, cy, 0.0))
+    )
 
 
 def translate_wrt_reference(
