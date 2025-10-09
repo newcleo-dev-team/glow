@@ -480,7 +480,8 @@ class Boundary:
                 #  M=2 (lx,0) *          * M=4 (-lx,0)
                 #             ************
                 #              M=1 (0,ly)
-                if math.isclose(math.sin(math.radians(self.angle)), 0.0):
+                if math.isclose(
+                        math.sin(math.radians(self.angle)), 0.0, abs_tol=1e-6):
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=3 (dx < 0)
                     self.tx = 0.0
