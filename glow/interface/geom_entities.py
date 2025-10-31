@@ -103,32 +103,6 @@ class GeomWrapper(ABC):
             check_shape_expected_types(geom_obj, self.expected_types)
         self._geom_obj = geom_obj
 
-    def __getattr__(self, name: str) -> Any:
-        # Avoid recursion if _geom_obj is not yet set
-        if "_geom_obj" not in self.__dict__:
-            raise AttributeError(
-                f"Error while checking for {name} attribute in "
-                f"'<{self.__class__.__name__}>' object: the attribute "
-                "'_geom_obj' has not been set yet.")
-        return getattr(self.__dict__["_geom_obj"], name)
-
-    def __repr__(self) -> str:
-        """
-        Outputs the class name followed by the ``name`` attribute of the
-        wrapped GEOM object.
-
-        Returns
-        -------
-        str
-            Descriptive string containing the class name followed by the
-            ``name`` attribute of the wrapped GEOM object.
-        """
-        try:
-            name = get_shape_name(self.geom_obj)
-        except Exception:
-            name = "Unnamed"
-        return f"<{self.__class__.__name__}: {name}>"
-
     def __add__(self, other: Self | Sequence[Self]) -> Self:
         """
         Returns an instance of the ``GeomWrapper`` subclasses resulting from
@@ -152,69 +126,6 @@ class GeomWrapper(ABC):
                     o for o in (
                         other if isinstance(other, Sequence) else [other])
                 ]
-            )
-        )
-
-    def __sub__(self, other: Self) -> Self:
-        """
-        Returns an instance of the ``GeomWrapper`` subclasses resulting from
-        cutting this shape with the given one.
-
-        Parameters
-        ----------
-        other : Self
-            A ``GeomWrapper`` object to cut this one with.
-
-        Returns
-        -------
-        Self
-            An instance of the ``GeomWrapper`` subclasses representing the
-            cut shape.
-        """
-        return wrap_shape(make_cut(self._geom_obj, other._geom_obj))
-
-    def __mul__(self, other: Self) -> Self:
-        """
-        Returns an instance of the ``GeomWrapper`` subclasses resulting as
-        the common part between this shape and the given one.
-
-        Parameters
-        ----------
-        other : Self
-            A ``GeomWrapper`` object to extract the common part.
-
-        Returns
-        -------
-        Self
-            An instance of the ``GeomWrapper`` subclasses representing the
-            common part between the current shape and the given one.
-        """
-        return wrap_shape(make_common(self._geom_obj, other._geom_obj))
-
-    def __truediv__(self, other: Self | Sequence[Self]) -> Self:
-        """
-        Returns an instance of the ``GeomWrapper`` subclasses resulting from
-        partitioning this shape with the given ones. The resulting shape
-        includes the current one subdivided by the given shapes.
-
-        Parameters
-        ----------
-        other : Self | Sequence[Self]
-            One or more ``GeomWrapper`` objects to partition the current
-            object with.
-
-        Returns
-        -------
-        Self
-            An instance of the ``GeomWrapper`` subclasses representing the
-            current partitioned shape.
-        """
-        return wrap_shape(
-            make_partition(
-                [self._geom_obj],
-                [o for o in (
-                    other if isinstance(other, Sequence) else [other])],
-                ShapeType.COMPOUND
             )
         )
 
@@ -242,6 +153,95 @@ class GeomWrapper(ABC):
                 [o for o in (
                     other if isinstance(other, Sequence) else [other])],
                 [],
+                ShapeType.COMPOUND
+            )
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        # Avoid recursion if _geom_obj is not yet set
+        if "_geom_obj" not in self.__dict__:
+            raise AttributeError(
+                f"Error while checking for {name} attribute in "
+                f"'<{self.__class__.__name__}>' object: the attribute "
+                "'_geom_obj' has not been set yet.")
+        return getattr(self.__dict__["_geom_obj"], name)
+
+    def __mul__(self, other: Self) -> Self:
+        """
+        Returns an instance of the ``GeomWrapper`` subclasses resulting as
+        the common part between this shape and the given one.
+
+        Parameters
+        ----------
+        other : Self
+            A ``GeomWrapper`` object to extract the common part.
+
+        Returns
+        -------
+        Self
+            An instance of the ``GeomWrapper`` subclasses representing the
+            common part between the current shape and the given one.
+        """
+        return wrap_shape(make_common(self._geom_obj, other._geom_obj))
+
+    def __repr__(self) -> str:
+        """
+        Outputs the class name followed by the ``name`` attribute of the
+        wrapped GEOM object.
+
+        Returns
+        -------
+        str
+            Descriptive string containing the class name followed by the
+            ``name`` attribute of the wrapped GEOM object.
+        """
+        try:
+            name = get_shape_name(self.geom_obj)
+        except Exception:
+            name = "Unnamed"
+        return f"<{self.__class__.__name__}: {name}>"
+
+    def __sub__(self, other: Self) -> Self:
+        """
+        Returns an instance of the ``GeomWrapper`` subclasses resulting from
+        cutting this shape with the given one.
+
+        Parameters
+        ----------
+        other : Self
+            A ``GeomWrapper`` object to cut this one with.
+
+        Returns
+        -------
+        Self
+            An instance of the ``GeomWrapper`` subclasses representing the
+            cut shape.
+        """
+        return wrap_shape(make_cut(self._geom_obj, other._geom_obj))
+
+    def __truediv__(self, other: Self | Sequence[Self]) -> Self:
+        """
+        Returns an instance of the ``GeomWrapper`` subclasses resulting from
+        partitioning this shape with the given ones. The resulting shape
+        includes the current one subdivided by the given shapes.
+
+        Parameters
+        ----------
+        other : Self | Sequence[Self]
+            One or more ``GeomWrapper`` objects to partition the current
+            object with.
+
+        Returns
+        -------
+        Self
+            An instance of the ``GeomWrapper`` subclasses representing the
+            current partitioned shape.
+        """
+        return wrap_shape(
+            make_partition(
+                [self._geom_obj],
+                [o for o in (
+                    other if isinstance(other, Sequence) else [other])],
                 ShapeType.COMPOUND
             )
         )
