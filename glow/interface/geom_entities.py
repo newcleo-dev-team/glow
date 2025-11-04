@@ -368,41 +368,6 @@ class Compound(GeomWrapper):
         return super().__repr__() + "\n   " + faces_str + "\n   " + edge_str
 
 
-class Vertex(GeomWrapper):
-    """
-    Class acting as a wrapper for the GEOM vertex object.
-
-    Parameters
-    ----------
-    geom_obj : Any | None
-        The GEOM vertex object to wrap (or ``None``). If provided, its
-        shape type is checked against the expected ``ShapeType.VERTEX``.
-
-    Attributes
-    ----------
-    geom_obj : Any | None
-        The wrapped GEOM vertex object (or ``None``).
-    name : str
-        The name of the wrapped GEOM vertex object.
-    """
-    def __init__(self, geom_obj: Any) -> None:
-        super().__init__(geom_obj, [ShapeType.VERTEX])
-
-    def __repr__(self) -> str:
-        """
-        Return a descriptive string of the ``Vertex`` instance containing
-        the XYZ coordinates of the GEOM vertex object.
-
-        Returns
-        -------
-        str
-            Descriptive string of the current instance.
-        """
-        return (
-            super().__repr__()
-            + f" - (x, y, z) = {get_point_coordinates(self)}"
-        )
-
 class Edge(GeomWrapper):
     """
     Class acting as a wrapper for the GEOM edge object.
@@ -438,6 +403,7 @@ class Edge(GeomWrapper):
         # Collect the information about its vertices
         vertices_str = "\n   ".join(repr(v) for v in vertices)
         return super().__repr__() + "\n   " + vertices_str
+
 
 class Face(GeomWrapper):
     """
@@ -502,6 +468,42 @@ class Face(GeomWrapper):
         # Collect the information about its edges
         edge_str = "\n   ".join(repr(e) for e in edges)
         return super().__repr__() + "\n   " + edge_str
+
+
+class Vertex(GeomWrapper):
+    """
+    Class acting as a wrapper for the GEOM vertex object.
+
+    Parameters
+    ----------
+    geom_obj : Any | None
+        The GEOM vertex object to wrap (or ``None``). If provided, its
+        shape type is checked against the expected ``ShapeType.VERTEX``.
+
+    Attributes
+    ----------
+    geom_obj : Any | None
+        The wrapped GEOM vertex object (or ``None``).
+    name : str
+        The name of the wrapped GEOM vertex object.
+    """
+    def __init__(self, geom_obj: Any) -> None:
+        super().__init__(geom_obj, [ShapeType.VERTEX])
+
+    def __repr__(self) -> str:
+        """
+        Return a descriptive string of the ``Vertex`` instance containing
+        the XYZ coordinates of the GEOM vertex object.
+
+        Returns
+        -------
+        str
+            Descriptive string of the current instance.
+        """
+        return (
+            super().__repr__()
+            + f" - (x, y, z) = {get_point_coordinates(self)}"
+        )
 
 
 def wrap_shape(geom_obj: Any) -> GeomWrapper:
