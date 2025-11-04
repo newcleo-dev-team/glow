@@ -442,7 +442,7 @@ class Boundary:
         # If the angle is close to zero, it can happen that it is written
         # with a minus sign which is unnecessary; hence, it is set to 0.0
         # explicitly
-        if math.isclose(self.angle, 0.0):
+        if math.isclose(self.angle, 0.0, abs_tol=1e-6):
             self.angle = 0.0
 
         # Initialize the border axes to the edge start point
