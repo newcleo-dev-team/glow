@@ -8,7 +8,7 @@ from typing import Any, Dict, Self, Sequence, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
-from glow.interface.geom_interface import make_vertex
+from glow.interface.geom_interface import make_cdg, make_vertex
 from glow.support.types import PropertyType
 
 
