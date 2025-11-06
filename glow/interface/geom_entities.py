@@ -3,6 +3,7 @@ Module containing classes providing an interface towards the topological
 entities of the GEOM module of SALOME.
 """
 from abc import ABC
+import math
 from typing import Any, List, Self, Sequence, Type
 
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
@@ -489,6 +490,28 @@ class Vertex(GeomWrapper):
     """
     def __init__(self, geom_obj: Any) -> None:
         super().__init__(geom_obj, [ShapeType.VERTEX])
+
+    def __eq__(self, other: Self) -> bool:
+        """
+        Return whether the current ``Vertex`` object is equal to the given
+        one.
+
+        Parameters
+        ----------
+        other : Self
+            The ``Vertex`` object to check the current one for equality.
+
+        Returns
+        -------
+        bool
+            ``True`` if the current and given ``Vertex`` objects are the
+            same (in terms of their coordinates); ``False`` otherwise.
+        """
+        if get_shape_type(other) != ShapeType.VERTEX:
+            raise RuntimeError("The given shape must be a vertex object.")
+        return all(
+            math.isclose(i, j, abs_tol=1e-6) for i, j in zip(
+                get_point_coordinates(self), get_point_coordinates(other)))
 
     def __repr__(self) -> str:
         """

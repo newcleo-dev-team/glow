@@ -4,11 +4,15 @@ geometry layouts built in GLOW.
 """
 from abc import ABC, abstractmethod
 from copy import deepcopy
+import math
 from typing import Any, Dict, Self, Sequence, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
-from glow.interface.geom_interface import make_cdg, make_vertex
+from glow.interface.geom_interface import add_to_study, clear_view, \
+    display_shape, get_object_from_id, get_point_coordinates, make_cdg, \
+    make_rotation, make_scale, make_translation, make_vector_from_points, \
+    make_vertex, remove_from_study, update_salome_study
 from glow.support.types import PropertyType
 
 
@@ -129,7 +133,7 @@ class Layout(ABC):
         """
 
 
-class Region(Face):
+class Region(Face, Layout):
     """
     Class that groups information regarding a generic region of the cell's
     or the lattice's geometry layout.
@@ -180,11 +184,12 @@ class Region(Face):
         super().__init__(geom_obj)
         # Initialize attributes
         self.color: Tuple[int, int, int] = DEFAULT_REGION_COLOR
-        self.entry_id: str | None = None
         self.properties: Dict[PropertyType, str] | None = properties
         self.region_id: int = id(self._geom_obj)
-        # Set the underlying GEOM face object name
         self.name = name if name else f"Region {self.region_id}"
+        # Initialize superclass attributes
+        self.entry_id = None
+        self.o = wrap_shape(make_cdg(self.geom_obj))
 
     def clone(self) -> Self:
         """
@@ -215,6 +220,56 @@ class Region(Face):
         """
         self.color = DEFAULT_REGION_COLOR
 
+    def rotate(self, angle: float) -> None:
+        """
+        Method for rotating the layout by the given angle (in degrees)
+        around the axis perpendicular to the layout and passing through
+        its centre.
+
+        Parameters
+        ----------
+        angle : float
+            The rotation angle in degrees.
+        """
+        # Get the figure center coordinates
+        center = get_point_coordinates(self.o)
+        # Build the Z-axis of rotation positioned in the figure center
+        z_axis = wrap_shape(
+            make_vector_from_points(
+                self.o, make_vertex((center[0], center[1], 1))
+            )
+        )
+        # Rotate the surface elements
+        self.rotate_from_axis(angle, z_axis)
+
+    def rotate_from_axis(self, angle: float, axis: Edge) -> None:
+        """
+        Method for rotating the region by the given angle (in degrees)
+        around the given axis.
+
+        Parameters
+        ----------
+        angle : float
+            The rotation angle in degrees.
+        axis : Edge
+            An ``Edge`` object representing the rotation axis.
+        """
+        # Convert the rotation angle in radians
+        self.rot_angle = math.radians(angle)
+        # Rotate the geometric elements of the surface
+        self.geom_obj = make_rotation(self, axis, self.rot_angle)
+
+    def scale(self, factor: float) -> None:
+        """
+        Method for scaling the region by the given factor.
+
+        Parameters
+        ----------
+        factor : float
+            The scaling factor.
+        """
+        self.geom_obj = make_scale(self.geom_obj, self.o, factor)
+
     def set_region_color(self, color: Tuple[int, int, int]) -> None:
         """
         Method for associating a specific RGB color to the region.
@@ -233,6 +288,59 @@ class Region(Face):
                              "tuple of 3 integers in the 0:255 range.")
         # Store the RGB color
         self.color = color
+
+    def show(self, *args: Any, **kwargs: Any) -> None:
+        """
+        Method for displaying the region in the 3D viewer of SALOME
+        according to the given settings.
+
+        Parameters
+        ----------
+        *args : Any
+            Positional arguments.
+        **kwargs : Any
+            Key arguments.
+        """
+        # Check that no args or kwargs are provided
+        if args or kwargs:
+            raise ValueError(f"No arguments are accepted for 'show()'.")
+        # Erase all objects from the current view
+        clear_view()
+        # Delete the region from the study if already present
+        if self.entry_id and get_object_from_id(self.entry_id):
+            remove_from_study(self.entry_id)
+        # Add the region's GEOM face to the current SALOME study
+        self.entry_id = add_to_study(self, self.name)
+        display_shape(self.entry_id)
+        # Update the SALOME view
+        update_salome_study()
+
+    def translate(self, new_cntr: Tuple[float, float, float]) -> None:
+        """
+        Method for translating the region so that its centre is positioned
+        at the given coordinates.
+
+        Parameters
+        ----------
+        new_cntr : Tuple[float, float, float]
+            The XYZ coordinates the region centre should be placed at.
+        """
+        # Build a vector from the current center to the new one
+        transl_vect = make_vector_from_points(self.o, make_vertex(new_cntr))
+        # Translate the wrapped GEOM face object
+        self.geom_obj = make_translation(self.geom_obj, transl_vect)
+        self.o = wrap_shape(make_translation(self.o, transl_vect))
+
+    def update(self, layout: Face) -> None:
+        """
+        Method for updating the GEOM object the region refers to.
+
+        Parameters
+        ----------
+        layout : Face
+            The new layout to update the current region with.
+        """
+        self.geom_obj = layout.geom_obj
 
     def __add__(self, other: Self | Sequence[Self]) -> Self:
         """
@@ -282,6 +390,30 @@ class Region(Face):
                 + [wrap_shape(region) for region in regions]
             ).geom_obj,
             properties=fused_properties
+        )
+
+    def __mul__(self, other: Self) -> Self:
+        """
+        Return a new ``Region`` instance resulting as the common part between
+        the current region and the given one.
+        The result of this operation shares the same properties of the given
+        region.
+
+        Parameters
+        ----------
+        other : Self
+            A ``Region`` object to extract the common part with the current
+            one.
+
+        Returns
+        -------
+        Self
+            A new ``Region`` instance resulting as the common part between
+            the current region and the given one.
+        """
+        return Region(
+            wrap_shape(self.geom_obj) * wrap_shape(other).geom_obj,
+            properties=deepcopy(other.properties)
         )
 
     def __repr__(self) -> str:
