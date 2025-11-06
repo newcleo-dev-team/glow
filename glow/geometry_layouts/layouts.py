@@ -2,18 +2,19 @@
 Module containing the classes enabling the creation of the visualisation of
 geometry layouts built in GLOW.
 """
+import math
+
 from abc import ABC, abstractmethod
 from copy import deepcopy
-import math
-from typing import Any, Dict, Self, Sequence, Tuple
+from typing import Any, Dict, List, Self, Sequence, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
 from glow.interface.geom_interface import add_to_study, clear_view, \
-    display_shape, get_object_from_id, get_point_coordinates, make_cdg, \
+    display_shape, get_basic_properties, get_bounding_box, get_object_from_id, get_point_coordinates, make_cdg, make_common, \
     make_rotation, make_scale, make_translation, make_vector_from_points, \
     make_vertex, remove_from_study, update_salome_study
-from glow.support.types import PropertyType
+from glow.support.types import GeometryType, PropertyType
 
 
 DEFAULT_REGION_COLOR: Tuple[int, int, int] = (167, 167, 167)
@@ -454,3 +455,186 @@ class Region(Face, Layout):
             wrap_shape(self.geom_obj) - wrap_shape(other).geom_obj,
             properties=deepcopy(self.properties)
         )
+
+
+class Fillable(Compound, Layout):
+    """
+    Class to represent any geometry layout that can be filled with regions
+    each associated to properties, such as the material.
+
+    This class inherits from the ``Compound`` wrapper class; this guarantees
+    that subclasses of ``Fillable`` behave like the corresponding GEOM
+    compound object when used with GEOM functions.
+    In addition, this class inherits from the ``Layout`` class, meaning that
+    a proper implementation of each abstract method of ``Layout`` is included
+    herein or in subclasses of ``Fillable``.
+
+    This class offers to its subclasses the capability to represent their
+    geometry layout as the superimposition of multiple layers made either by
+    ``Region`` or ``Fillable`` objects. By relying on this layer concept,
+    the whole layout can be represented in a tree-like structure where nodes
+    are represented by ``Fillable`` objects, while leaves by ``Region`` ones.
+    In addition, it enables a mapping between different geometry views,
+    according to the ``GeometryType`` enumeration.
+
+    Attributes
+    ----------
+    layers : List[List[Region | Self]]
+        A list of layers, each layer itself being a list of ``Region`` objects
+        or nested ``Fillable`` instances. Layers represent the hierarchical
+        structure of the geometry layout.
+    geometry_maps : Dict[GeometryType, Compound]
+        A mapping from ``GeometryType`` values to ``Compound`` objects. Each
+        entry provides a different representation for the geometry layout this
+        instance refers. It is used to switch between different visualisation
+        types (e.g., technological, sectorized).
+    is_update_needed : bool
+        Flag that indicates whether an update is required (e.g., geometry
+        layout rebuilding).
+    displayed_geom : GeometryType
+        The currently ``GeometryType`` displayed in the SALOME 3D viewer.
+    regions : List[Region]
+        A flat list of Region objects contained by the current instance.
+        Maintained in addition to the layered `layers` structure to allow
+        quick iteration or lookups over all regions.
+    """
+    def __init__(self) -> None:
+        super().__init__(None)
+        # Initialize attributes
+        self.layers: List[List[Region | Self]] = [[]]
+        self.geometry_maps: Dict[GeometryType, Compound] = {}
+        self.is_update_needed: bool = False
+        self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
+        self.regions: List[Region] = []
+
+    def add(self,
+            layout: Region | Self,
+            position: Tuple[float, float, float] | None = None,
+            layer_index: int | None = None) -> None:
+        """
+        Method that adds a generic layout, i.e. either a ``Region`` or a
+        `Fillable` object, to the technological geometry layout of this
+        instance at the indicated layer.
+
+        The given layout object is first translated, if needed, so that the
+        coordinates of its CDG match the indicated position. If no position
+        is provided, the layout object is placed in the CDG of this instance.
+        The given layout is stored at the end of the sublist of the ``layers``
+        attribute that is specified by the indicated parameter
+        ``layer_index``, if any. Otherwise, a new sublist (i.e. a new layer)
+        is created with the given layout.
+        If the layer index value is not valid, an exception is raised.
+
+        This method simply updates the list of layers of the technological
+        geometry layout with the given layout without collapsing the layers
+        and updating the entire GEOM compound object this instance refers to.
+        To collapse the layers and build the regions of this instance without
+        displaying the geometry in the 3D viewer of SALOME, call the method
+        ``build_regions``. To build and display the geometry layout, call the
+        method ``show``.
+
+        Parameters
+        ----------
+        layout : Region | Self
+            The generic layout object to add.
+        position : Tuple[float, float, float] | None
+            The XYZ coordinates of the layout's centre, if any. It defaults
+            to ``None``, meaning that the layout is added at the current
+            instance centre.
+        layer_index : int | None
+            The index identifying the layer at which the given layout should
+            be added. It defaults to ``None``, meaning that the layout is
+            stored in a new layer.
+
+        Raises
+        ------
+        RuntimeError
+            If the size of the given layout object is greater than the size
+            of the current compound domain.
+        ValueError
+            If the indicated layer index is not valid.
+        """
+        # Check whether the given layout is within the current compound domain
+        if not is_layout_contained(self, layout):
+            raise RuntimeError(
+                f"The size of the given '{layout.name}' layout object "
+                "exceeds that of the current compound domain.")
+        # Set the given layout name to include the one of the current compound
+        layout.name = f"{self.name}_{layout.name}"
+        # Set the given layout position to the current compound centre, if no
+        # position is provided.
+        if not position:
+            position = get_point_coordinates(self.o)
+        # Translate the given layout if its position differs from the compound
+        # centre
+        if not all(math.isclose(i, 0.0) for i in position):
+            layout = layout.clone()
+            layout.translate(position)
+
+        # Include the given layout at the end of the sublist specified by the
+        # indicated index, if any; otherwise, either create a new sublist or
+        # raise an exception
+        if layer_index is None or layer_index == len(self.layers):
+            # Create a new layer
+            self.layers.append([layout])
+        elif layer_index >= 0 or layer_index < len(self.layers):
+            # Add to existing layer
+            self.layers[layer_index].append(layout)
+        else:
+            raise ValueError(f"Invalid layer index {layer_index}.")
+
+        # Indicate the need to update the layout by building its regions
+        self.is_update_needed = True
+
+
+def is_layout_contained(
+        container: Compound | Face,
+        candidate: Compound | Face,
+        tolerance: float = 1e-6) -> bool:
+    """
+    Check if `candidate` layout is entirely contained within `container`
+    layout. The containment check consists of:
+
+    - Area comparison: ``False`` is returned if the candidate area is larger
+      than container area.
+    - Bounding box check: ``False`` is returned if the candidate extends
+      beyond container bounds.
+    - Precise containment: The common area is computed and compared with the
+      candidate area. ``True`` is returned if the two areas are the same.
+
+    Parameters
+    ----------
+    container : Compound | Face
+        The geometry layout acting as the container.
+    candidate : Compound | Face
+        The geometry layout to check for containment.
+    tolerance : float
+        Numerical tolerance for area and bounding box comparisons. Default
+        valus is 1e-6.
+
+    Returns
+    -------
+    bool
+        ``True`` if `candidate` layout is fully contained within the layout of
+        the `container` by the given tolerance; ``False`` otherwise.
+    """
+    # Area check
+    area_container = get_basic_properties(container)[1]
+    area_candidate = get_basic_properties(candidate)[1]
+    if area_candidate > area_container + tolerance * area_container:
+        return False
+
+    # Bounding box check
+    bbox_container = get_bounding_box(container)
+    bbox_candidate = get_bounding_box(candidate)
+    if any([
+        bbox_candidate[i] - bbox_container[i] <= -tolerance for i in [0, 2]
+    ]) or any([
+        bbox_candidate[i] - bbox_container[i] >= tolerance for i in [1, 3]
+    ]):
+        return False
+
+    # Precise geometric intersection
+    common = make_common(container, candidate)
+    area_common = get_basic_properties(common)[1]
+    return abs(area_common - area_candidate) < tolerance * area_candidate
