@@ -133,10 +133,19 @@ class TestLatticeDataExtractor(unittest.TestCase):
         """
         # Verify an exception is raised when the lattice has no cells
         with self.assertRaises(RuntimeError):
-            _ = LatticeDataExtractor(Lattice(), GeometryType.TECHNOLOGICAL)
+            _ = LatticeDataExtractor(
+                [Lattice()],
+                GeometryType.TECHNOLOGICAL,
+                None,
+                LatticeGeometryType.ISOTROPIC
+            )
 
         # Instantiate the 'LatticeDataExtractor' class
-        lde = LatticeDataExtractor([self.lattice], GeometryType.TECHNOLOGICAL)
+        lde = LatticeDataExtractor(
+            [self.lattice],
+            GeometryType.TECHNOLOGICAL,
+            None,
+            LatticeGeometryType.ISOTROPIC)
         # Verify the correct attributes assignment
         self.assertEqual(len(lde.lattices[0].lattice_cells),
                          len(self.lattice.lattice_cells))
@@ -170,18 +179,22 @@ class TestLatticeDataExtractor(unittest.TestCase):
         """
         # Verify no 'Boundary' objects are built when the lattice type is
         # 'ISOTROPIC'
-        self.lattice.type_geo = LatticeGeometryType.ISOTROPIC
         lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
         lde.lattices = [deepcopy(self.lattice)]
         lde.boundaries = []
+        lde.type_geo = LatticeGeometryType.ISOTROPIC
         lde.build_boundaries()
         self.assertEqual(len(lde.boundaries), 0)
 
         # Verify 'Boundary' objects have been created for the borders of the
         # lattice
         self.lattice.apply_symmetry(SymmetryType.EIGHTH)
-        self.lattice.type_geo = LatticeGeometryType.RECTANGLE_EIGHT
-        lde = LatticeDataExtractor(self.lattice, GeometryType.TECHNOLOGICAL)
+        lde = LatticeDataExtractor(
+            [self.lattice],
+            GeometryType.TECHNOLOGICAL,
+            None,
+            LatticeGeometryType.RECTANGLE_EIGHT
+        )
         lde.build_boundaries()
         self.assertEqual(len(lde.boundaries), 3)
         self.assertTrue(
@@ -286,6 +299,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
         lde.lattices = [deepcopy(self.lattice)]
         lde.subfaces = []
+        lde.regions = []
 
         # Verify an exception is raised if building the 'Face' objects from
         # lattice's regions not having any 'PropertyType', or no value is
@@ -295,6 +309,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         # 'PropertyType' element.
         lattice = lde.lattices[0]
         lattice.build_regions(GeometryType.TECHNOLOGICAL)
+        lde.regions = lattice.regions
         with self.assertRaises(RuntimeError):
             lde.build_faces(PropertyType.MATERIAL)
         for region in lattice.regions:
@@ -580,7 +595,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         """
         lde.lattices = [deepcopy(lattice)]
         # Call the private method
-        lde._LatticeDataExtractor__preprocess(geom_type)
+        lde._LatticeDataExtractor__preprocess(geom_type, None)
         cmpd = (lattice.lattice_cmpd
                 if lattice.symmetry_type == SymmetryType.FULL
                 else lattice.lattice_symm)
@@ -613,7 +628,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         """
         lde.lattices = [deepcopy(lattice)]
         # Call the private method
-        lde._LatticeDataExtractor__preprocess(geom_type)
+        lde._LatticeDataExtractor__preprocess(geom_type, None)
         cmpd = (lattice.lattice_cmpd
                 if lattice.symmetry_type == SymmetryType.FULL
                 else lattice.lattice_symm)
@@ -688,7 +703,8 @@ class TestGeomExtractorFunctions(unittest.TestCase):
 
         # Call the function extracting the geometric data from the lattice
         lde = analyse_lattice(
-            lattice, TdtSetup(GeometryType.SECTORIZED, PropertyType.MATERIAL))
+            [lattice],
+            TdtSetup(GeometryType.SECTORIZED, PropertyType.MATERIAL))
 
         # Verify the 'LatticeDataExtractor' contains the needed information
         self.assertIsInstance(lde, LatticeDataExtractor)
