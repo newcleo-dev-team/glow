@@ -257,9 +257,10 @@ def get_bounding_box(shape: Any) -> List[float]:
     -------
     List[float]
         The `[Xmin, Xmax, Ymin, Ymax]` values representing the shape bounding
-        box extension.
+        box extension. Values are rounded to the 6th decimal digit to remove
+        floating-point precision errors SALOME could introduce.
     """
-    return geompy.BoundingBox(shape)[:4]
+    return [round(v, 6) for v in geompy.BoundingBox(shape)[:4]]
 
 
 def get_closed_free_boundary(compound: Any) -> List[Any]:
