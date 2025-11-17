@@ -8,6 +8,7 @@ from typing import Any, List
 from glow.support.types import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
+from glow.support.utility import check_type_geo_consistency
 
 
 @dataclass
@@ -79,11 +80,25 @@ def analyse_and_generate_tdt(
     - the type of property associated to the lattice regions;
     - the value for the albedo applied to the lattice's BCs. If ``None``, a
       default value that corresponds to the lattice's geometry type is
-      adopted.
+      adopted;
+    - the value for the `typegeo` parameter;
+    - the type of symmetry applied to the single lattice or the colorset.
+
+    When exporting one or more ``Lattice`` instances provided by the input
+    list, the `typegeo` and the symmetry type values of the ``TdtSetup``
+    instance are neglected. The values of the corresponding attributes for
+    the first lattice in the list (taken as reference) are considered instead.
 
     If the ``compound_to_export`` parameter is provided, it will be the one
-    to be analysed and exported, according to the information stored in the
-    provided lattices. In this way, a colorset of the lattices can be treated.
+    to be analysed and exported, according to the property information stored
+    in the provided lattices. The indicated compound object must be a portion
+    of the lattices, otherwise the successive steps of the analysis will fail.
+    The values for the `typegeo` parameter and the symmetry type provided in
+    the ``TdtSetup`` instance are considered regardless of what set in the
+    list of involved lattices, even if only one lattice is present.
+    Users should note that these two values must match with the provided
+    compound. If values that do not match with the shape of the compound are
+    provided, the validity of the results in DRAGON cannot be assured.
 
     Parameters
     ----------
@@ -98,6 +113,19 @@ def analyse_and_generate_tdt(
     compound_to_export: Any | None = None
         The compound object to analyse and export to TDT, if present. If
         ``None`` is given, the lattices are considered instead.
+
+    Raises
+    ------
+    RuntimeError
+        When multiple lattices, and no compound, are provided and they do
+        not have the same ``SymmetryType.FULL`` symmetry.
+        When a compound is provided and the corresponding lattices do not
+        have the same ``SymmetryType.FULL`` symmetry.
+        In case of inconsistencies in the values of the ``TdTSetup``
+        settings.
+        If the analysis fails due to the compound not been part of the
+        lattices, no property found for a region, the impossibility to get
+        the borders of the layout to export.
     """
     # Import the 'time' module for evaluating the analysis performance
     import time
@@ -107,6 +135,42 @@ def analyse_and_generate_tdt(
     # Import the classes and functions for performing the geometry conversion
     from glow.generator.geom_extractor import analyse_lattice
     from glow.generator.generator import TdtData, write_tdt_file
+
+    # The reference lattice is the first instance in the given list
+    ref_lattice = lattices[0]
+    # Choose whether to use data from the 'TdtSetup' instance or the lattice;
+    # in the latter case, update the 'TdtSetup' instance values accordingly
+    if compound_to_export is None:
+        # If multiple lattices are provided, they must not have any symmetry
+        if len(lattices) > 1 and not all(
+            lattice.symmetry_type == SymmetryType.FULL
+                for lattice in lattices
+        ):
+            raise RuntimeError(
+                "When considering a colorset, the type of symmetry of all "
+                "the involved lattices must be 'SymmetryType.FULL'. If a "
+                "portion of the colorset is meant to be considered, run the "
+                "analysis with a compound from the lattices.")
+        # Modify the typegeo and symmetry type values of the 'TdtSetup'
+        # instance
+        tdt_config.symmetry_type = ref_lattice.symmetry_type
+        tdt_config.type_geo = ref_lattice.type_geo
+    else:
+        # If a compound is provided, the lattices must not have any symmetry
+        if not all(
+            lattice.symmetry_type == SymmetryType.FULL
+                for lattice in lattices
+        ):
+            raise RuntimeError(
+                "When a portion of the lattices is provided, the type of "
+                "symmetry of all the involved lattices must be "
+                "'SymmetryType.FULL'.")
+        # Check the correctness of the 'TdtSetup' settings
+        check_type_geo_consistency(
+            tdt_config.type_geo,
+            ref_lattice.cells_type,
+            tdt_config.symmetry_type
+        )
 
     # Perform the lattice faces and edges analysis for the given geometry and
     # property types

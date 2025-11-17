@@ -2,18 +2,21 @@
 Module containing utility functions to support the construction and analysis
 of the geometry layouts.
 """
-from copy import deepcopy
 import math
 import random
+
+from types import CellType
 from typing import Any, List, Tuple
 
-from glow.interface.geom_interface import ShapeType, \
+from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
-    get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, \
+    get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, get_kind_of_shape, \
     get_min_distance, get_point_coordinates, get_selected_object, \
-    get_shape_name, get_shape_type, is_gui_available, make_cdg, \
+    get_shape_name, get_shape_type, is_gui_available, make_cdg, make_compound, \
     make_cut, make_edge, make_face, make_fuse, make_partition, \
     make_translation, make_vector_from_points, make_vertex
+from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, LatticeGeometryType, \
+    SymmetryType
 
 
 # List of the RGB color codes taken by varying each RGB value with steps of 10
@@ -123,13 +126,17 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
                 break
         else:
             groups_of_collinear_edges.append([edge])
-
+    # Build the borders edges as single edge objects
     border_edges = []
     for edge in groups_of_collinear_edges:
-        # Get start-end vertices of the edges on the border
-        v1 = extract_sorted_sub_shapes(edge[0], ShapeType.VERTEX)[0]
-        v2 = extract_sorted_sub_shapes(edge[-1], ShapeType.VERTEX)[1]
-        border_edges.append(make_edge(v1, v2))
+        if str(get_kind_of_shape(edge[0])[0]) == 'SEGMENT':
+            # Get start-end vertices of the edges on the border
+            v1 = extract_sub_shapes(edge[0], ShapeType.VERTEX)[0]
+            v2 = extract_sub_shapes(edge[-1], ShapeType.VERTEX)[1]
+            border_edges.append(make_edge(v1, v2))
+        else:
+            border_edges.append(edge[0])
+
     return border_edges
 
 
@@ -196,6 +203,43 @@ def check_shape_expected_types(shape: Any,
         raise RuntimeError(
             f"The GEOM object has a non-valid '{type}' type: any of the "
             f"'{expected_types}' objects are expected.")
+
+
+def check_type_geo_consistency(
+        type_geo: LatticeGeometryType,
+        cell_type: CellType,
+        symmetry_type: SymmetryType
+    ) -> None:
+    """
+    Function that checks if the given type of geometry is valid for the
+    indicated type of cell and the type of symmetry.
+
+    Parameters
+    ----------
+    type_geo : LatticeGeometryType
+        The type of geometry of the lattice.
+    cell_type : CellType
+        The type of cell.
+    symmetry_type : SymmetryType
+        The type of symmetry.
+
+    Raises
+    ------
+    RuntimeError
+        If the given lattice type of geometry does not match with the
+        indicated cell and symmetry types.
+    """
+    try:
+        # Get the list of types of geometry available for the lattice
+        types_geo = CELL_VS_SYMM_VS_TYP_GEO[cell_type][symmetry_type]
+        if type_geo not in types_geo:
+            raise KeyError
+    except KeyError:
+        raise RuntimeError(
+            f"The given type of geometry '{type_geo}' is not compatible "
+            f"with the indicated type of cell (i.e. '{cell_type}') and the "
+            f"applied symmetry type '{symmetry_type}'. "
+            f"Expected values are {types_geo}.")
 
 
 def compute_point_by_reference(
