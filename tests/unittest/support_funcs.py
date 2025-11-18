@@ -1,8 +1,12 @@
 """
 Module declaring functions to support the execution of the unit tests.
 """
+import hashlib
+
+from copy import deepcopy
 from dataclasses import dataclass, field
 from math import degrees, sqrt, atan2
+from pathlib import Path
 from typing import Any, List, Tuple
 
 from glow.geometry_layouts.cells import Cell, HexCell, RectCell
@@ -12,7 +16,7 @@ from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     make_circle, make_edge, make_vector_from_points, make_vertex,\
     make_vertex_on_curve
 from glow.support.types import BoundaryType, CellType, LatticeGeometryType, \
-    SymmetryType
+    PropertyType, SymmetryType
 from glow.support.utility import build_contiguous_edges
 
 
@@ -448,61 +452,6 @@ def build_boundary_data(
                 return build_bd_eighth_rect(*dimensions)
 
 
-
-def build_hex_geom_elements(
-        center: Any, edge_length: float) -> Tuple[List[Any], List[Any]]:
-    """
-    Function that, given the center and the length of the hexagon edge,
-    builds the vertex and edge objects that represent a hexagon.
-
-    Parameters
-    ----------
-    center : Any
-        A vertex object representing the center of the resulting hexagonal
-        shape.
-    edge_length : float
-        The length of the hexagon's edge.
-
-    Returns
-    -------
-    Tuple[List[Any], List[Any]]
-        A tuple with the list of vertices and edges of the hexagon.
-    """
-    vertices = [
-        make_vertex_on_curve(
-            make_circle(center, None, edge_length), i/6) for i in range(6)
-    ]
-    edges = [
-            make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
-    ]
-    return vertices, edges
-
-
-def make_ref_vectors(surf: Surface) -> Tuple[Any, Any]:
-    """
-    Function that returns two vector objects built on the `Surface` first
-    border element and on its corresponding circle the surface is inscribed
-    into.
-
-    Parameters
-    ----------
-    surf : Surface
-        The `Surface` object used to build the reference vectors.
-
-    Returns
-    -------
-    Tuple[Any, Any]
-        Tuple providing two reference vector objects, the first built
-        on the surface border, the second on the circle the surface is
-        inscribed into.
-    """
-    face_ref_vect = make_vector_from_points(
-        surf.o, make_vertex_on_curve(surf.borders[0], 0.0))
-    out_circle_ref_vect = make_vector_from_points(
-        surf.o, make_vertex_on_curve(surf.out_circle, 0.0))
-    return face_ref_vect, out_circle_ref_vect
-
-
 def build_cell_ref_vectors(cell: Cell) -> List[Any]:
     """
     Function that builds a list of vector objects on the first edge of
@@ -537,6 +486,87 @@ def build_cell_ref_vectors(cell: Cell) -> List[Any]:
             cell.figure.o,
             make_vertex_on_curve(e, 0.0)) for e in edges
     ]
+
+
+def build_colorset(lattice: Lattice) -> List[Lattice]:
+    """
+    Function that facilitates the construction of a colorset as a list of
+    ``Lattice`` instances.
+
+    Parameters
+    ----------
+    lattice : Lattice
+        The reference lattice.
+
+    Returns
+    -------
+    List[Lattice]
+        A list of ``Lattice`` instances each positioned appropriately to
+        replicate a colorset.
+    """
+    # Deepcopy the given lattice
+    lattice = deepcopy(lattice)
+    # Build a ring of cells around the only cell present in the given
+    # lattice and add a box
+    lattice.add_ring_of_cells(lattice.lattice_cells[0], 1, 0)
+    lattice.build_lattice_box([0.1])
+    lattice.set_lattice_box_properties(
+        {PropertyType.MATERIAL: ["MAT1"]})
+    # Build the positions of the lattices in the colorset
+    lattices: List[Lattice] = [lattice]
+    pos = [
+        (lattice.lattice_box.figure.lx, 0.0, 0.0),
+        (lattice.lattice_box.figure.lx,
+            lattice.lattice_box.figure.ly,
+            0.0),
+        (0.0, lattice.lattice_box.figure.ly, 0.0),
+        (-lattice.lattice_box.figure.lx,
+            lattice.lattice_box.figure.ly,
+            0.0),
+        (-lattice.lattice_box.figure.lx, 0.0, 0.0),
+        (-lattice.lattice_box.figure.lx,
+            -lattice.lattice_box.figure.ly,
+            0.0),
+        (0.0, -lattice.lattice_box.figure.ly, 0.0),
+        (lattice.lattice_box.figure.lx,
+            -lattice.lattice_box.figure.ly,
+            0.0)
+    ]
+    # Copy and translate the given lattice to the calculated positions
+    for xyz in pos:
+        l = deepcopy(lattice)
+        l.translate(xyz)
+        lattices.append(l)
+    return lattices
+
+
+def build_hex_geom_elements(
+        center: Any, edge_length: float) -> Tuple[List[Any], List[Any]]:
+    """
+    Function that, given the center and the length of the hexagon edge,
+    builds the vertex and edge objects that represent a hexagon.
+
+    Parameters
+    ----------
+    center : Any
+        A vertex object representing the center of the resulting hexagonal
+        shape.
+    edge_length : float
+        The length of the hexagon's edge.
+
+    Returns
+    -------
+    Tuple[List[Any], List[Any]]
+        A tuple with the list of vertices and edges of the hexagon.
+    """
+    vertices = [
+        make_vertex_on_curve(
+            make_circle(center, None, edge_length), i/6) for i in range(6)
+    ]
+    edges = [
+            make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
+    ]
+    return vertices, edges
 
 
 def build_lattice_ref_vectors(lattice: Lattice) -> List[Any]:
@@ -574,6 +604,53 @@ def build_lattice_ref_vectors(lattice: Lattice) -> List[Any]:
             lattice.lattice_center,
             make_vertex_on_curve(e, 0.0)) for e in edges
     ]
+
+
+def compute_hash(file_path: Path) -> str:
+    """
+    Function to compute the SHA256 hash of a file.
+
+    Parameters
+    ----------
+    file_path : Path
+        The ``Path`` object of the file to process.
+
+    Returns
+    -------
+    str
+        The SHA256 hash of a given file.
+    """
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for block in iter(lambda: f.read(4096), b""):
+            sha256.update(block)
+    return sha256.hexdigest()
+
+
+def make_ref_vectors(surf: Surface) -> Tuple[Any, Any]:
+    """
+    Function that returns two vector objects built on the `Surface` first
+    border element and on its corresponding circle the surface is inscribed
+    into.
+
+    Parameters
+    ----------
+    surf : Surface
+        The `Surface` object used to build the reference vectors.
+
+    Returns
+    -------
+    Tuple[Any, Any]
+        Tuple providing two reference vector objects, the first built
+        on the surface border, the second on the circle the surface is
+        inscribed into.
+    """
+    face_ref_vect = make_vector_from_points(
+        surf.o, make_vertex_on_curve(surf.borders[0], 0.0))
+    out_circle_ref_vect = make_vector_from_points(
+        surf.o, make_vertex_on_curve(surf.out_circle, 0.0))
+    return face_ref_vect, out_circle_ref_vect
+
 
 def set_up_hex_cells(hex_cell: HexCell) -> List[HexCell]:
     """

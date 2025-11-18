@@ -129,10 +129,10 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
     # Build the borders edges as single edge objects
     border_edges = []
     for edge in groups_of_collinear_edges:
-        if str(get_kind_of_shape(edge[0])[0]) == 'SEGMENT':
+        if len(edge) > 1 and str(get_kind_of_shape(edge[0])[0]) == 'SEGMENT':
             # Get start-end vertices of the edges on the border
-            v1 = extract_sub_shapes(edge[0], ShapeType.VERTEX)[0]
-            v2 = extract_sub_shapes(edge[-1], ShapeType.VERTEX)[1]
+            v1 = extract_sorted_sub_shapes(edge[0], ShapeType.VERTEX)[0]
+            v2 = extract_sorted_sub_shapes(edge[-1], ShapeType.VERTEX)[1]
             border_edges.append(make_edge(v1, v2))
         else:
             border_edges.append(edge[0])
