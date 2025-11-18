@@ -512,6 +512,8 @@ def build_colorset(lattice: Lattice) -> List[Lattice]:
     lattice.build_lattice_box([0.1])
     lattice.set_lattice_box_properties(
         {PropertyType.MATERIAL: ["MAT1"]})
+    # Build the regions
+    lattice.build_regions()
     # Build the positions of the lattices in the colorset
     lattices: List[Lattice] = [lattice]
     pos = [

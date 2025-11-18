@@ -960,6 +960,12 @@ class LatticeDataExtractor():
                         f"No region could be found for the subface {i} of "
                         "the given compound. Please ensure the compound is "
                         "a portion of the indicated lattices.")
+                break
+            else:
+                raise RuntimeError(
+                    f"No region could be found for the subface {i} of "
+                    "the given compound. Please ensure the compound is "
+                    "a portion of the indicated lattices.")
 
     def __get_lattice_compound(self) -> Any:
         """
@@ -1090,7 +1096,9 @@ class LatticeDataExtractor():
         # Handle the case where the analysis is done on a given compound
         if compound_to_analyse is not None:
             # Build the 'Region' objects corresponding to the given compound
+            print("compound non None", self.regions)
             self.__build_compound_regions(compound_to_analyse)
+            print("AFTER)", self.regions)
             lattice_cmpd = compound_to_analyse
         else:
             # Get the GEOM compound identifying either the full lattice of a

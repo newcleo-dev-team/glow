@@ -179,7 +179,7 @@ class TestMainFunction(unittest.TestCase):
         colorset_cmpd = make_partition(
             [l.lattice_cmpd for l in self.colorset], [], ShapeType.COMPOUND)
         colorset_portion = make_common(
-                colorset_cmpd, Rectangle((3.2, 3.2, 0.0), 3.2, 3.2).face)
+            colorset_cmpd, Rectangle((3.2, 3.2, 0.0), 3.2, 3.2).face)
         with self.assertRaises(RuntimeError):
             analyse_and_generate_tdt(
                 lattices=self.colorset,
@@ -346,38 +346,3 @@ class TestMainFunction(unittest.TestCase):
         # of the reference TDT file
         generated_tdt_hash = compute_hash(self.file_name)
         self.assertEqual(generated_tdt_hash, ref_hash)
-
-if __name__ == "__main__":
-    cell = RectCell()
-    cell.set_properties({PropertyType.MATERIAL: ['MAT']})
-    lattice: Lattice = Lattice([cell])
-    geom_type: GeometryType = GeometryType.TECHNOLOGICAL
-    prop_type: PropertyType = PropertyType.MATERIAL
-    lattice.build_regions(geom_type)
-    format: str = f"{{:.{7}E}}"
-    colorset: List[Lattice] = build_colorset(lattice)
-    add_to_study(make_compound([l.lattice_cmpd for l in colorset]), "sa")
-
-    analyse_and_generate_tdt([lattice], "pippo")
-
-    Rectangle((1.6, 1.6, 0.0), 3.2, 3.2).show_face()
-
-    colorset_cmpd = make_partition(
-        [l.lattice_cmpd for l in colorset], [], ShapeType.COMPOUND)
-    colorset_portion = make_partition(
-        [make_common(
-            colorset_cmpd, Rectangle((3.2, 3.2, 0.0), 3.2, 3.2).face)],
-        [],
-        ShapeType.COMPOUND
-    )
-    add_to_study(colorset_portion, "portion")
-
-    analyse_and_generate_tdt(
-        colorset,
-        "test_colorset",
-        TdtSetup(
-            type_geo=LatticeGeometryType.SYMMETRIES_TWO,
-            symmetry_type=SymmetryType.QUARTER
-        ),
-        colorset_portion
-    )

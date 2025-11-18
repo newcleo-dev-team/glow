@@ -7,7 +7,7 @@ import unittest
 
 from contextlib import redirect_stdout
 from copy import deepcopy
-from math import pi, sin, sqrt
+from math import isclose, pi, sin, sqrt
 from typing import Any, Dict, List
 
 from glow.generator.geom_extractor import Edge, Face, LatticeDataExtractor, \
@@ -16,12 +16,14 @@ from glow.geometry_layouts.cells import HexCell, RectCell
 from glow.geometry_layouts.geometries import Hexagon, Rectangle
 from glow.geometry_layouts.lattices import Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    get_shape_name, make_arc_edge, make_circle, make_compound, make_edge, \
-    make_face, make_partition, make_vertex, set_shape_name
+    get_shape_name, make_arc_edge, make_circle, make_common, make_compound, \
+    make_edge, make_face, make_partition, make_translation, make_vector, \
+    make_vertex, set_shape_name
 from glow.main import TdtSetup
 from glow.support.types import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes, build_contiguous_edges
+from support_funcs import build_colorset
 
 
 class TestLatticeDataExtractor(unittest.TestCase):
@@ -48,6 +50,9 @@ class TestLatticeDataExtractor(unittest.TestCase):
     rect_symm_vs_shape : Dict[SymmetryType, Any]
         Providing the lattice's geometry layout for each symmetry type
         (nine hexagonal cells with a box)
+    colorset : List[Lattice]
+        A list of ``Lattice`` instances each positioned appropriately to
+        replicate a colorset.
     """
     def setUp(self):
         """
@@ -59,6 +64,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
         cell.add_circle(0.25)
         self.lattice: Lattice = Lattice([cell])
         self.lattice.add_ring_of_cells(cell, 1)
+        self.lattice.build_regions()
         self.hex_symm_vs_regions: Dict[
             SymmetryType, Dict[GeometryType, int]] = {
             SymmetryType.FULL: {GeometryType.TECHNOLOGICAL: 20,
@@ -125,11 +131,12 @@ class TestLatticeDataExtractor(unittest.TestCase):
                 make_vertex((1/2*box_lx, 1/2*box_ly, 0.0))
             ]))
         }
+        self.colorset: List[Lattice] = build_colorset(Lattice([cell]))
 
     def test_init(self) -> None:
         """
         Method that tests the initialization of the `LatticeDataExtractor`
-        class.
+        class for a single lattice.
         """
         # Verify an exception is raised when the lattice has no cells
         with self.assertRaises(RuntimeError):
@@ -149,13 +156,19 @@ class TestLatticeDataExtractor(unittest.TestCase):
         # Verify the correct attributes assignment
         self.assertEqual(len(lde.lattices[0].lattice_cells),
                          len(self.lattice.lattice_cells))
-        # Translate the lattice so that the lower-left corner is in the origin
-        self.lattice.translate((1.5, 1.5, 0.0))
+        self.assertEqual(len(lde.regions), len(self.lattice.regions))
+
+        # Check if the lattice has been properly translated by verifying that
+        # the shape built from the stored borders coincides with a rectangle
+        # centered in (1.5, 1.5, 0.0) and that the extracted edges coincide
+        # with those of the lattice compound
+        center = (1.5, 1.5, 0.0)
+        self.lattice.translate(center)
         self.assertIsNone(lde.lattices[0].lattice_box)
         self.assertTrue(
             are_same_shapes(
                 make_face(lde.borders),
-                Rectangle(center=(1.5, 1.5, 0.0), height=3, width=3).face,
+                Rectangle(center=center, height=3, width=3).face,
                 ShapeType.FACE
             )
         )
@@ -167,6 +180,118 @@ class TestLatticeDataExtractor(unittest.TestCase):
                 ShapeType.COMPOUND
             )
         )
+        self.assertTrue(
+            all(
+                isclose(xyz1, xyz2) for xyz1, xyz2 in zip(
+                    lde.layout_center, center)
+            )
+        )
+        self.assertEqual(lde.dimensions, (3.0, 3.0))
+        self.assertEqual(lde.boundaries, [])
+        self.assertEqual(lde.subfaces, [])
+        self.assertEqual(lde.edges, [])
+        self.assertEqual(len(lde.id_vs_edge.values()), len(lde.lattice_edges))
+
+    def test_init_colorset(self) -> None:
+        """
+        Method that tests the initialization of the `LatticeDataExtractor`
+        class for a full colorset.
+        """
+        # Instantiate the 'LatticeDataExtractor' class
+        lde = LatticeDataExtractor(
+            self.colorset,
+            GeometryType.TECHNOLOGICAL,
+            None,
+            LatticeGeometryType.ISOTROPIC)
+        # Verify the correct attributes assignment
+        self.assertEqual(len(lde.lattices), len(self.colorset))
+        self.assertEqual(
+            len(lde.regions),
+            len([r for lattice in self.colorset for r in lattice.regions])
+        )
+
+        # Build the compound object of the colorset and translate it so that
+        # the entire layout has its lower-left corner in the origin
+        center = (4.8, 4.8, 0.0)
+        layout_cmpd = make_compound(
+            [lattice.lattice_cmpd for lattice in self.colorset]
+        )
+        layout_cmpd = make_translation(layout_cmpd, make_vector(center))
+        # Check if the colorset has been properly translated by verifying that
+        # the shape built from the stored borders coincides with a rectangle
+        # centered in (4.8, 4.8, 0.0) and that the extracted edges coincide
+        # with those of the layout compound
+        self.assertTrue(
+            are_same_shapes(
+                make_face(lde.borders),
+                Rectangle(center=center, height=9.6, width=9.6).face,
+                ShapeType.FACE
+            )
+        )
+        self.assertTrue(
+            are_same_shapes(
+                make_compound(lde.lattice_edges),
+                make_partition([layout_cmpd], [], ShapeType.EDGE),
+                ShapeType.COMPOUND
+            )
+        )
+        # Check the other instance attribute initialization
+        self.assertTrue(
+            all(
+                isclose(xyz1, xyz2) for xyz1, xyz2 in zip(
+                    lde.layout_center, center)
+            )
+        )
+        self.assertEqual(lde.dimensions, (9.6, 9.6))
+        self.assertEqual(lde.boundaries, [])
+        self.assertEqual(lde.subfaces, [])
+        self.assertEqual(lde.edges, [])
+        self.assertEqual(len(lde.id_vs_edge.values()), len(lde.lattice_edges))
+
+    def test_init_colorset_portion(self) -> None:
+        """
+        Method that tests the initialization of the `LatticeDataExtractor`
+        class for a portion of a colorset.
+        """
+        # Extract a portion of the colorset
+        colorset_cmpd = make_partition(
+            [l.lattice_cmpd for l in self.colorset], [], ShapeType.COMPOUND)
+        shape = Rectangle((2.4, 2.4, 0.0), 4.8, 4.8).face
+        colorset_portion = make_common(colorset_cmpd, shape)
+        # Instantiate the 'LatticeDataExtractor' class
+        lde = LatticeDataExtractor(
+            self.colorset,
+            GeometryType.TECHNOLOGICAL,
+            colorset_portion,
+            LatticeGeometryType.ISOTROPIC)
+        # Verify the correct attributes assignment
+        self.assertEqual(len(lde.lattices), len(self.colorset))
+        self.assertEqual(
+            len(lde.regions),
+            len(extract_sub_shapes(colorset_portion, ShapeType.FACE))
+        )
+
+        # Verify that the shape built from the stored borders coincides with
+        # a rectangle centered in (2.4, 2.4, 0.0) and that the extracted edges
+        # coincide with those of the colorset portion
+        self.assertTrue(
+            are_same_shapes(make_face(lde.borders), shape, ShapeType.FACE)
+        )
+        self.assertTrue(
+            are_same_shapes(
+                make_compound(lde.lattice_edges),
+                make_partition([colorset_portion], [], ShapeType.EDGE),
+                ShapeType.COMPOUND
+            )
+        )
+        # Check the other instance attribute initialization
+        self.assertTrue(
+            all(
+                isclose(xyz1, xyz2) for xyz1, xyz2 in zip(
+                    lde.layout_center, (0.0, 0.0, 0.0))
+            )
+        )
+        self.assertEqual(lde.dimensions, (4.8, 4.8))
         self.assertEqual(lde.boundaries, [])
         self.assertEqual(lde.subfaces, [])
         self.assertEqual(lde.edges, [])
@@ -507,6 +632,67 @@ class TestLatticeDataExtractor(unittest.TestCase):
         self.__assess_preprocess_rect_symm(
             lattice, lde, GeometryType.SECTORIZED)
 
+    def test_preprocess_colorset(self) -> None:
+        """
+        Method that tests the implementation of the private method
+        `__preprocess` of the `LatticeDataExtractor` class.
+        A colorset made by lattices of Cartesian cells is used for testing
+        purposes.
+        The following cases are tested:
+        - full colorset;
+        - a eighth of the colorset;
+        - a compound which is not part of the full colorset.
+        """
+        # Build the compound from the lattices in the colorset
+        layout_cmpd = make_compound(
+            [lattice.lattice_cmpd for lattice in self.colorset]
+        )
+
+        # Properly translate the comparison compound so to have its
+        # lower-left corner in the origin
+        center = (4.8, 4.8, 0.0)
+        layout_cmpd_trnsl = make_translation(layout_cmpd, make_vector(center))
+        # Verify the preprocess activities are performed correctly with a
+        # full colorset
+        self.__assess_preprocess_colorset(
+            None,
+            len([r for lattice in self.colorset for r in lattice.regions]),
+            Rectangle(center, 9.6, 9.6).face,
+            layout_cmpd_trnsl
+        )
+
+        # Build the shape for extracting the colorset portion
+        eighth_shape = make_face(
+            build_contiguous_edges(
+                [
+                    make_vertex((0.0, 0.0, 0.0)),
+                    make_vertex((4.8, 0.0, 0.0)),
+                    make_vertex((4.8, 4.8, 0.0))
+                ]
+            )
+        )
+        layout_symm = make_common(layout_cmpd, eighth_shape)
+        # Verify the preprocess activities are performed correctly with a
+        # eighth symmetry of the colorset
+        self.__assess_preprocess_colorset(
+            layout_symm,
+            len(extract_sub_shapes(layout_symm, ShapeType.FACE)),
+            eighth_shape,
+            layout_symm
+        )
+
+        # Verify an exception is raised when the compound does not overlap
+        # to the whole colorset
+        layout = make_translation(layout_symm, make_vector((10.0, 10.0, 0.0)))
+        # Instantiate the 'LatticeDataExtractor' class without attributes
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        # Setup the needed attributes
+        lde.regions = []
+        lde.lattices = deepcopy(self.colorset)
+        with self.assertRaises(RuntimeError):
+            lde._LatticeDataExtractor__preprocess(
+                GeometryType.TECHNOLOGICAL, layout)
+
     def test_preprocess_hex_lattice(self) -> None:
         """
         Method that tests the implementation of the private method
@@ -572,6 +758,48 @@ class TestLatticeDataExtractor(unittest.TestCase):
         lattice.translate((lattice.lx/2, lattice.ly, 0.0))
         self.__assess_preprocess_hex_symm(
             lattice, lde, GeometryType.SECTORIZED)
+
+    def __assess_preprocess_colorset(
+            self,
+            portion: Any | None,
+            no_regions: int,
+            cmpr_shape: Any,
+            layout_cmpd: Any) -> None:
+        """
+        Method that assesses the correctness of the private method
+        `__preprocess` in the case of a colorset from which either
+        the full or a portion of the colorset is considered.
+
+        Parameters
+        ----------
+        portion : Any | None
+            The compound object representing the portion of the colorset to
+            considered. If `None`, the whole colorset is taken.
+        no_regions : int
+            The number of layout's regions that should be present in the
+            layout to analyse.
+        cmpr_shape : Any
+            A shape with which comparing the face build over the saved
+            borders.
+        layout_cmpd : Any
+            A compound object from which edges are extracted and compared with
+            those stored during the preprocess activities.
+        """
+        # Instantiate the 'LatticeDataExtractor' class without attributes
+        lde = LatticeDataExtractor.__new__(LatticeDataExtractor)
+        # Setup the needed attributes
+        lde.regions = []
+        lde.lattices = deepcopy(self.colorset)
+        # Call the private method
+        lde._LatticeDataExtractor__preprocess(
+            GeometryType.TECHNOLOGICAL, portion)
+        # Assess the correct execution of the private method
+        self.__assess_preprocess(
+            lde,
+            no_regions,
+            cmpr_shape,
+            make_partition([layout_cmpd], [], ShapeType.COMPOUND)
+        )
 
     def __assess_preprocess_hex_symm(
             self,
@@ -648,9 +876,9 @@ class TestLatticeDataExtractor(unittest.TestCase):
         """
         Method that verifies the preprocess activities performed during the
         initialization of an instanc of the class`LatticeDataExtractor`.
-        It is checked whether the number of lattice's regions equals the
-        indicated number, the borders are those  of the lattice's outline
-        and the edges are those of the lattice portion to analyse (either
+        It is checked whether the number of layout's regions equals the
+        indicated number, the borders are those of the layout's outline
+        and the edges are those of the layout portion to analyse (either
         full or a symmetry part).
 
         Parameters
@@ -658,8 +886,8 @@ class TestLatticeDataExtractor(unittest.TestCase):
         lde : LatticeDataExtractor
             Instance of the `LatticeDataExtractor` class to test.
         no_regions : int
-            The number of lattice's regions that should be present in the
-            lattice to analyse.
+            The number of layout's regions that should be present in the
+            layout to analyse.
         cmpr_shape: Any
             A shape with which comparing the face build over the saved
             borders.
@@ -667,7 +895,7 @@ class TestLatticeDataExtractor(unittest.TestCase):
             A compound object from which edges are extracted and compared
             with those stored during the preprocess activities.
         """
-        self.assertEqual(len(lde.lattices[0].regions), no_regions)
+        self.assertEqual(len(lde.regions), no_regions)
         self.assertTrue(
             are_same_shapes(
                 make_face(lde.borders),
@@ -692,7 +920,8 @@ class TestGeomExtractorFunctions(unittest.TestCase):
     def test_analyse_lattice(self) -> None:
         """
         Method that tests the implementation of the function `analyse_lattice`
-        declared in the `geom_extractor.py` module.
+        declared in the `geom_extractor.py` module when providing a single
+        lattice.
         """
         cell = RectCell()
         cell.add_circle(0.25)
@@ -718,6 +947,76 @@ class TestGeomExtractorFunctions(unittest.TestCase):
                 make_compound(lde.lattice_edges),
                 make_partition(
                     [lattice.lattice_cmpd], [], ShapeType.EDGE),
+                ShapeType.COMPOUND
+            )
+        )
+
+    def test_analyse_lattice_colorset(self) -> None:
+        """
+        Method that tests the implementation of the function `analyse_lattice`
+        declared in the `geom_extractor.py` module when providing a colorset
+        or its portion.
+        """
+        # Build the colorset and its portion
+        cell = RectCell()
+        cell.add_circle(0.25)
+        cell.set_properties({PropertyType.MATERIAL: ['MAT1', 'MAT2']})
+        colorset = build_colorset(Lattice([cell]))
+        colorset_cmpd = make_compound([l.lattice_cmpd for l in colorset])
+        eighth_shape = make_face(
+            build_contiguous_edges(
+                [
+                    make_vertex((0.0, 0.0, 0.0)),
+                    make_vertex((4.8, 0.0, 0.0)),
+                    make_vertex((4.8, 4.8, 0.0))
+                ]
+            )
+        )
+        colorset_portion = make_common(colorset_cmpd, eighth_shape)
+
+        # Call the function extracting the geometric data from the colorset
+        lde = analyse_lattice(
+            colorset,
+            TdtSetup(
+                type_geo=LatticeGeometryType.RECTANGLE_TRAN,
+                symmetry_type=SymmetryType.FULL
+            )
+        )
+        # Verify the 'LatticeDataExtractor' contains the needed information
+        self.assertIsInstance(lde, LatticeDataExtractor)
+        self.assertEqual(len(lde.borders), 4)
+        self.assertEqual(len(lde.boundaries), 4)
+        self.assertEqual(len(lde.subfaces), 171)
+        self.assertEqual(len(lde.edges), 321)
+        self.assertEqual(len(lde.id_vs_edge), 321)
+        self.assertTrue(
+            are_same_shapes(
+                make_compound(lde.lattice_edges),
+                make_partition([colorset_cmpd], [], ShapeType.EDGE),
+                ShapeType.COMPOUND
+            )
+        )
+        # Call the function extracting the geometric data from the colorset
+        # portion
+        lde = analyse_lattice(
+            colorset,
+            TdtSetup(
+                type_geo=LatticeGeometryType.RECTANGLE_EIGHT,
+                symmetry_type=SymmetryType.EIGHTH
+            ),
+            colorset_portion
+        )
+        # Verify the 'LatticeDataExtractor' contains the needed information
+        self.assertIsInstance(lde, LatticeDataExtractor)
+        self.assertEqual(len(lde.borders), 3)
+        self.assertEqual(len(lde.boundaries), 3)
+        self.assertEqual(len(lde.subfaces), 33)
+        self.assertEqual(len(lde.edges), 87)
+        self.assertEqual(len(lde.id_vs_edge), 87)
+        self.assertTrue(
+            are_same_shapes(
+                make_compound(lde.lattice_edges),
+                make_partition([colorset_portion], [], ShapeType.EDGE),
                 ShapeType.COMPOUND
             )
         )
