@@ -119,7 +119,7 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
     groups_of_collinear_edges: List[List[Any]] = []
     # Loop through all the sorted edges
     for edge in extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE):
-        if not str(get_kind_of_shape(edge)) == 'SEGMENT':
+        if str(get_kind_of_shape(edge)[0]) != 'SEGMENT':
             groups_of_collinear_edges.append([edge])
             continue
         # Check if the current edge belongs to any group of collinear edges
