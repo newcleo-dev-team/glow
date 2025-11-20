@@ -338,8 +338,7 @@ class Cell(ABC):
                                     key=lambda item: item.radius)
 
         # Build a partition between the cell face and the circle one
-        self.face = make_partition(
-            [self.face, circle.face], [], ShapeType.FACE)
+        self.face = make_partition([self.face], [circle.face], ShapeType.FACE)
 
         # List of all the face objects contained in the cell technological
         # geometry
@@ -1473,7 +1472,7 @@ class Cell(ABC):
                 self.__initialize_cell()
                 # Update the cell face with the face built on the given shape
                 # borders
-                self.face = make_face(build_compound_borders(shape))
+                self.face = shape
                 self.sectorized_face = sect_face
                 # Update the cell face with the edges found in the given shape
                 self.__update_cell_with_edges(shape)

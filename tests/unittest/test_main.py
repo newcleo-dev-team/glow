@@ -208,11 +208,11 @@ class TestMainFunction(unittest.TestCase):
         self.colorset[0].type_geo = LatticeGeometryType.RECTANGLE_TRAN
         # Call the function to test with a full colorset
         self.__assess_tdt_colorset(
-            'de6955b64217cf08cb0875cf2da14d8a71e7583b3fc9c588fe778316bc545b09'
+            '8bade00c97b25eac47ad09c38fccfa7611d7bf269a425a36087e03f091053ce7'
         )
         # Call the function to test with a portion of the colorset
         self.__assess_tdt_colorset(
-            'b481a9fa3b4bf2d9af86ed9f2b674a9f1b9162d76fc09319c672c5b1bb3065d1',
+            '163caa507b2dc7429c4fa9c4ee9b933c598cb1859bb5058e74c8f3dfc47a3206',
             colorset_portion
         )
 
