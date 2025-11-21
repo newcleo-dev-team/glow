@@ -18,11 +18,12 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_bounding_box, get_kind_of_shape, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_point_inside_shape, make_cdg, make_compound, make_cut, \
-    make_face, make_line, make_partition, make_rotation, make_translation, \
-    make_vector_from_points, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, make_vertex_on_lines_intersection, \
-    remove_from_study, set_color_face, update_salome_study
+    get_shape_type, is_point_inside_shape, make_cdg, make_common, \
+    make_compound, make_cut, make_face, make_line, make_partition, \
+    make_rotation, make_translation, make_vector_from_points, make_vertex, \
+    make_vertex_inside_face, make_vertex_on_curve, \
+    make_vertex_on_lines_intersection, remove_from_study, set_color_face, \
+    update_salome_study
 from glow.support.types import CellType, GeometryType, PropertyType
 
 
@@ -1486,13 +1487,8 @@ class Cell(ABC):
                         sec_opts,
                         (1, 0))
                     self.tech_geom_sect_opts = sec_opts
-                    sectors_angles = list(self.tech_geom_sect_opts.values())
-                    # Re-apply the sectorization with the updated options
-                    # values
-                    self._sectorize_cell(
-                        [value[0] for value in sectors_angles],
-                        [value[1] for value in sectors_angles],
-                        self.is_windmill_applied)
+                    self.sectorized_face = make_common(
+                        self.sectorized_face, self.face)
             case _:
                 raise ValueError(
                     f"{geo_type}: unhandled type of geometry to update.")

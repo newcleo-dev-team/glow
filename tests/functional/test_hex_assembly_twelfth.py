@@ -8,7 +8,7 @@ import sys
 
 from glow.geometry_layouts.cells import *
 from glow.geometry_layouts.lattices import *
-from glow.main import analyse_and_generate_tdt
+from glow.main import TdtSetup, analyse_and_generate_tdt
 from glow.generator.generator import *
 
 # Declare the values of the hexagonal cells geometrical characteristics
@@ -52,8 +52,8 @@ lattice.apply_symmetry(SymmetryType.TWELFTH)
 
 # Perform the lattice faces and edges analysis and generate the output
 # TDT file
-analyse_and_generate_tdt(lattice, os.path.join(os.path.dirname(sys.argv[0]),'test_hex_assembly_twelfth'))
-
-
-
-
+analyse_and_generate_tdt(
+    [lattice],
+    os.path.join(
+        os.path.dirname(sys.argv[0]), 'test_hex_assembly_twelfth')
+)
