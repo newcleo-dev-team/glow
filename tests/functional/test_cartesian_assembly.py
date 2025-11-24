@@ -33,7 +33,7 @@ rect_cell.set_properties(
 rect_cell.show(PropertyType.MATERIAL)
 
 # Build a lattice made of cartesian cells
-lattice = Lattice([rect_cell],'Cartesian Lattice')
+lattice = Lattice([rect_cell], 'Cartesian Lattice')
 
 lattice.add_rings_of_cells(rect_cell, 1)
 
@@ -41,4 +41,8 @@ lattice.set_type_geo(LatticeGeometryType.RECTANGLE_SYM)
 
 # Perform the geometry analysis and export the TDT file of the surface
 # geometry
-analyse_and_generate_tdt(lattice, os.path.join(os.path.dirname(sys.argv[0]),'test_cartesian_assembly'))
+analyse_and_generate_tdt(
+    [lattice],
+    os.path.join(
+        os.path.dirname(sys.argv[0]), 'test_cartesian_assembly')
+)

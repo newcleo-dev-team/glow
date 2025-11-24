@@ -80,4 +80,4 @@ lattice.type_geo = LatticeGeometryType.HEXAGON_TRAN
 # ----------------------------------------------------------------------
 # Perform the geometry analysis and export the TDT file of the surface
 # geometry
-analyse_and_generate_tdt(lattice, 'hexagonal_assembly')
+analyse_and_generate_tdt([lattice], 'hexagonal_assembly')

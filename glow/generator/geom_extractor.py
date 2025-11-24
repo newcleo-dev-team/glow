@@ -9,18 +9,19 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Self
 
+from glow.geometry_layouts.cells import Region
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, CellType, \
     EdgeType, GeometryType, LatticeGeometryType, PropertyType, SymmetryType
 from glow.geometry_layouts.lattices import Lattice
 from glow.support.utility import build_compound_borders, \
     check_shape_expected_types, get_id_from_name, get_id_from_shape, \
     translate_wrt_reference
-from glow.interface.geom_interface import ShapeType, \
-    extract_sorted_sub_shapes, extract_sub_shapes, get_in_place, \
+from glow.interface.geom_interface import ShapeType, add_to_study, \
+    extract_sorted_sub_shapes, extract_sub_shapes, get_bounding_box, get_in_place, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
     make_face, make_partition, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, set_shape_name
+    make_vertex_on_curve, set_shape_name, update_salome_study
 from glow.main import TdtSetup
 
 
@@ -441,7 +442,7 @@ class Boundary:
         # If the angle is close to zero, it can happen that it is written
         # with a minus sign which is unnecessary; hence, it is set to 0.0
         # explicitly
-        if math.isclose(self.angle, 0.0):
+        if math.isclose(self.angle, 0.0, abs_tol=1e-6):
             self.angle = 0.0
 
         # Initialize the border axes to the edge start point
@@ -479,7 +480,8 @@ class Boundary:
                 #  M=2 (lx,0) *          * M=4 (-lx,0)
                 #             ************
                 #              M=1 (0,ly)
-                if math.isclose(math.sin(math.radians(self.angle)), 0.0):
+                if math.isclose(
+                        math.sin(math.radians(self.angle)), 0.0, abs_tol=1e-6):
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=3 (dx < 0)
                     self.tx = 0.0
@@ -580,41 +582,57 @@ class Boundary:
 
 class LatticeDataExtractor():
     """
-    Class that extracts the needed geometrical data from the given lattice
-    to be used further on for generating the output TDT file.
-    It determines the association of faces with properties, the one between
-    edges and the faces they belong to, as well as the geometric data and BC
-    types of the lattice's borders.
+    Class that extracts the geometric data from a layout coming either from
+    a given list of lattices or from the compound object representing their
+    portion. These data is used for generating the output TDT file.
+    The process relies on determining:
+
+    - the association of faces with properties;
+    - the association between edges and the faces they belong to;
+    - the geometric data and BC types applied on the lattices/compound
+      borders.
 
     Parameters
     ----------
-    lattice : Lattice
-        An instance of the ``Lattice`` class storing the lattice information
+    lattices : List[Lattice]
+        A list of ``Lattice`` instances storing the geometric information
         to extract.
     geom_type : GeometryType
-        The type of geometry of the lattice's cells used to extract the
-        corresponding regions.
+        The type of geometry of the cells in the lattices. This setting is
+        used to extract the regions matching the geometry types.
+    compound_to_analyse: Any | None = None
+        The compound object to analyse. If ``None`` is provided, the lattices
+        are considered instead.
+    type_geo : LatticeGeometryType
+        Identifying the value for the typegeo related to the layout.
 
     Attributes
     ----------
-    lattice : Lattice
-        The ``Lattice`` object storing the geometric information to extract.
+    lattices : List[Lattice]
+        The list of ``Lattice`` objects storing the geometric information to
+        extract.
     borders : List[Any]
-        The list of edge objects representing the lattice's borders.
+        The list of edge objects representing the borders of the layout.
     boundaries : List[Boundary]
         The list of ``Boundary`` objects storing the geometric and BCs
-        information about the lattice's borders.
+        information about the layout's borders.
     subfaces : List[Face]
         The list of ``Face`` objects storing the geometric information about
-        each region of the lattice.
+        each region of the layout.
     edges : List[Edge]
         The list of ``Edge`` objects storing the geometric information about
-        each edge of the lattice and the faces they belong to.
+        each edge of the layout and the faces they belong to.
     id_vs_edge : Dict[str, Any]
-        A dictionary of the IDs for the lattice's edges VS the corresponding
+        A dictionary of the IDs for the layout's edges VS the corresponding
         edge objects.
     lattice_edges : List[Any]
-        The list of the edge objects contained in the lattice.
+        The list of the edge objects contained in the layout.
+    type_geo : LatticeGeometryType
+        Identifying the value for the typegeo related to the layout.
+    layout_center : Tuple[float, float, float]
+        The XYZ coordinates of the whole layout center.
+    dimensions : Tuple[float, float]
+        The XY characteristic dimensions of the layout.
     """
     CASES_FOR_TRANSLATION = {
         CellType.RECT: [SymmetryType.FULL, SymmetryType.HALF],
@@ -625,35 +643,45 @@ class LatticeDataExtractor():
     the lattice translation should be evaluated.
     """
 
-    def __init__(self, lattice: Lattice, geom_type: GeometryType) -> None:
+    def __init__(
+            self,
+            lattices: List[Lattice],
+            geom_type: GeometryType,
+            compound_to_analyse: Any | None,
+            type_geo: LatticeGeometryType) -> None:
         # Raise an exception if the lattice does not have any cell
-        if not lattice.lattice_cells:
+        if any(not lattice.lattice_cells for lattice in lattices):
             raise RuntimeError("No data extraction can be performed from "
                                "a lattice without cells.")
         # Initialize the instance attributes
-        self.lattice: Lattice = deepcopy(lattice)
+        self.lattices: List[Lattice] = deepcopy(lattices)
         self.borders: List[Any] = []
         self.lattice_edges: List[Any] = []
         self.boundaries: List[Boundary] = []
         self.subfaces: List[Face] = []
         self.edges: List[Edge] = []
+        self.regions: List[Region] = []
+        self.layout_center: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self.dimensions: Tuple[float, float] = (0.0, 0.0)
         # Extract the information to be stored about borders and edges of the
         # lattice according to the applied symmetry and geometry
-        self.__preprocess(geom_type)
+        self.__preprocess(geom_type, compound_to_analyse)
         # Associate each edge with an index and build a dictionary
         self.id_vs_edge: Dict[str, Any] = classify_lattice_edges(
             self.lattice_edges)
 
+        self.type_geo: LatticeGeometryType = type_geo
+
     def build_boundaries(self) -> None:
         """
         Method that constructs a list of ``Boundary`` objects representing
-        the lattice boundary edges, i.e. those connected to a single face.
+        the layout boundary edges, i.e. those connected to a single face.
         All the GEOM edges being part of each boundary are associated to the
         same ``Boundary`` object.
         """
         # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
         # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
-        if self.lattice.type_geo == LatticeGeometryType.ISOTROPIC:
+        if self.type_geo == LatticeGeometryType.ISOTROPIC:
             return
         # Initialize the list of 'Boundary' objects
         boundary_edges = []
@@ -673,10 +701,12 @@ class LatticeDataExtractor():
         print("LEN BORDERS:", len(self.borders))
         for border in self.borders:
             # Build an object of the 'Boundary' class
-            boundary = Boundary(border=border,
-                                type_geo=self.lattice.type_geo,
-                                lattice_o=self.lattice.lattice_center,
-                                dimensions=(self.lattice.lx, self.lattice.ly))
+            boundary = Boundary(
+                border=border,
+                type_geo=self.type_geo,
+                lattice_o=make_vertex(self.layout_center),
+                dimensions=self.dimensions
+            )
             # Store all the indices of the edges belonging to the border
             boundary.find_edges_on_border(boundary_edgs_cmpd, self.id_vs_edge)
             # Append the built 'Boundary' object to the corresponding list
@@ -736,8 +766,8 @@ class LatticeDataExtractor():
     def build_faces(self, property_type: PropertyType) -> None:
         """
         Method that builds a list of ``Face`` objects from the GEOM face
-        objects, extracted from the lattice regions, and the property
-        values. Each region in the lattice corresponds to a region in a
+        objects, extracted from the layout regions, and the property
+        values. Each region in the layout corresponds to a region in a
         cell, according to the type of geometry (either technological or
         sectorized).
         Each region must be associated with a value for the given property
@@ -746,23 +776,23 @@ class LatticeDataExtractor():
         Parameters
         ----------
         property_type : PropertyType = PropertyType.MATERIAL
-            The type of property associated to the lattice regions.
+            The type of property associated to the layout regions.
 
         Raises
         ------
         RuntimeError
-            If no properties are associated to a lattice region.
+            If no properties are associated to a layout region.
         RuntimeError
             If no value for the given property type is associated to a
-            lattice region.
+            layout region.
         """
         # Index identifying the 'Face' object
         subface_indx = 0
-        # Loop through all the lattice regions and build the corresponding
+        # Loop through all the layout regions and build the corresponding
         # data structure storing the face object and the value of the given
         # type of property
-        print("LEN REGIONS:", len(self.lattice.regions))
-        for region in self.lattice.regions:
+        print("LEN REGIONS:", len(self.regions))
+        for region in self.regions:
             # Update the subface index
             subface_indx += 1
             # Set the subface name by providing its index
@@ -792,12 +822,12 @@ class LatticeDataExtractor():
             self, edge_name_vs_faces: Dict[str, List[Any]]) -> None:
         """
         Method that prints on the stdout the log of the data extraction from
-        the lattice.
+        the layout.
 
         Parameters
         ----------
         edge_name_vs_faces : Dict[str, List[Any]]
-            A dictionary of the name of the lattice edges VS the GEOM faces
+            A dictionary of the name of the layout edges VS the GEOM faces
             connected to it.
         """
         # Displays the number of faces, the number of edges and the edges
@@ -821,6 +851,7 @@ class LatticeDataExtractor():
     def __apply_lattice_elements_translation(
             self,
             lattice_cmpd: Any,
+            cur_center: Any,
             new_center: Tuple[float, float, float]) -> Any:
         """
         Method that translates the lattice regions and the given lattice
@@ -838,6 +869,8 @@ class LatticeDataExtractor():
         ----------
         lattice_cmpd : Any
             The lattice compound object to be translated.
+        cur_center : Any
+            The vertex object representing the current lattice center.
         new_center : Tuple[float, float, float]
             The coordinates for the new lattice center.
 
@@ -848,19 +881,17 @@ class LatticeDataExtractor():
             center has not changed.
         """
         # Procede only if the lattice center has changed
+        # lattice = self.lattices[0]
         if all(math.isclose(c, nc) for c, nc in zip(
-            get_point_coordinates(self.lattice.lattice_center), new_center)):
+            get_point_coordinates(cur_center), new_center)):
             return lattice_cmpd
-        pre_center = self.lattice.lattice_center
-        # Rebuild the lattice center in the new position
-        self.lattice.lattice_center = make_vertex(new_center)
         # Translate the regions of the lattice
-        for region in self.lattice.regions:
+        for region in self.regions:
             region.face = translate_wrt_reference(
-                region.face, pre_center, new_center)
+                region.face, cur_center, new_center)
         # Translate the given lattice compound and return it
         return translate_wrt_reference(
-            lattice_cmpd, pre_center, new_center)
+            lattice_cmpd, cur_center, new_center)
 
     def __evaluate_lattice_center(self) -> Tuple[float, float, float]:
         """
@@ -895,7 +926,46 @@ class LatticeDataExtractor():
             # Return the coordinates of the new center
             return (0.0 - lower_left[0]), (0.0 - lower_left[1]), 0.0
         # Return the current lattice center
-        return get_point_coordinates(self.lattice.lattice_center)
+        return get_point_coordinates(self.lattices[0].lattice_center)
+
+    def __build_compound_regions(self, compound: Any) -> None:
+        """
+        Method that builds a ``Region`` object for each face of the given
+        compound. Properties are assigned by identifying the corresponding
+        ``Region`` object from the stored ``Lattice`` objects.
+
+        Parameters
+        ----------
+        compound : Any
+            The compound object to build ``Region`` objects for each face.
+        """
+        # Build the 'Region' objects corresponding to the faces of the given
+        # compound
+        faces = extract_sub_shapes(compound, ShapeType.FACE)
+        for i, face in enumerate(faces):
+            ref_pnt = make_vertex_inside_face(face)
+            for lattice in self.lattices:
+                if not is_point_inside_shape(ref_pnt, lattice.lattice_cmpd):
+                    continue
+                for region in lattice.regions:
+                    if is_point_inside_shape(ref_pnt, region.face):
+                        self.regions.append(
+                            Region(face=face,
+                                   inner_point=ref_pnt,
+                                   name=f"Region {i}",
+                                   properties=deepcopy(region.properties)))
+                        break
+                else:
+                    raise RuntimeError(
+                        f"No region could be found for the subface {i} of "
+                        "the given compound. Please ensure the compound is "
+                        "a portion of the indicated lattices.")
+                break
+            else:
+                raise RuntimeError(
+                    f"No region could be found for the subface {i} of "
+                    "the given compound. Please ensure the compound is "
+                    "a portion of the indicated lattices.")
 
     def __get_lattice_compound(self) -> Any:
         """
@@ -909,10 +979,17 @@ class LatticeDataExtractor():
             The lattice compound that corresponds to the currently applied
             symmetry type.
         """
-        lattice_cmpd = self.lattice.lattice_cmpd
-        if not self.lattice.symmetry_type == SymmetryType.FULL:
-            lattice_cmpd = self.lattice.lattice_symm
-        return lattice_cmpd
+        if not self.lattices[0].symmetry_type == SymmetryType.FULL:
+            return make_partition(
+                [lattice.lattice_symm for lattice in self.lattices],
+                [],
+                ShapeType.FACE
+            )
+        return make_partition(
+            [lattice.lattice_cmpd for lattice in self.lattices],
+            [],
+            ShapeType.FACE
+        )
 
     def __get_unique_edges(
             self, subface_edge: Any, edge_id: str) -> List[Any]:
@@ -980,15 +1057,20 @@ class LatticeDataExtractor():
                 # Raise an exception if the compound does not have edges
                 raise RuntimeError(error_message) from exc
 
-    def __preprocess(self, geom_type: GeometryType) -> None:
+    def __preprocess(self,
+                     geom_type: GeometryType,
+                     compound_to_analyse: Any | None) -> None:
         """
-        Method that initializes the information to be stored from the lattice
-        according to the applied symmetry and the given geometry.
+        Method that initializes the information to be stored from either the
+        lattices or the given compound.
+        In case no compound is provided, this information is determined
+        according to the symmetry applied to the lattice and the given
+        geometry type of its cells.
         It re-builds the regions of the lattice according to the given
         ``GeometryType``, if it is needed or the indicated geometry type is
         different from the one used to display them in the SALOME viewer.
         This allows that analysis on the lattice is always performed on the
-        up to date regions.
+        up-to-date regions.
         In case the lattice falls in one of the cases identified by the
         ``CASES_FOR_TRANSLATION`` attribute, its compound is translated
         together with its regions and the center, so that the lower-left
@@ -999,44 +1081,73 @@ class LatticeDataExtractor():
         geom_type : GeometryType
             The type of geometry of the lattice cells used to extract the
             regions.
+        compound_to_analyse: Any | None = None
+            The compound object to analyse, if present. If ``None`` is given,
+            the lattices are considered instead.
         """
-        # Check if the lattice geometry layout needs to be rebuilt
-        if (self.lattice.is_update_needed or
-            geom_type != self.lattice.displayed_geom):
-            self.lattice.build_regions(geom_type)
-        # Get the GEOM compound identifying either the full lattice of a part
-        # of it, if a symmetry is applied
-        lattice_cmpd = self.__get_lattice_compound()
-        # Extract the lattice borders
+        # Consider the first lattice in the stored list as the reference one
+        ref_lattice = self.lattices[0]
+        # Check if any of the geometry layouts of the lattices need to be
+        # rebuilt
+        for lattice in self.lattices:
+            if (lattice.is_update_needed or
+                geom_type != lattice.displayed_geom):
+                lattice.build_regions(geom_type)
+        # Handle the case where the analysis is done on a given compound
+        if compound_to_analyse is not None:
+            # Build the 'Region' objects corresponding to the given compound
+            self.__build_compound_regions(compound_to_analyse)
+            lattice_cmpd = compound_to_analyse
+        else:
+            # Get the GEOM compound identifying either the full lattice of a
+            # part of it, if a symmetry is applied
+            lattice_cmpd = self.__get_lattice_compound()
+             # Extract the list of 'Region' objects from all the lattices
+            self.regions = [
+                region for lattice in self.lattices
+                       for region in lattice.regions]
+        # Extract the layout compound borders
         self.borders = build_compound_borders(lattice_cmpd)
-        # Handle the lattice translation so that the lower-left corner is in
+        # Extract the layout characteristic dimensions depending on the cells
+        # type
+        x_min, x_max, y_min, y_max = get_bounding_box(lattice_cmpd)
+        self.dimensions = (x_max - x_min, y_max - y_min)
+        if ref_lattice.cells_type == CellType.HEX:
+            self.dimensions = tuple([d / 2 for d in self.dimensions])
+
+        # Handle the layout translation so that the lower-left corner is in
         # the XYZ space origin; this is valid for specific symmetries and
-        # cells geometries or if the lattice center does not coincide with
+        # cells geometries or if the layout center does not coincide with
         # the XYZ origin
         symm_condition = (
-            self.lattice.symmetry_type in self.CASES_FOR_TRANSLATION[
-            self.lattice.cells_type]
+            ref_lattice.symmetry_type in self.CASES_FOR_TRANSLATION[
+            ref_lattice.cells_type]
         )
         center_condition = (
             get_min_distance(
-                self.lattice.lattice_center,
+                ref_lattice.lattice_center,
                 make_vertex((0.0, 0.0, 0.0))) > 0.0
         )
         if symm_condition or center_condition:
             # Evaluate the new center of the lattice, if it has not been
             # translated yet, and apply the translation to the regions
             # and the lattice compound
-            new_center = (
+            self.layout_center = (
                 self.__evaluate_lattice_center() if symm_condition
                     else (0.0, 0.0, 0.0))
             lattice_cmpd = self.__apply_lattice_elements_translation(
-                lattice_cmpd, new_center)
+                lattice_cmpd, ref_lattice.lattice_center, self.layout_center)
             # Re-evaluate the lattice borders
             self.borders = build_compound_borders(lattice_cmpd)
         # Extract the lattice edges from the lattice compound to analyse
         self.lattice_edges = extract_sub_shapes(
             make_partition([lattice_cmpd], [], ShapeType.FACE),
             ShapeType.EDGE)
+
+        add_to_study(make_compound(self.lattice_edges), "EDGES TO ANALYSE")
+        add_to_study(make_compound(self.borders), "BOUNDARIES TO ANALYSE")
+        add_to_study(lattice_cmpd, "CMPD TO ANALYSE")
+        update_salome_study()
 
     def __update_edge_face_association(
             self,
@@ -1073,32 +1184,45 @@ class LatticeDataExtractor():
 
 
 def analyse_lattice(
-        lattice: Lattice, tdt_config: TdtSetup) -> LatticeDataExtractor:
+        lattices: List[Lattice],
+        tdt_config: TdtSetup,
+        compound_to_analyse: Any | None = None) -> LatticeDataExtractor:
     """
     Function that performs the lattice analysis to extract the necessary
     information about the regions and their associated properties, the edges
     and their association with the faces they belong to. It also extracts
     information about the edges representing the lattice boundaries.
 
+    If the ``compound_to_export`` parameter is provided, it will be the one
+    to be analysed, according to the information stored in the provided
+    lattices. In this way, a colorset of the lattices can be treated.
+
     Parameters
     ----------
-    lattice : Lattice
-        The instance of the ``Lattice`` class storing the geometrical data
-        about the lattice to analyse.
+    lattice : List[Lattice]
+        The object storing the information about the geometry and the
+        properties of the lattices.
     tdt_config : TdtSetup
         Dataclass providing the settings for extracting the geometry
         information from the lattice layout and the properties assigned
         to its regions.
+    compound_to_analyse: Any | None = None
+        The compound object to analyse, if present. If ``None`` is given, the
+        lattices are considered instead.
 
     Returns
     -------
     LatticeDataExtractor
         Object collecting all the information about the geometry and the
-        properties extracted from the lattice.
+        properties extracted from the layout.
     """
     # Instantiate the class for extracting the geometric data from the lattice
     # according to the given type of geometry
-    data_extractor = LatticeDataExtractor(lattice, tdt_config.geom_type)
+    data_extractor = LatticeDataExtractor(
+        lattices,
+        tdt_config.geom_type,
+        compound_to_analyse,
+        tdt_config.type_geo)
     # Call its method for performing the analysis
     data_extractor.build_faces(tdt_config.property_type)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()

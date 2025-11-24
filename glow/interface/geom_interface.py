@@ -257,9 +257,10 @@ def get_bounding_box(shape: Any) -> List[float]:
     -------
     List[float]
         The `[Xmin, Xmax, Ymin, Ymax]` values representing the shape bounding
-        box extension.
+        box extension. Values are rounded to the 6th decimal digit to remove
+        floating-point precision errors SALOME could introduce.
     """
-    return geompy.BoundingBox(shape)[:4]
+    return [round(v, 6) for v in geompy.BoundingBox(shape)[:4]]
 
 
 def get_closed_free_boundary(compound: Any) -> List[Any]:
@@ -736,7 +737,7 @@ def make_fuse(shapes: List[Any]) -> Any:
     Any
         The face object resulting from fusing all the given shapes.
     """
-    return make_face([geompy.MakeFuseList(shapes, True, True)])
+    return geompy.MakeFuseList(shapes, True, True)
 
 
 def make_line(point1: Any, point2: Any) -> Any:
@@ -806,6 +807,28 @@ def make_rotation(shape: Any, axis: Any, angle: float) -> Any:
         The rotated shape object.
     """
     return geompy.MakeRotation(shape, axis, angle)
+
+
+def make_scale(shape: Any, center: Any, factor: float) -> Any:
+    """
+    Function that scales the given shape by the specified factor, wrt the
+    indicated center point.
+
+    Parameters
+    ----------
+    shape : Any
+        The generic shape object the scaling should be applied to.
+    center : Any
+        The vertex object wrt the scaling is performed.
+    factor : float
+        The scaling factor.
+
+    Returns
+    -------
+    Any
+        The scaled shape object.
+    """
+    return geompy.MakeScaleTransform(shape, center, factor)
 
 
 def make_translation(shape: Any, vector: Any) -> Any:

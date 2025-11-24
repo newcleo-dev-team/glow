@@ -4,15 +4,19 @@ of the geometry layouts.
 """
 import math
 import random
+
+from types import CellType
 from typing import Any, List, Tuple
 
-from glow.interface.geom_interface import ShapeType, \
+from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
-    get_basic_properties, get_closed_free_boundary, get_min_distance, \
-    get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_gui_available, make_cdg, make_cut, make_edge, \
-    make_face, make_fuse, make_translation, make_vector_from_points, \
-    make_vertex
+    get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, get_kind_of_shape, \
+    get_min_distance, get_point_coordinates, get_selected_object, \
+    get_shape_name, get_shape_type, is_gui_available, make_cdg, make_compound, \
+    make_cut, make_edge, make_face, make_fuse, make_partition, \
+    make_translation, make_vector_from_points, make_vertex
+from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, LatticeGeometryType, \
+    SymmetryType
 
 
 # List of the RGB color codes taken by varying each RGB value with steps of 10
@@ -89,7 +93,8 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
         object.
     """
     # Extract a list of closed boundaries from the given compound object
-    closed_boundaries = get_closed_free_boundary(cmpd)
+    closed_boundaries = get_closed_free_boundary(
+        make_partition([cmpd], [], ShapeType.COMPOUND))
     # Handle the case where more than a closed wire is extracted from
     # the compound
     if len(closed_boundaries) > 1:
@@ -97,17 +102,45 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
         # fusing adjacent edges
         shapes =  []
         for wire in closed_boundaries:
-            wire_mod = fuse_edges_in_wire(wire)
-            shapes.append(make_face(wire_mod))
+            face = make_face(fuse_edges_in_wire(wire))
+            if get_shape_type(face) == ShapeType.COMPOUND:
+                shapes.extend(extract_sub_shapes(face, ShapeType.FACE))
+            else:
+                shapes.append(face)
         # Fuse all the faces into a single shape
         shape = make_fuse(shapes)
         # Return the edges of the fused shape
-        return extract_sorted_sub_shapes(shape, ShapeType.EDGE)
+        return extract_sub_shapes(shape, ShapeType.EDGE)
 
     # Suppress vertices internal to the edges of the wire
     borders_wire = fuse_edges_in_wire(closed_boundaries[0])
-    # Extract the edge objects of the border wire
-    return extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE)
+    # Initialize a list of list each containing the edges lying on the same
+    # border
+    groups_of_collinear_edges: List[List[Any]] = []
+    # Loop through all the sorted edges
+    for edge in extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE):
+        if str(get_kind_of_shape(edge)[0]) != 'SEGMENT':
+            groups_of_collinear_edges.append([edge])
+            continue
+        # Check if the current edge belongs to any group of collinear edges
+        for group in groups_of_collinear_edges:
+            if is_collinear(edge, group):
+                group.append(edge)
+                break
+        else:
+            groups_of_collinear_edges.append([edge])
+    # Build the borders edges as single edge objects
+    border_edges = []
+    for edge in groups_of_collinear_edges:
+        if len(edge) > 1 and str(get_kind_of_shape(edge[0])[0]) == 'SEGMENT':
+            # Get start-end vertices of the edges on the border
+            v1 = extract_sorted_sub_shapes(edge[0], ShapeType.VERTEX)[0]
+            v2 = extract_sorted_sub_shapes(edge[-1], ShapeType.VERTEX)[1]
+            border_edges.append(make_edge(v1, v2))
+        else:
+            border_edges.append(edge[0])
+
+    return border_edges
 
 
 def build_contiguous_edges(vertices: List[Any]) -> List[Any]:
@@ -173,6 +206,43 @@ def check_shape_expected_types(shape: Any,
         raise RuntimeError(
             f"The GEOM object has a non-valid '{type}' type: any of the "
             f"'{expected_types}' objects are expected.")
+
+
+def check_type_geo_consistency(
+        type_geo: LatticeGeometryType,
+        cell_type: CellType,
+        symmetry_type: SymmetryType
+    ) -> None:
+    """
+    Function that checks if the given type of geometry is valid for the
+    indicated type of cell and the type of symmetry.
+
+    Parameters
+    ----------
+    type_geo : LatticeGeometryType
+        The type of geometry of the lattice.
+    cell_type : CellType
+        The type of cell.
+    symmetry_type : SymmetryType
+        The type of symmetry.
+
+    Raises
+    ------
+    RuntimeError
+        If the given lattice type of geometry does not match with the
+        indicated cell and symmetry types.
+    """
+    try:
+        # Get the list of types of geometry available for the lattice
+        types_geo = CELL_VS_SYMM_VS_TYP_GEO[cell_type][symmetry_type]
+        if type_geo not in types_geo:
+            raise KeyError
+    except KeyError:
+        raise RuntimeError(
+            f"The given type of geometry '{type_geo}' is not compatible "
+            f"with the indicated type of cell (i.e. '{cell_type}') and the "
+            f"applied symmetry type '{symmetry_type}'. "
+            f"Expected values are {types_geo}.")
 
 
 def compute_point_by_reference(
@@ -247,6 +317,29 @@ def generate_unique_random_colors(
     return random.sample(RGB_COLORS, no_colors)
 
 
+def get_angle_between_points(
+        point1: Tuple[float, float, float],
+        point2: Tuple[float, float, float]) -> float:
+    """
+    Function that, given two points, calculates the angle between the line
+    connecting the two points and the X-axis.
+
+    Parameters
+    ----------
+    point1 : Tuple[float, float, float]
+        First point.
+    point2: Tuple[float, float, float]
+        Second point.
+
+    Returns
+    -------
+    float
+        The angle, in radians, between the line connecting the two points
+        and the X-axis.
+    """
+    return math.atan2(point1[1] - point2[1], point1[0] - point2[0])
+
+
 def get_id_from_name(name: str) -> int:
     """
     Function that extracts the index of the shape whose name is provided.
@@ -304,6 +397,87 @@ def get_id_from_shape(shape: Any) -> int:
     return get_id_from_name(name)
 
 
+def is_collinear(edge: Any, collinear_edges: List[Any]) -> bool:
+    """
+    Function that determines whether the given edge is collinear with a group
+    of collinear edges.
+    Collinearity is determined by checking if the angle between the edge and
+    any edge in the group is close to ``0`` or ``pi``, and if the minimum
+    distance between the edge and the infinite axis defined by the group is
+    close to zero.
+
+    Parameters
+    ----------
+    edge : Any
+        The edge to check for collinearity.
+    group_of_collinear_edges : List[Any]
+        A list of edges that are collinear.
+
+    Returns
+    -------
+    bool
+        True if the edge is collinear with the group, False otherwise.
+    """
+    for collinear_edge in collinear_edges:
+        angle = get_angle_between_shapes(edge, collinear_edge)
+        if (
+            math.isclose(angle, 0.0, abs_tol=1e-5) or
+            math.isclose(angle, math.pi, abs_tol=1e-5)
+        ):
+            distance = get_min_distance(
+                edge, make_infinite_axis(collinear_edges[0]))
+            if math.isclose(distance, 0.0, abs_tol=1e-5):
+                return True
+    return False
+
+
+def make_infinite_axis(edge, length=1e6) -> Any:
+    """
+    Function that creates an infinite-like axis along the direction of the
+    given edge.
+
+    It computes the direction vector of the provided edge and extends it
+    in both directions by a specified length, resulting in a much longer edge
+    that simulates an infinite axis.
+
+    Parameters
+    ----------
+    edge : Any
+        The edge object from which to derive the axis direction.
+    length : float, optional
+        The distance to extend the axis in both directions from the edge's
+        endpoints. Default is 1e6.
+
+    Returns
+    -------
+    Any
+        An edge object resulting from extending the given edge along its
+        direction vector.
+
+    Notes
+    -----
+    The function assumes that the edge lies in the XY plane (Z=0).
+    """
+    # Get start and end points of the edge
+    v1, v2 = extract_sorted_sub_shapes(edge, ShapeType.VERTEX)
+    p1 = get_point_coordinates(v1)
+    p2 = get_point_coordinates(v2)
+    # Compute direction vector
+    dx = p2[0] - p1[0]
+    dy = p2[1] - p1[1]
+    dz = 0.0
+    # Normalize direction
+    norm = (dx**2 + dy**2 + dz**2)**0.5
+    dx /= norm
+    dy /= norm
+    dz /= norm
+    # Create extended points
+    p_start = (p1[0] - dx * length, p1[1] - dy * length, p1[2] - dz * length)
+    p_end = (p2[0] + dx * length, p2[1] + dy * length, p2[2] + dz * length)
+    # Build and return the extended edge
+    return make_edge(make_vertex(p_start), make_vertex(p_end))
+
+
 def retrieve_selected_object(error_msg: str) -> Any:
     """
     Function that retrieves the geometrical object currently selected in
@@ -328,6 +502,35 @@ def retrieve_selected_object(error_msg: str) -> Any:
     if not shape:
         raise RuntimeError(error_msg)
     return shape
+
+
+def sort_vertices_radially(vertices) -> List[Any]:
+    """
+    Function that sorts a list of vertices in radial order around their
+    centroid.
+    The function computes the centroid of the given vertices, then sorts them
+    based on the angle each vertex makes with respect to the centroid.
+
+    Parameters
+    ----------
+    vertices : list
+        A list of vertex objects to be sorted.
+
+    Returns
+    -------
+    List[Any]
+        A list of vertex objects sorted in radial order around the centroid.
+    """
+    # Compute the centroid X-Y coordinates
+    coords = [get_point_coordinates(v) for v in vertices]
+    cx = sum(p[0] for p in coords) / len(coords)
+    cy = sum(p[1] for p in coords) / len(coords)
+    # Sort vertices according to the angle wrt to the centroid
+    return sorted(
+        vertices,
+        key=lambda v: get_angle_between_points(get_point_coordinates(v),
+                                               (cx, cy, 0.0))
+    )
 
 
 def translate_wrt_reference(

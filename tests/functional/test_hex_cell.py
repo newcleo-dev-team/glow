@@ -36,4 +36,8 @@ lattice = Lattice([hex_cell], 'Hexagonal Lattice')
 
 # Perform the lattice faces and edges analysis and generate the output
 # TDT file
-analyse_and_generate_tdt(lattice, os.path.join(os.path.dirname(sys.argv[0]),'test_hex_cell'))
+analyse_and_generate_tdt(
+    [lattice],
+    os.path.join(
+        os.path.dirname(sys.argv[0]), 'test_hex_cell')
+)

@@ -34,7 +34,7 @@ fuel_cell.set_properties(
 fuel_cell.show(PropertyType.MATERIAL)
 # Build the assembly made of a central dummy cell and 6 rings of fuel cells around
 # the central one
-lattice = Lattice([fuel_cell],"Fuel assembly")
+lattice = Lattice([fuel_cell], "Fuel assembly")
 # Add a specific number of rings of cells to the lattice
 lattice.add_rings_of_cells(fuel_cell, 6)
 
@@ -53,4 +53,8 @@ lattice.apply_symmetry(SymmetryType.SIXTH)
 
 # Perform the lattice faces and edges analysis and generate the output
 # TDT file
-analyse_and_generate_tdt(lattice, os.path.join(os.path.dirname(sys.argv[0]),'test_hex_assembly_sixth'))
+analyse_and_generate_tdt(
+    [lattice],
+    os.path.join(
+        os.path.dirname(sys.argv[0]), 'test_hex_assembly_sixth')
+)
