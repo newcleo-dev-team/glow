@@ -712,7 +712,7 @@ The three examples show different instantiations; in particular, we have:
     the lattice.
 
 Similarly to the cells, the two types of geometry layout, the technological and
-the sectorized ones, apply to the lattice (see ::ref:`geom-def`).
+the sectorized ones, apply to the lattice (see :ref:`geom-def`).
 
 The :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` public methods
 cover the following functionalities:
@@ -1301,18 +1301,20 @@ To meet this requirement, |TOOL| comes with a functionality for extracting the
 necessary information about the geometry and generate the output file in the
 required format.
 
-Once the lattice geometry has been created using a
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` instance, users can
-run the export process by calling the function
+Once the geometry layout has been created using one or more
+:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` instances, users
+can run the export process by calling the function
 :py:func:`analyse_and_generate_tdt()<glow.main.analyse_and_generate_tdt>`.
-This function first analyses the lattice, then generates the output file
-containing the extracted information.
+This function first analyses the provided list of lattices with respect to the
+compound layout representing a portion of them, if any is provided, then
+generates the output file containing the extracted information.
 
-This function operates on the provided :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`
-instance on the basis of specific configuration options defined in the dataclass
+This function operates on the provided list of :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`
+instances on the basis of specific configuration options defined in the dataclass
 :py:class:`TdtSetup<glow.main.TdtSetup>`. Values for these options influence
 the data about the surface geometry representation of the layout contained in
-the output *TDT* file.
+the output *TDT* file, but only if a portion of the entire geometry layout is
+provided.
 The available settings in the :py:class:`TdtSetup<glow.main.TdtSetup>` instance
 include:
 
@@ -1335,18 +1337,25 @@ include:
     provide a value different from `0.0` for a geometry type other than
     :py:attr:`ISOTROPIC<glow.support.types.LatticeGeometryType.ISOTROPIC>`,
     as this would not make sense.
+  - the value for the *typegeo* parameter, which is strictly related to the
+    type of cells, the applied symmetry and the type of tracking;
+  - the type of symmetry applied to the geometry layout.
 
-The values set in the given :py:class:`TdtSetup<glow.main.TdtSetup>` instance
-drives the analysis step in which the needed geometric data is extracted from
-the lattice.
-The first step consists in determining the lattice's *GEOM compound* to analyse;
-this is selected on the basis of the :py:class:`GeometryType<glow.support.types.GeometryType>`
-and on the applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
-Each :py:class:`Region<glow.geometry_layouts.cells.Region>` object, which
-corresponds to the *regions* of the lattice compound, is associated with its
-value of property type (:py:class:`PropertyType<glow.support.types.PropertyType>`)
-for which the lattice is analysed. In addition, an index is assigned to each
-*region* to ensure its identification.
+The analysis step involves the extraction of the geometric data, that is needed
+for the generation of the output TDT file, from the layout.
+The first step consists in determining the *GEOM compound* to analyse, if one
+or more lattices are provided; this compound is selected on the basis of the
+:py:class:`GeometryType<glow.support.types.GeometryType>` and on the applied
+:py:class:`SymmetryType<glow.support.types.SymmetryType>`.
+In case a *GEOM compound* is directly provided, it will be used for extracting
+the geometric data, provided that the *GEOM compound* is a portion of the given
+lattice(s).
+For each :py:class:`Region<glow.geometry_layouts.cells.Region>` object, which
+corresponds to the *regions* of the layout's compound, a
+`Face<glow.generator.geom_extractor.Face>` object is built and associated with
+the property type value (:py:class:`PropertyType<glow.support.types.PropertyType>`)
+for which the layout is analysed. In addition, an index is assigned to ensure
+their identification.
 The *GEOM edge* objects are then extracted and associated to the corresponding
 regions. This means that each edge, identified with another index, has one or
 two regions associated with it. Those associated with two regions are internal
@@ -1548,7 +1557,9 @@ In addition, since *SALOME* comes with an embedded Python console, users can
 import the |TOOL| modules and exploit its functionalities directly.
 
 To see some of the |TOOL| functionalities in action, please refer to the script
-files present in the ``tutorials`` folder: they are intended to show a few
-case studies and how they are managed in |TOOL|.
+files present in the ``tutorials`` folder and described in the :ref:`tutorials`
+section.
+These examples are intended to show a few case studies and how they are managed
+in |TOOL|.
 For further information about the available classes and methods, please refer
 to the :doc:`api_guide` section.

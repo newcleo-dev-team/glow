@@ -181,7 +181,7 @@ cr_wrapper_radii = [7, 7.25]
 int_shaft_ir = 1.4
 int_shaft_or = 1.7
 
-# Build the control rod assembly cells
+# Build the central cell of the control rod assembly
 cr_cell = HexCell(edge_length=edge_ext_wrap_i, name= "Control Rod cell")
 # Add the circles representing the different zones
 for r in cr_wrapper_radii:
@@ -203,19 +203,12 @@ box_cell.set_properties(
     {PropertyType.MATERIAL: ["CR_MIX", "CR_CLADDING", "COOLANT"]})
 box_cell.show(PropertyType.MATERIAL)
 
-# Build the control rod assembly
-cr_assembly = Lattice([cr_cell], "Control Rod Assembly")
-cr_assembly.lattice_box = box_cell
-cr_assembly.show(PropertyType.MATERIAL)
-
-# Build the vertices at which the control rod circles are placed
+# Build the vertices at which the control rod cells are placed
 cr_vertices_i = create_vertices_list(r_cr_circles_i, 6)
 cr_vertices_o = create_vertices_list(r_cr_circles_o, 12)
-# Build the circular cells and add them to the control rod assembly
+# Build the circular control rod cells placed along two circumferences
 cr_cells_i = make_circular_cells_list(cr_vertices_i, cr_pin_radii)
 cr_cells_o = make_circular_cells_list(cr_vertices_o, cr_pin_radii)
-for cell in cr_cells_i + cr_cells_o:
-    cr_assembly.add_cell(cell, ())
 
 # Build the central shaft cell as made by three concentric circles
 circle_shaft_i = Circle(
@@ -234,7 +227,17 @@ shaft_cell.set_properties(
 # Dummy assignement of the cell's type so that it can be added to a hexagonal
 # lattice
 shaft_cell.cell_type = CellType.HEX
+
+# Build the control rod assembly
+cr_assembly = Lattice([cr_cell], "Control Rod Assembly")
+# Add the two rings of rod pin cells to the control rod assembly
+for cell in cr_cells_i + cr_cells_o:
+    cr_assembly.add_cell(cell, ())
+# Add the shaft cell to the control rod assembly
 cr_assembly.add_cell(shaft_cell, ())
+# Assign the built box cell to the control rod assembly
+cr_assembly.lattice_box = box_cell
+
 # Display the control rod assembly
 cr_assembly.show(PropertyType.MATERIAL)
 
