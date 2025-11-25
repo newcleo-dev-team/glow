@@ -9,11 +9,11 @@ import os
 from dataclasses import dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from glow.generator.geom_extractor import Boundary, Edge, Face
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
-    LatticeGeometryType, SymmetryType
+    LatticeGeometryType, PropertyType, SymmetryType
 
 
 # Precision in terms of number of digits after the decimal
@@ -58,14 +58,19 @@ class TdtData():
     """Options for printing the geometric data."""
     precisions: Tuple[float, float] = (1e-5, 1e-5)
     """Options for the geometric precision of the data."""
-    properties: List[str] = field(init=False)
+    properties: Dict[PropertyType, List[str]] = field(
+        init=False, default_factory=dict)
     """
-    List of the names of the properties the regions of the geometry layout
-    are associated with.
+    Dictionary with keys the property types and values the list of names for
+    each property the regions of the geometry layout are associated with.
     """
-    property_ids : List[int] = field(init=False)
-    """List of the IDs of the properties in the geometry layout."""
-    nb_folds      : int = field(init=False)
+    property_ids: Dict[PropertyType, List[int]] = field(
+        init=False, default_factory=dict)
+    """
+    Dictionary with keys the property types and values the list of the IDs for
+    each property the regions of the geometry layout are associated with.
+    """
+    nb_folds: int = field(init=False)
     """
     The number of times the geometry layout has to be unfolded to replicate
     the full geometry, if any symmetry is applied.
@@ -100,33 +105,39 @@ class TdtData():
 
     def __build_properties_id(self) -> None:
         """
-        Method that builds two lists for the properties associated to the
-        regions of the lattice: one containing the names of the properties,
-        the other containing the corresponding IDs, as integer indices, so
-        that they appear only once.
+        Method that populates the two dictionaries for the properties
+        associated to the regions of the lattice: one associates the list of
+        the names of the properties to the property type, the other associates
+        the list containing the corresponding IDs, as integer indices, with
+        the property types.
         """
-        # Initialize the list of properties names
-        self.properties = list()
-        # Initialize the list of property IDs as a list of '-1' with
-        # dimension being the size of the list of subfaces in the lattice
-        self.property_ids = [-1]*len(self.faces)
         # Loop through the 'Face' objects
         for face in self.faces:
-            # Add the property name to the corresponding list, if not
-            # already present
-            if face.property not in self.properties:
-                self.properties.append(face.property)
-                # Update the unique index for the properties
-                prop_indx = len(self.properties)
-            else:
-                # Get the index that corresponds to the property name and
-                # increment it by 1 (as indices start from 0)
-                prop_indx = self.properties.index(face.property) + 1
-
-            # Add the property ID in the list of properties: the index at
-            # which it is set corresponds to the 'no' attribute of the
-            # associated 'Face' object
-            self.property_ids[face.no - 1] = prop_indx
+            # Loop through the properties associated with the face
+            for p_type, value in face.properties.items():
+                # Add the property name to the corresponding dictionary, or
+                # create a new entry, if the property is not already present
+                if p_type not in self.properties:
+                    self.properties[p_type] = [value]
+                    prop_indx = 1
+                else:
+                    if value not in self.properties[p_type]:
+                        self.properties[p_type].append(value)
+                        # Update the unique index for the properties
+                        prop_indx = len(self.properties[p_type])
+                    else:
+                        # Get the index that corresponds to the property name
+                        # and increment it by 1 (as indices start from 0)
+                        prop_indx = self.properties[p_type].index(value) + 1
+                # Initialize the list of IDs associated with the property type
+                # if not already present
+                if p_type not in self.property_ids:
+                    self.property_ids[p_type] = [-1]*len(self.faces)
+                # Add the property ID in the list of properties for the
+                # current property type: the index at which it is set in the
+                # list corresponds to the 'no' attribute of the associated
+                # 'Face' object (-1 as 'no' starts from 1)
+                self.property_ids[p_type][face.no - 1] = prop_indx
 
 
 def write_tdt_file(tdt_data: TdtData) -> None:
@@ -196,6 +207,9 @@ def _write_header(file: TextIOWrapper, tdt_data: TdtData) -> None:
 def _write_regions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
     Function for writing to file the list of regions and macros.
+    Information about the latter ones is included only if the
+    ``PropertyType.MACRO`` has been assigned to the regions of the
+    layout.
 
     Parameters
     ----------
@@ -209,22 +223,24 @@ def _write_regions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     nbregions = len(tdt_data.faces)
     # Write a line in the file
     file.writelines(["*   flux region number per geometry region (mesh)\n"])
-
     # Write the list of region numbers
-    for i in range(1, nbregions):
-        file.write(f"{i:4d},")
-        # Write on a new line after 12 values
-        if i % 12 == 0: file.write("\n")
-    # Write the last region number without ','
-    file.write(f"{nbregions:4d}")
-    file.write("\n")
+    _write_values(file, range(1, nbregions + 1), 3, 12, ",")
 
-    # Write the information about the macros
-    file.writelines([
-        "*   names of macros\n",
-        "mac\n",
-        "*   macro order number per flux region\n",
-        f"{nbregions}*1\n"])
+    # Write the information about the macros, if any has been assigned to the
+    # regions of the layout
+    file.write("*   names of macros\n")
+    if PropertyType.MACRO not in tdt_data.properties:
+        file.writelines([
+            "mac\n",
+            "*   macro order number per flux region\n",
+            f"{nbregions}*1\n"]
+        )
+        return
+    # Write the macro names
+    _write_values(file, tdt_data.properties[PropertyType.MACRO], 7, 4)
+    # Write the macro index for each region
+    file.write("*   macro order number per flux region\n")
+    _write_values(file, tdt_data.property_ids[PropertyType.MACRO], 2, 12, ",")
 
 
 def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
@@ -376,14 +392,78 @@ def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     tdt_data : TdtData
         The instance of the ``TdtData`` class storing the information of
         the lattice geometry.
+
+    Raise
+    -----
+    RuntimeError
+        If no ``PropertyType.MATERIAL`` has been assigned to the regions of
+        the layout.
     """
-    # Write the names of the properties that are present in the lattice prior
-    # to the header line. Each line starts with a '#' so to be ignored.
-    for id, name in enumerate(tdt_data.properties):
+    # Check if the MATERIAL property type is included; if not, raise an
+    # exception
+    if PropertyType.MATERIAL not in tdt_data.properties:
+        raise("Error while writing the material indices of the layout's "
+              "regions. No 'PropertyType.MATERIAL' has been defined for any "
+              "of the layout's regions.")
+    # Write the names of the materials that are present in the layout on
+    # separate lines. Each line starts with a '#' so to be ignored.
+    mat_names = tdt_data.properties[PropertyType.MATERIAL]
+    for id, name in enumerate(mat_names):
         file.write(f"# {(id+1):2d} - {name}\n")
     # Write the header line for this section
     file.write("* medium number per region\n")
     # Loop through the IDs of the materials associated to a face
-    for material_id in tdt_data.property_ids:
+    mat_indices = tdt_data.property_ids[PropertyType.MATERIAL]
+    for material_id in mat_indices:
         # Write the ID of the material associated to a face to the TDT file
         file.write(f"  {material_id}\n")
+
+
+def _write_values(
+        file: TextIOWrapper,
+        values: List[int | str],
+        width: int,
+        items_per_line: int,
+        sep_char: str = ""
+    ) -> None:
+    """
+    Function for writing a sequence of values to a file with fixed width
+    formatting. Values are separated by a given character and a new line
+    is added after a specified number of items. The last value is written
+    without any trailing character.
+
+    Parameters
+    ----------
+    file : TextIOWrapper
+        Handle for the opened file to write.
+    values : List[int]
+        The list of indices or names to write in the TDT file.
+    width : int
+        The width formatting value used when writing the values.
+    items_per_line : int
+        The number of values written on the same line.
+    sep_char : str = ""
+        The character separating the values written on the same line.
+
+    Raises
+    ------
+    RuntimeError
+        If the values in the input list are not all integers or strings.
+    """
+    # Set the formatting type depending on the type of the values
+    if all(isinstance(v, int) for v in values):
+        formatting = 'd'
+    elif all(isinstance(v, str) for v in values):
+        formatting = 's'
+    else:
+        raise RuntimeError(
+            "Values in the input list must all be integers or strings.")
+    # Loop through the values of the given list, excluding the last one
+    for i, val in enumerate(values[:-1]):
+        # Write the value to file with the given width formatting
+        file.write(f" {val:{width}{formatting}}{sep_char}")
+        # Write on a new line after the given number of values
+        if (i + 1) % items_per_line == 0:
+            file.write("\n")
+    # Write last value without any trailing character
+    file.write(f" {values[-1]:{width}{formatting}}\n")

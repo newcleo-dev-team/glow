@@ -17,8 +17,8 @@ from glow.support.utility import build_compound_borders, \
     check_shape_expected_types, get_id_from_name, get_id_from_shape, \
     translate_wrt_reference
 from glow.interface.geom_interface import ShapeType, add_to_study, \
-    extract_sorted_sub_shapes, extract_sub_shapes, get_bounding_box, get_in_place, \
-    get_kind_of_shape, get_min_distance, get_point_coordinates, \
+    extract_sorted_sub_shapes, extract_sub_shapes, get_bounding_box, \
+    get_in_place, get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
     make_face, make_partition, make_vertex, make_vertex_inside_face, \
     make_vertex_on_curve, set_shape_name, update_salome_study
@@ -40,7 +40,7 @@ class Face():
     """
     face: Any
     """A GEOM face object representing a region of the lattice."""
-    property: str
+    properties: Dict[PropertyType, str]
     """The value of the property associated to the region."""
     no: int = field(init=False)
     """Global index of the face."""
@@ -86,7 +86,7 @@ class Face():
 
     def __str__(self) -> str:
         return f"Region {self.no}, name={get_shape_name(self.face)}, " + \
-               f"property={self.property}"
+               f"property={self.properties}"
 
 
 class Edge():
@@ -763,7 +763,7 @@ class LatticeDataExtractor():
         # Return the dictionary of edge names VS the list of connected faces
         return edges_name_vs_faces
 
-    def build_faces(self, property_type: PropertyType) -> None:
+    def build_faces(self, property_types: List[PropertyType]) -> None:
         """
         Method that builds a list of ``Face`` objects from the GEOM face
         objects, extracted from the layout regions, and the property
@@ -775,8 +775,8 @@ class LatticeDataExtractor():
 
         Parameters
         ----------
-        property_type : PropertyType = PropertyType.MATERIAL
-            The type of property associated to the layout regions.
+        property_type : List[PropertyType]
+            The list of property types associated to the layout regions.
 
         Raises
         ------
@@ -803,20 +803,27 @@ class LatticeDataExtractor():
                 raise RuntimeError(
                     "The lattice analysis failed: no properties have been "
                     f"assigned for region '{region.name}'.")
-            try:
-                value = region.properties[property_type]
-            except KeyError:
-                raise RuntimeError(
-                    f"The lattice analysis failed: no {property_type.name} "
-                    "property type has been defined for region "
-                    f"'{region.name}'")
-            if not value:
-                raise RuntimeError(
-                    "The lattice analysis failed: no value for the property "
-                    f"type {property_type.name} has been defined for region "
-                    f"'{region.name}'")
+            # Associate the values to the indicated property types for the
+            # current region
+            region_properties = {}
+            for p_type in property_types:
+                try:
+                    value = region.properties[p_type]
+                except KeyError:
+                    raise RuntimeError(
+                        f"The lattice analysis failed: no {p_type.name} "
+                        f"property type has been defined for region "
+                        f"'{region.name}'.")
+                if not value:
+                    raise RuntimeError(
+                        "The lattice analysis failed: no value for the "
+                        f"property type {p_type.name} has been defined for "
+                        f"region '{region.name}'.")
+                region_properties[p_type] = value
             # Build a 'Face' object and append to the corresponding list
-            self.subfaces.append(Face(region.face, value))
+            self.subfaces.append(
+                Face(region.face, deepcopy(region_properties))
+            )
 
     def print_log_analysis(
             self, edge_name_vs_faces: Dict[str, List[Any]]) -> None:
@@ -1223,8 +1230,8 @@ def analyse_lattice(
         tdt_config.geom_type,
         compound_to_analyse,
         tdt_config.type_geo)
-    # Call its method for performing the analysis
-    data_extractor.build_faces(tdt_config.property_type)
+    # Call its methods for performing the analysis
+    data_extractor.build_faces(tdt_config.property_types)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()
     data_extractor.build_edges(edge_name_vs_faces)
     data_extractor.build_boundaries()

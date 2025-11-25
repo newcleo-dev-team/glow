@@ -117,6 +117,8 @@ class PropertyType(Enum):
     """
     MATERIAL: int = 0
     """Identifying the material property type."""
+    MACRO: int = 1
+    """Identifying the macro region a region belongs to."""
 
 
 # Dictionary associating for each type of cells, the valid combinations of
