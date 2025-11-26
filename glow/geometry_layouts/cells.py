@@ -1148,6 +1148,37 @@ class Cell(ABC):
             # Associate a region with its properties
             self.tech_geom_props[tech_face] = prop_types
 
+    def update_properties(
+            self, properties: Dict[PropertyType, List[str]]) -> None:
+        """
+        Method that allows to updates the values of the given property types
+        for all the regions of the cell.
+
+        Parameters
+        ----------
+        properties : Dict[PropertyType, List[str]]
+            Dictionary collecting the properties for each cell's region;
+            different types, given by the ``PropertyType`` enumeration,
+            can be provided.
+        """
+        # Check if the number of cell regions coincides with the number of
+        # property elements for all the given property types
+        no_regions = len(self.tech_geom_props)
+        for prop_type, values in properties.items():
+            if not no_regions == len(values):
+                raise ValueError(
+                    "There is no correspondence between the number "
+                    f"of cell zones ({no_regions}) and that of the "
+                    f"properties with type '{prop_type.name}' (no. "
+                    f"{len(values)})")
+        # Update the dictionary of cell zones VS properties
+        for i, tech_face in enumerate(self.tech_geom_props):
+            # Collect all properties for a region
+            prop_types = {
+                type: values[i] for type, values in properties.items()}
+            # Associate a region with its properties
+            self.tech_geom_props[tech_face].update(prop_types)
+
     def __build_sector_regions(self) -> None:
         """
         Method for building the ``Region`` objects that corresponds to the
@@ -2139,8 +2170,10 @@ def get_region_info(shape: Any, regions: List[Region]) -> str:
             # Build the info about the region name and its properties
             if not region.properties:
                 return region.name + "\n   No associated properties."
+            properties = ""
             for prop_type, value in region.properties.items():
-                return region.name + f"\n   {prop_type.name}: {value}"
+                properties += f"\n   {prop_type.name}: {value}"
+            return region.name + properties
     else:
         raise RuntimeError("The indicated region could be found among "
                             "the cell's ones.")
