@@ -90,10 +90,6 @@ class Lattice():
         Flag indicating if the lattice geometry needs to be updated by
         rebuilding the ``Region`` objects.
     """
-    # Admitted values for the rotation angle (in degrees) of the cells in
-    # the lattice
-    VALID_CELLS_ANGLES: List[float] = [0.0, 90.0, 180.0, 270.0, 360.0]
-
     def __init__(self,
                  cells: List[Cell] = [],
                  name: str = "Lattice",
@@ -309,10 +305,11 @@ class Lattice():
         Raises
         ------
         RuntimeError
-            If given cells do not share the same rotation angle.
+            If given cells do not share the same rotation angle or it is not
+            among the admitted ones according to the cell's type.
         """
         # Get the rotation angle of the first cell in the list
-        cell_rot = math.degrees(cells[0].rotation)
+        cell_rot = round(math.degrees(cells[0].rotation), 6)
         # If any of the cells has a different angle, an exception is raised
         if not all(
             [math.isclose(math.degrees(cell.rotation), cell_rot)
@@ -326,7 +323,8 @@ class Lattice():
 
     def __check_cell_rotation_validity(self, cell_rot: float) -> None:
         """
-        Method that checks if the provided cell rotation angle is valid.
+        Method that checks if the provided cell rotation angle is valid
+        according to the cell's type.
 
         Parameters
         ----------
@@ -338,9 +336,16 @@ class Lattice():
         RuntimeError
             If the provided cell rotation angle is not among the valid ones.
         """
-        if not cell_rot in self.VALID_CELLS_ANGLES:
-            raise RuntimeError("Cells can only have any of the "
-                               f"{self.VALID_CELLS_ANGLES}° rotation angles")
+        # Admitted values for the rotation angle (in degrees) of the cells in
+        # the lattice depends on the type of the cells of the main pattern
+        if self.cells_type == CellType.RECT:
+            valid_cells_angle = [i for i in range(0, 450, 90)]
+        else:
+            valid_cells_angle = [i for i in range(0, 390, 30)]
+        if abs(cell_rot) not in valid_cells_angle:
+            raise RuntimeError(
+                f"Cells can only have any of the {valid_cells_angle}° "
+                f"rotation angles. Current value is {cell_rot}.")
 
     def __evaluate_lattice_center(
             self,
@@ -2125,8 +2130,12 @@ class Lattice():
             self.lattice_symm = make_rotation(
                 self.lattice_symm, z_axis, rotation)
         # Update the rotation angle of the main pattern of cells
-        self.__cells_rot = self.__evaluate_cells_rotation(self.lattice_cells)
-
+        try:
+            self.__cells_rot = self.__evaluate_cells_rotation(
+                self.lattice_cells)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Error while rotating the lattice by {angle}°.") from e
         # Set the need to update the lattice geometry
         self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study
