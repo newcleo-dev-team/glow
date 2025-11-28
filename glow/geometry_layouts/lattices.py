@@ -2089,33 +2089,102 @@ class Lattice():
     def rotate(self, angle: float = 0.0) -> None:
         """
         Method that rotates all the lattice's geometric elements by the given
-        angle in degrees. They are its compound objects representing its full
-        and partial (if any symmetry is applied) geometry layout, the
-        contained cells, including the box, if present, and all the regions.
+        angle in degrees around the Z-axis originating from the lattice's
+        centre.
+        The rotated elements are the lattice's compound objects representing
+        its full and partial (if any symmetry is applied) geometry layouts,
+        the contained cells, including the box, if present, and all the
+        ``Region`` objects.
 
         Parameters
         ----------
         angle : float
             The rotation angle in degrees.
+
+        Raises
+        ------
+        RuntimeError
+            If the lattice's cells have an invalid rotation angle after their
+            rotation.
         """
         # Return immediately if the rotation angle is 0.0
         if math.isclose(angle, 0.0):
             print("No rotation is performed as the given angle is 0.0°")
             return
-        # Convert the rotation angle in radians
-        rotation = math.radians(angle)
-
         # Build the Z-axis of rotation
         x, y, _ = get_point_coordinates(self.lattice_center)
         z_axis = make_vector_from_points(
             self.lattice_center, make_vertex((x, y, 1)))
+        # Apply the rotation of all the lattice's geometric elements around
+        # the given axis
+        self.__apply_rotation(angle, z_axis)
+
+    def rotate_from_axis(self, angle: float, axis: Any) -> None:
+        """
+        Method that rotates all the lattice's geometric elements by the given
+        angle in degrees around the given axis object.
+        The rotated elements are the lattice's compound objects representing
+        its full and partial (if any symmetry is applied) geometry layouts,
+        the contained cells, including the box, if present, and all the
+        ``Region`` objects.
+
+        Parameters
+        ----------
+        angle : float
+            The angle of rotation in degrees.
+        axis : Any
+            The vector object representing the rotation axis.
+
+        Raises
+        ------
+        RuntimeError
+            If the lattice's cells have an invalid rotation angle after their
+            rotation.
+        """
+        # Return immediately if the rotation angle is 0.0
+        if math.isclose(angle, 0.0):
+            print("No rotation is performed as the given angle is 0.0°")
+            return
+        # Apply the rotation of all the lattice's geometric elements around
+        # the given axis
+        self.__apply_rotation(angle, axis)
+
+    def __apply_rotation(self, angle: float, axis: Any) -> None:
+        """
+        Method that rotates all the lattice's geometric elements by the given
+        angle in degrees around the given axis object.
+        The rotated elements are the lattice's compound objects representing
+        its full and partial (if any symmetry is applied) geometry layouts,
+        the contained cells, including the box, if present, and all the
+        ``Region`` objects.
+
+        Parameters
+        ----------
+        angle : float
+            The angle of rotation in degrees.
+        axis : Any
+            The vector object representing the rotation axis.
+
+        Raises
+        ------
+        RuntimeError
+            If lattice's cells do not share the same rotation angle after
+            applying the rotation or the value is not among the admitted
+            ones according to the cell's type.
+        """
+        # Convert the rotation angle in radians
+        rotation = math.radians(angle)
+        # Rotate the lattice center
+        self.lattice_center = make_rotation(
+            self.lattice_center, axis, rotation
+        )
         # Rotate the lattice compound
-        self.lattice_cmpd = make_rotation(self.lattice_cmpd, z_axis, rotation)
+        self.lattice_cmpd = make_rotation(self.lattice_cmpd, axis, rotation)
         # Loop through all the layers to rotate the cells
         rotated_layers: List[List[Cell]] = []
         for layer in self.layers:
             rotated_layers.append(
-                self.__rotate_cells(layer, angle, z_axis))
+                self.__rotate_cells(layer, angle, axis))
         # Update the data structure holding the rotated cells for each layer
         self.layers = [
             [cell for cell in layer] for layer in rotated_layers]
@@ -2123,12 +2192,12 @@ class Lattice():
         self.lattice_cells = [cell for layer in self.layers for cell in layer]
         # Rotate the lattice box, if any
         if self.__lattice_box:
-            self.__lattice_box.rotate_from_axis(angle, z_axis)
+            self.__lattice_box.rotate_from_axis(angle, axis)
         # Rotate the lattice compound on which a symmetry operation has been
         # applied, if any
         if self.symmetry_type != SymmetryType.FULL:
             self.lattice_symm = make_rotation(
-                self.lattice_symm, z_axis, rotation)
+                self.lattice_symm, axis, rotation)
         # Update the rotation angle of the main pattern of cells
         try:
             self.__cells_rot = self.__evaluate_cells_rotation(
