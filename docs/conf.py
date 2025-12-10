@@ -63,7 +63,7 @@ national_sec = {"country": "4", "sec_level": "1", }
 itns = "1"
 distribution_list = "C\&M all, Luciano Cinotti, ECD/Massimo Ciambrella"
 bibtex_bibfiles = [os.path.join(SOURCE_DIR_NAME, 'glow.bib')]
-latex_theme_to_use = "nwcldocs"
+latex_theme_to_use = "manual"
 
 
 # -- Global substitutions ----------------------------------------------------
