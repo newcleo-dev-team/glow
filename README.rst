@@ -205,6 +205,9 @@ executing the following command in the folder ``docs``:
 To see the available templates for generating the documentation in *PDF*
 format and to choose among them, please look at the ``docs/conf.py`` file.
 
+The *html* documentation is available on GitHub Pages at
+https://newcleo-dev-team.github.io/glow/.
+
 .. _How to Contribute:
 
 How to Contribute
