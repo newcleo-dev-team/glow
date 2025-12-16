@@ -2581,7 +2581,7 @@ class Lattice():
             for cell in layer:
                 cell.update_properties(
                     {PropertyType.MACRO: [
-                        f"{base_name}{index_0}"]*len(cell.tech_geom_props)
+                        f"{base_name}{index_0:03d}"]*len(cell.tech_geom_props)
                     }
                 )
                 index_0 += 1

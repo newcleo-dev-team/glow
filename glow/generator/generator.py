@@ -191,13 +191,17 @@ def _write_header(file: TextIOWrapper, tdt_data: TdtData) -> None:
     typegeom   = tdt_data.type_geo.value
     # Get the number of folds of the lattice
     nb_folds   = tdt_data.nb_folds
+    # Get the number of macro regions, if any
+    nb_macros = 1
+    if PropertyType.MACRO in tdt_data.properties:
+        nb_macros = len(tdt_data.properties[PropertyType.MACRO])
     file.writelines([
          "\n",
          "	dat input file for DRAGON5\n",
          "------------------------------------------------------------\n\n\n",
          "* typge, nbfo, node, elem, macr, nreg,    z, mac2\n",
         f"  {typegeom:5d},{nb_folds:5d}, {nbnodes:5d}, {nbelements:5d}, "
-        f"{1:5d},{nbregions:5d}, {0:5d}, {1:5d}\n",
+        f"{nb_macros:5d},{nbregions:5d}, {0:5d}, {1:5d}\n",
          "* index  kindex\n",
         f"  {tdt_data.impressions[0]:5d}  {tdt_data.impressions[1]:6d}  1\n",
          "*     eps    eps0\n",
