@@ -1205,8 +1205,10 @@ class Lattice():
 
         # Update the compound object storing the applied symmetry
         if self.symmetry_type != SymmetryType.FULL:
-            self.lattice_symm = make_common(self.lattice_cmpd,
-                                            self.lattice_symm)
+            # Extract the shape of the symmetry by extracting its
+            # borders and building a face object
+            shape = make_face(build_compound_borders(self.lattice_symm))
+            self.lattice_symm = make_common(self.lattice_cmpd, shape)
 
     def __assemble_box(self, geo_type: GeometryType) -> None:
         """
@@ -2552,6 +2554,37 @@ class Lattice():
 
         # Set the need to update the lattice geometry
         self.is_update_needed = True
+
+    def assign_macro_to_cells(
+            self, index_0: int = 1, base_name: str = "MAC") -> None:
+        """
+        Method that assignes the names of the property ``PropertyType.MACRO``
+        to the cells the lattice is made of.
+        Given the starting index and the base name of the macros, a loop
+        through all the cells and the lattice's box is performed. All the
+        regions of a cell will share the same name of the macro made by the
+        base name plus the increasing index.
+
+        Parameters
+        ----------
+        index_0: int
+            The index to start from when setting the macros to the cells'
+            regions.
+        base_name : str
+            The base name of the macros which defaults to 'MAC'.
+        """
+        box_layer = []
+        if self.lattice_box:
+            box_layer = [self.lattice_box]
+        # Loop through the lattice's cells first and then the box cell, if any
+        for layer in self.layers + [box_layer]:
+            for cell in layer:
+                cell.update_properties(
+                    {PropertyType.MACRO: [
+                        f"{base_name}{index_0}"]*len(cell.tech_geom_props)
+                    }
+                )
+                index_0 += 1
 
 
 def get_compound_from_geometry(
