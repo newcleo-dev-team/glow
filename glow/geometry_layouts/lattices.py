@@ -2200,13 +2200,6 @@ class Lattice():
         if self.symmetry_type != SymmetryType.FULL:
             self.lattice_symm = make_rotation(
                 self.lattice_symm, axis, rotation)
-        # Update the rotation angle of the main pattern of cells
-        try:
-            self.__cells_rot = self.__evaluate_cells_rotation(
-                self.lattice_cells)
-        except RuntimeError as e:
-            raise RuntimeError(
-                f"Error while rotating the lattice by {angle}°.") from e
         # Set the need to update the lattice geometry
         self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study

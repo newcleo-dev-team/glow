@@ -5,18 +5,17 @@ of the geometry layouts.
 import math
 import random
 
-from types import CellType
 from typing import Any, List, Tuple
 
-from glow.interface.geom_interface import ShapeType, add_to_study, \
+from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
-    get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, get_kind_of_shape, \
-    get_min_distance, get_point_coordinates, get_selected_object, \
-    get_shape_name, get_shape_type, is_gui_available, make_cdg, make_compound, \
-    make_cut, make_edge, make_face, make_fuse, make_partition, \
-    make_translation, make_vector_from_points, make_vertex
-from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, LatticeGeometryType, \
-    SymmetryType
+    get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, \
+    get_kind_of_shape, get_min_distance, get_point_coordinates, \
+    get_selected_object, get_shape_name, get_shape_type, \
+    is_gui_available, make_cdg, make_cut, make_edge, make_face, make_fuse, \
+    make_partition, make_translation, make_vector_from_points, make_vertex
+from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, CellType, \
+    LatticeGeometryType, SymmetryType
 
 
 # List of the RGB color codes taken by varying each RGB value with steps of 10
@@ -94,7 +93,7 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
     """
     # Extract a list of closed boundaries from the given compound object
     closed_boundaries = get_closed_free_boundary(
-        make_partition([cmpd], [], ShapeType.COMPOUND))
+        make_partition([cmpd], [], ShapeType.FACE))
     # Handle the case where more than a closed wire is extracted from
     # the compound
     if len(closed_boundaries) > 1:
