@@ -12,7 +12,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
     get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, get_kind_of_shape, \
     get_min_distance, get_point_coordinates, get_selected_object, \
-    get_shape_name, get_shape_type, is_gui_available, make_cdg, make_compound, \
+    get_shape_name, get_shape_type, is_gui_available, make_arc_edge, make_cdg, make_compound, \
     make_cut, make_edge, make_face, make_fuse, make_partition, \
     make_translation, make_vector_from_points, make_vertex
 from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, LatticeGeometryType, \
@@ -68,6 +68,88 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
     if get_shape_type(cut) != ShapeType.COMPOUND:
         return False
     return len(extract_sub_shapes(cut, shapes_type)) == 0
+
+
+def build_arcs_for_rounded_corners(
+        rounded_corners: List[Tuple[int, float]],
+        center: Tuple[float, float, float],
+        height: float,
+        width: float) -> List[Any]:
+    """
+    Function that builds the arcs (as GEOM edge objects) that represent the
+    rounded corners of a rectangle with given dimensions.
+    The information about which corners are rounded and the corresponding
+    radius is provided by the `rounded_corners` input list.
+
+    Parameters
+    ----------
+    rounded_corners : List[Tuple[int, float]]
+        List of tuples containing the rectangle corner ID and the
+        corresponding radius.
+    center : Tuple[float, float, float]
+        The XYZ coordinates of the center of the rectangle.
+    height : float
+        The height of the rectangle.
+    width : float
+        The width of the rectangle.
+
+    Returns
+    -------
+    List[Any]
+        A list of GEOM edge objects representing the arcs of circle for
+        the rounded corners on the borders of the rectangle.
+    """
+    arcs = []
+    max_radius = min(width/2, height/2)
+    for rc in rounded_corners:
+        # Check the radius of the corner does not exceed the minimum
+        # among the characteristic dimensions
+        if rc[1] > max_radius:
+            raise RuntimeError(
+                f"The corner no. {rc[0]} has a radius of {rc[1]} that "
+                f"exceeds the maximum allowed value of {max_radius}.")
+        # Build the XY coordinates of the arc's start/end points and its
+        # center
+        match rc[0]:
+            case 0:
+                # Calculate the XY coordinates of the corner
+                x0 = center[0] - width/2
+                y0 = center[1] - height/2
+                # Build the GEOM objects to create an arc
+                xy1 = x0, y0 + rc[1]
+                xy2 = x0 + rc[1], y0
+                cxy = (x0 + rc[1], y0 + rc[1])
+            case 1:
+                # Calculate the XY coordinates of the corner
+                x0 = center[0] + width/2
+                y0 = center[1] - height/2
+                # Build the GEOM objects to create an arc
+                xy1 = x0 - rc[1], y0
+                xy2 = x0, y0 + rc[1]
+                cxy = (x0 - rc[1], y0 + rc[1])
+            case 2:
+                # Calculate the XY coordinates of the corner
+                x0 = center[0] + width/2
+                y0 = center[1] + height/2
+                # Build the GEOM objects to create an arc
+                xy1 = x0, y0 - rc[1]
+                xy2 = x0 - rc[1], y0
+                cxy = (x0 - rc[1], y0 - rc[1])
+            case 3:
+                # Calculate the XY coordinates of the corner
+                x0 = center[0] - width/2
+                y0 = center[1] + height/2
+                # Build the GEOM objects to create an arc
+                xy1 = x0 + rc[1], y0
+                xy2 = x0, y0 - rc[1]
+                cxy = (x0 + rc[1], y0 - rc[1])
+        v1 = make_vertex((*xy1, 0.0))
+        v2 = make_vertex((*xy2, 0.0))
+        cv = make_vertex((*cxy, 0.0))
+        # Add the arc edge to the list
+        arcs.append(make_arc_edge(cv, v1, v2))
+    # Return the built arcs
+    return arcs
 
 
 def build_compound_borders(cmpd: Any) -> List[Any]:
@@ -181,6 +263,27 @@ def build_contiguous_edges(vertices: List[Any]) -> List[Any]:
         # Build and return a list of the contiguous edges
         edges.append(make_edge(vertices[i], vertices[(i+1) % len(vertices)]))
     return edges
+
+
+def build_z_axis_from_vertex(vertex: Any) -> Any:
+    """
+    Function that builds an axis originating from the given GEOM vertex and
+    being perpendicular to the XY plane.
+
+    Parameters
+    ----------
+    vertex : Any
+        The GEOM vertex being the origin point of the Z-axis.
+
+    Returns
+    -------
+    Any
+        The GEOM edge being the Z-axis originating from the given vertex.
+    """
+    # Get the vertex coordinates
+    v_x, v_y, _ = get_point_coordinates(vertex)
+    # Return the vector
+    return make_vector_from_points(vertex, make_vertex((v_x, v_y, 1.0)))
 
 
 def check_shape_expected_types(shape: Any,
@@ -502,6 +605,34 @@ def retrieve_selected_object(error_msg: str) -> Any:
     if not shape:
         raise RuntimeError(error_msg)
     return shape
+
+
+def sort_shapes_from_vertex(
+        shapes: List[Any], vertex: Any, reverse: bool = False) -> List[Any]:
+    """
+    Function that sorts the given shapes based on their minimum distance from
+    a given vertex.
+
+    Parameters
+    ----------
+    shapes : List[Any]
+        A list of shape objects to sort.
+    vertex : Any
+        The reference vertex used to compute distances.
+    reverse : bool = False
+        The sorting order. It defaults to ``False``
+
+    Returns
+    -------
+    List[Any]
+        A new list of shapes sorted (by default in ascending order) according
+        to their minimum distance from the given vertex.
+    """
+    return sorted(
+        shapes,
+        key=lambda shape: get_min_distance(vertex, shape),
+        reverse=reverse
+    )
 
 
 def sort_vertices_radially(vertices) -> List[Any]:
