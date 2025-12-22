@@ -6,15 +6,19 @@ import math
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Any, Dict, List, Self, Sequence, Tuple
+from typing import Any, Dict, List, Self, Sequence, Set, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
-from glow.interface.geom_interface import add_to_study, clear_view, \
-    display_shape, get_basic_properties, get_bounding_box, get_object_from_id, get_point_coordinates, make_cdg, make_common, \
-    make_rotation, make_scale, make_translation, make_vector_from_points, \
-    make_vertex, remove_from_study, update_salome_study
+from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
+    display_shape, extract_sub_shapes, get_basic_properties, get_bounding_box, \
+    get_closed_free_boundary, get_min_distance, get_object_from_id, \
+    get_point_coordinates, get_shape_type, is_point_inside_shape, make_cdg, make_common, \
+    make_compound, make_cut, make_face, make_partition, make_rotation, \
+    make_scale, make_translation, make_vector_from_points, make_vertex, \
+    make_vertex_inside_face, remove_from_study, update_salome_study
 from glow.support.types import GeometryType, PropertyType
+from glow.support.utility import generate_unique_random_colors
 
 
 DEFAULT_REGION_COLOR: Tuple[int, int, int] = (167, 167, 167)
@@ -48,7 +52,7 @@ class Layout(ABC):
     o : Vertex
         The ``Vertex`` object representing the centre of the GEOM object.
     rot_angle : float
-        The rotation angle of the GEOM object wrt the X-axis.
+        The rotation angle (in degrees) of the GEOM object wrt the X-axis.
     """
     def __init__(self) -> None:
         super().__init__()
@@ -72,7 +76,7 @@ class Layout(ABC):
         """
 
     @abstractmethod
-    def rotate_from_axis(self, angle: float, axis: Edge) -> None:
+    def _rotate_from_axis(self, angle: float, axis: Edge) -> None:
         """
         Abstract method for rotating the layout by the given angle (in
         degrees) around the given axis.
@@ -241,9 +245,9 @@ class Region(Face, Layout):
             )
         )
         # Rotate the surface elements
-        self.rotate_from_axis(angle, z_axis)
+        self._rotate_from_axis(angle, z_axis)
 
-    def rotate_from_axis(self, angle: float, axis: Edge) -> None:
+    def _rotate_from_axis(self, angle: float, axis: Edge) -> None:
         """
         Method for rotating the region by the given angle (in degrees)
         around the given axis.
@@ -298,9 +302,9 @@ class Region(Face, Layout):
         Parameters
         ----------
         *args : Any
-            Positional arguments.
+            Positional arguments. Must not be provided.
         **kwargs : Any
-            Key arguments.
+            Key arguments. Must not be provided.
         """
         # Check that no args or kwargs are provided
         if args or kwargs:
@@ -342,6 +346,7 @@ class Region(Face, Layout):
             The new layout to update the current region with.
         """
         self.geom_obj = layout.geom_obj
+        self.o = wrap_shape(make_cdg(layout))
 
     def __add__(self, other: Self | Sequence[Self]) -> Self:
         """
@@ -501,7 +506,7 @@ class Fillable(Compound, Layout):
     def __init__(self) -> None:
         super().__init__(None)
         # Initialize attributes
-        self.layers: List[List[Region | Self]] = [[]]
+        self.layers: List[List[Region | Self]] = []
         self.geometry_maps: Dict[GeometryType, Compound] = {}
         self.is_update_needed: bool = False
         self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
@@ -510,7 +515,8 @@ class Fillable(Compound, Layout):
     def add(self,
             layout: Region | Self,
             position: Tuple[float, float, float] | None = None,
-            layer_index: int | None = None) -> None:
+            layer_index: int | None = None
+        ) -> None:
         """
         Method that adds a generic layout, i.e. either a ``Region`` or a
         `Fillable` object, to the technological geometry layout of this
@@ -520,18 +526,12 @@ class Fillable(Compound, Layout):
         coordinates of its CDG match the indicated position. If no position
         is provided, the layout object is placed in the CDG of this instance.
         The given layout is stored at the end of the sublist of the ``layers``
-        attribute that is specified by the indicated parameter
+        attribute that is specified by the value of the indicated parameter
         ``layer_index``, if any. Otherwise, a new sublist (i.e. a new layer)
         is created with the given layout.
         If the layer index value is not valid, an exception is raised.
-
-        This method simply updates the list of layers of the technological
-        geometry layout with the given layout without collapsing the layers
-        and updating the entire GEOM compound object this instance refers to.
-        To collapse the layers and build the regions of this instance without
-        displaying the geometry in the 3D viewer of SALOME, call the method
-        ``build_regions``. To build and display the geometry layout, call the
-        method ``show``.
+        Please note that, when providing layouts on the same layer, they must
+        not overlap.
 
         Parameters
         ----------
@@ -548,17 +548,19 @@ class Fillable(Compound, Layout):
 
         Raises
         ------
-        RuntimeError
-            If the size of the given layout object is greater than the size
-            of the current compound domain.
         ValueError
             If the indicated layer index is not valid.
+
+        Notes
+        -----
+        This method simply updates the list of layers of the technological
+        geometry layout with the given layout without collapsing the layers
+        and updating the entire GEOM compound object this instance refers to.
+        To collapse the layers and build the regions of this instance without
+        displaying the geometry in the 3D viewer of SALOME, call the method
+        ``build_regions``. To build and display the geometry layout, call the
+        method ``show``.
         """
-        # Check whether the given layout is within the current compound domain
-        if not is_layout_contained(self, layout):
-            raise RuntimeError(
-                f"The size of the given '{layout.name}' layout object "
-                "exceeds that of the current compound domain.")
         # Set the given layout name to include the one of the current compound
         layout.name = f"{self.name}_{layout.name}"
         # Set the given layout position to the current compound centre, if no
@@ -585,6 +587,216 @@ class Fillable(Compound, Layout):
 
         # Indicate the need to update the layout by building its regions
         self.is_update_needed = True
+
+    def build_regions(self) -> None:
+        """
+        Method that processes the layers of the current instance object to
+        construct a list of ``Region`` objects that are representative of
+        the technological geometry layout.
+        These regions are the result of collapsing all the layers by
+        traversing the entire hierarchical structure in reverse order, and
+        cutting the regions of the layers that are overlapped. This operation
+        is skipped and the method exits without changes if there is no need
+        to update the technological geometry layout (i.e. the value of the
+        attribute ``is_update_needed`` is ``False``).
+
+        The operation of assembling all the layers requires that each layout
+        is up-to-date. This means that each ``Fillable`` object in the list
+        of layers is further processed by recursively calling this method to
+        collapse its own layers.
+
+        Given the updated layout objects for each layer, the corresponding
+        ``Region`` objects are retrieved and a flat list is populated.
+        Finally, the GEOM compound object representative of this instance is
+        updated by performing a partition with all the built ``Region``
+        objects.
+        """
+        # Return immediately if there is no need to update the layout
+        if not self.is_update_needed:
+            return
+        # Reverse the layers
+        reversed_layers = self.layers[::-1]
+        # Ensure the layout is up-to-date for each 'Fillable' object by
+        # recursively calling this method
+        for layer in reversed_layers:
+            for layout in layer:
+                if isinstance(layout, Fillable):
+                    layout.build_regions()
+        # Collapse all the layers and cut out the overlapping regions
+        self._collapse_layers()
+        # Clear and rebuild the list of regions from those of each layer
+        self.regions.clear()
+        for layer in reversed_layers:
+            for layout in layer:
+                if isinstance(layout, Region):
+                    self.regions.append(layout)
+                elif isinstance(layout, Fillable):
+                    self.regions.extend(layout.regions)
+
+        # Update the GEOM compound object of this instance
+        self.geom_obj = make_partition(self.regions, [], ShapeType.COMPOUND)
+        # Update the flag stating there is no need to rebuild the regions
+        self.is_update_needed = False
+
+    def clone(self) -> Self:
+        """
+        Method that returns a copy of the current ``Fillable`` instance.
+
+        Returns
+        -------
+        Self
+            A copy of the current instance.
+        """
+        return deepcopy(self)
+
+    def update(self, layout: Compound | Face) -> None:
+        """
+        Method for updating the GEOM object this instance refers to.
+
+        Parameters
+        ----------
+        layout : Compound | Face
+            The new layout to update the current instance with.
+        """
+        self.geom_obj = layout.geom_obj
+        self.o = wrap_shape(make_cdg(layout))
+
+    def _apply_cut_to_layouts_in_layer(
+            self, layer: List[Region | Self], cutting_tool: Face) -> None:
+        """
+        Method that applies a cutting operation to all layout objects within
+        a given layer using the given ``Face`` object as cutting tool.
+
+        A loop through all the layout objects of the given layer is performed
+        to handle the overlap operations:
+        - if the distance between the cutting tool and the layout object is
+          greater than 0 (with a tolerance), no overlapping is expected and a
+          new layout is considered;
+        - the cut operation is performed and, if the resulting shape does not
+          contain any GEOM face object, it means the layout object is
+          completely overlapped and its index in the layer list is stored;
+        - if the layout object is a ``Region`` instance, its GEOM face is
+          updated with the result of the cut, if it is a GEOM face, otherwise
+          if the cut results in multiple faces, each is inserted as a new
+          ``Region`` and the original instance is removed;
+        - if the layout object is a ``Fillable`` instance, its GEOM compound
+          is updated with the result of the cut and the same operation is
+          recursively applied to its ``Region`` objects;
+        - lastly, the layout objects completely overlapped are removed by the
+          list of objects of the given sub-layer.
+
+        Parameters
+        ----------
+        layer : List[Region | Self]
+            The list of layout objects in the layer to be cut.
+        cutting_tool : Face
+            The geometric shape used to cut the layouts in the layer.
+        """
+        # List storing the indices of the layouts to remove from the
+        # sub-layer, as completely overlapped
+        layouts_to_remove: List[int] = []
+        # Loop through all the layout objects of the sub-layer and perform
+        # the cuts
+        for i, layout in enumerate(layer):
+            # Continue with the next layout in the sub-layer if the current
+            # layout is not close to the layer
+            if get_min_distance(layout, cutting_tool) > 1e-6:
+                continue
+            # Cut the layout with the layer shape and check the result
+            cut_layout = make_cut(layout, cutting_tool)
+            if not extract_sub_shapes(
+                make_compound([cut_layout]), ShapeType.FACE
+            ):
+                layouts_to_remove.append(i)
+                continue
+            # Update the layout object according to its type and the result
+            # of the cut operation
+            is_cut_a_cmpd = get_shape_type(cut_layout) == ShapeType.COMPOUND
+            if isinstance(layout, Region):
+                # Substitute the Region with those resulting from the cut
+                if is_cut_a_cmpd:
+                    layer.pop(i)
+                    for j, face in enumerate(
+                        extract_sub_shapes(cut_layout, ShapeType.FACE)
+                    ):
+                        # Create a new region for each subface
+                        layer.insert(
+                            i+j, Region(face, layout.name, layout.properties))
+                    continue
+                layer[i].update(wrap_shape(cut_layout))
+            elif isinstance(layout, Fillable):
+                layer[i].update(wrap_shape(cut_layout))
+                # Recursively apply the cut
+                self._apply_cut_to_layouts_in_layer(
+                    layer[i].regions, cutting_tool)
+
+        # Remove the layouts completely overlapped by the superior layer
+        for index in sorted(layouts_to_remove, reverse=True):
+            layer.pop(index)
+
+    def _collapse_layers(self) -> None:
+        """
+        Method that collapses all the layers (a list containing lists of
+        ``Region`` or ``Fillable`` objects) of the current instance by
+        traversing them in reverse order.
+        If any compound object of a layer overlaps any layer below it, its
+        ``Region`` objects are cut by the higher layer compound.
+
+        Notes
+        -----
+        Layout objects belonging to the same layer should not overlap each
+        other.
+        """
+        # Reverse the list of layers
+        reversed_layers = self.layers[::-1]
+        for i, layer in enumerate(reversed_layers):
+            # Skip the layer, if empty
+            if not layer:
+                continue
+            # Loop through all the layers below the current one to cut all the
+            # layout objects of each sublayer, if any is overlapped.
+            for sub_layer in reversed_layers[i + 1:]:
+                # Skip the layer, if empty
+                if not sub_layer:
+                    continue
+                # Overlap the current layer onto the layers below
+                self._overlap_layer_to(reversed_layers[i], sub_layer)
+
+    def _overlap_layer_to(
+            self, layer: List[Region | Self], sub_layer: List[Region | Self]
+        ) -> None:
+        """
+        Method that overlaps a layer, whose shape is derived from its layout
+        objects, onto a layer below it, which is given as a list of ``Region``
+        and/or ``Fillable`` objects.
+        The shape of the layer, which acts as the cutting tool for the layout
+        objects of the given sub-layer is determined on the basis of the
+        number of closed boundaries that can be extracted by the compound of
+        the layer. When more than one are found, a partition operation is
+        performed to reduce the number of closed boundaries to the minimum.
+        In any case, a GEOM face is built from the found boundaries. If
+        multiple boundaries are found, the resulting shape may have holes.
+        The cut operation is then performed on the sublayer by using the built
+        shape as cutting tool.
+
+        Parameters
+        ----------
+        layer : List[Region | Self]
+            The superior layer representing the cutting tool.
+        sub_layer : List[Region | Self]
+            The inferior layer whose layout objects are cut by the superior
+            layer.
+        """
+        # Build the shape of the layer compound
+        layer_cmpd = make_compound(layer)
+        boundaries = get_closed_free_boundary(layer_cmpd)
+        if len(boundaries) > 1:
+            boundaries = get_closed_free_boundary(
+                make_partition(layer, [], ShapeType.FACE)
+            )
+        layer_shape = make_face(boundaries)
+        # Apply the cut on the layout objects of the sub-layer
+        self._apply_cut_to_layouts_in_layer(sub_layer, layer_shape)
 
 
 def is_layout_contained(
@@ -638,3 +850,99 @@ def is_layout_contained(
     common = make_common(container, candidate)
     area_common = get_basic_properties(common)[1]
     return abs(area_common - area_candidate) < tolerance * area_candidate
+
+
+def associate_colors_to_regions(
+        property_type: PropertyType | None, regions: List[Region]) -> None:
+    """
+    Method that assigns the same color to all the regions having the same
+    value for the given property type.
+
+    Parameters
+    ----------
+    property_type : PropertyType | None
+        The type of property for which colors must be assigned to regions
+        having the same property type value. If ``None``, the regions
+        color is reset to its default value.
+    regions : List[Region]
+        The list of ``Region`` objects to colour according to the value of
+        the associated property type.
+    """
+    # If no colorset to display, reset the region colors
+    if not property_type:
+        for region in regions:
+            # Set the region color to its default value
+            region.reset_region_color()
+        return
+    # Extract the unique values of the given property type associated to
+    # each region
+    values = get_unique_values_for_property(property_type, regions)
+    # Generate a specific amount of colors as the number of different
+    # values for the same given property type
+    colors = generate_unique_random_colors(len(values))
+    # Build a dictionary of values for the given property type VS color
+    property_vs_color = dict(zip(values, colors))
+    # Loop through all the regions and assign a color corresponding to
+    # the value of the given property type
+    for region in regions:
+        # Get the value of the given property type associated to the
+        # region
+        value = region.properties[property_type]
+        # Set the region color
+        region.set_region_color(property_vs_color[value])
+
+
+def get_unique_values_for_property(
+        property_type: PropertyType, regions: List[Region]) -> List[str]:
+    """
+    Method that gets the unique values of the given property type for the
+    given regions. If any ``Region`` object does not have any property
+    or the given property type is missing, a reference point for the
+    region is stored for logging purposes.
+    An exception showing the coordinates of the points of the problematic
+    regions is raised.
+
+    Parameters
+    ----------
+    property_type : PropertyType
+        The type of property whose unique values to collect.
+    regions : List[Region]
+        The list of ``Region`` objects to select the unique values associated
+        to the indicated ``PropertyType``.
+
+    Returns
+    -------
+    List[str]
+        A list of the unique names for the given property type that have
+        been associated to the given regions.
+
+    Raises
+    ------
+    RuntimeError
+        Showing the coordinates of the points of the regions having any
+        issue.
+    """
+    values = set()
+    missing_regions_points = []
+    for region in regions:
+        if not region.properties or property_type not in region.properties:
+            missing_regions_points.append(
+                get_point_coordinates(
+                    make_vertex_inside_face(region)))
+            region.set_region_color((255, 0, 0))
+            continue
+        values.add(region.properties[property_type])
+    # Raise an exception if there are regions with missing property
+    if missing_regions_points:
+        message = (
+            f"No {property_type.name} property type has been found "
+            "for the regions identified by the inner points with "
+            f"coordinates: ")
+        for point in missing_regions_points[:-1]:
+            message += f"'{point}', "
+        message += (f"'{missing_regions_points[-1]}'. Please, call the "
+            + "'show()' method to show the regions, select the one with "
+            + "a missing property and call the 'set_region_property()' "
+            + "method to assign the property to.")
+        raise RuntimeError(message)
+    return list(values)
