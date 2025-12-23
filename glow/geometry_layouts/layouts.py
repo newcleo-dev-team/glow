@@ -10,14 +10,14 @@ from typing import Any, Dict, List, Self, Sequence, Set, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
-from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
+from glow.interface.geom_interface import ShapeType, add_to_study, add_to_study_in_father, clear_view, \
     display_shape, extract_sub_shapes, get_basic_properties, get_bounding_box, \
     get_closed_free_boundary, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_shape_type, is_point_inside_shape, make_cdg, make_common, \
     make_compound, make_cut, make_face, make_partition, make_rotation, \
     make_scale, make_translation, make_vector_from_points, make_vertex, \
-    make_vertex_inside_face, remove_from_study, update_salome_study
-from glow.support.types import GeometryType, PropertyType
+    make_vertex_inside_face, remove_from_study, set_color_face, update_salome_study
+from glow.support.types import GeometryType, PropertyType, SymmetryType
 from glow.support.utility import generate_unique_random_colors
 
 
@@ -101,7 +101,7 @@ class Layout(ABC):
         """
 
     @abstractmethod
-    def show(self, *args: Any, **kwargs: Any) -> None:
+    def show(self, *args: Any) -> None:
         """
         Abstract method for displaying the layout in the 3D viewer of SALOME
         according to the given settings.
@@ -109,9 +109,7 @@ class Layout(ABC):
         Parameters
         ----------
         *args : Any
-            Positional arguments.
-        **kwargs : Any
-            Key arguments.
+            Positional arguments providing the display settings.
         """
 
     @abstractmethod
@@ -168,17 +166,23 @@ class Region(Face, Layout):
         The tuple whose values represent the RGB color code associated to the
         region when displayed in the SALOME viewer according to a property
         map.
+    dimensions : Tuple[float, float]
+        The X-Y characteristic dimensions of the GEOM object.
     entry_id : str | None
         The ID of the region used in the current SALOME study.
     geom_obj : Any | None
         The internal `GEOM_Object` representative of the region's surface.
     name : str | None = None
         The name associated to the region used in the current SALOME study.
+    o : Vertex
+        The ``Vertex`` object representing the centre of the GEOM object.
     properties : Dict[PropertyType, str] | None = None
         The dictionary of property types and value names associated to the
         region.
     region_id : int
         The ID used to globally identify a ``Region`` object.
+    rot_angle : float
+        The rotation angle (in degrees) of the GEOM object wrt the X-axis.
     """
     def __init__(
             self,
@@ -294,7 +298,7 @@ class Region(Face, Layout):
         # Store the RGB color
         self.color = color
 
-    def show(self, *args: Any, **kwargs: Any) -> None:
+    def show(self, *args: Any) -> None:
         """
         Method for displaying the region in the 3D viewer of SALOME
         according to the given settings.
@@ -302,12 +306,11 @@ class Region(Face, Layout):
         Parameters
         ----------
         *args : Any
-            Positional arguments. Must not be provided.
-        **kwargs : Any
-            Key arguments. Must not be provided.
+            Positional arguments providing the display settings. Must not
+            be provided.
         """
-        # Check that no args or kwargs are provided
-        if args or kwargs:
+        # Check that no args are provided
+        if args:
             raise ValueError(f"No arguments are accepted for 'show()'.")
         # Erase all objects from the current view
         clear_view()
@@ -484,10 +487,13 @@ class Fillable(Compound, Layout):
 
     Attributes
     ----------
-    layers : List[List[Region | Self]]
-        A list of layers, each layer itself being a list of ``Region`` objects
-        or nested ``Fillable`` instances. Layers represent the hierarchical
-        structure of the geometry layout.
+    dimensions : Tuple[float, float]
+        The X-Y characteristic dimensions of the GEOM object.
+    displayed_geom : GeometryType
+        The currently ``GeometryType`` displayed in the SALOME 3D viewer.
+    entry_id : str | None
+        The ID attributed by SALOME when the GEOM object is added to the
+        study.
     geometry_maps : Dict[GeometryType, Compound]
         A mapping from ``GeometryType`` values to ``Compound`` objects. Each
         entry provides a different representation for the geometry layout this
@@ -496,12 +502,18 @@ class Fillable(Compound, Layout):
     is_update_needed : bool
         Flag that indicates whether an update is required (e.g., geometry
         layout rebuilding).
-    displayed_geom : GeometryType
-        The currently ``GeometryType`` displayed in the SALOME 3D viewer.
+    layers : List[List[Region | Self]]
+        A list of layers, each layer itself being a list of ``Region`` objects
+        or nested ``Fillable`` instances. Layers represent the hierarchical
+        structure of the geometry layout.
+    o : Vertex
+        The ``Vertex`` object representing the centre of the GEOM object.
     regions : List[Region]
         A flat list of Region objects contained by the current instance.
         Maintained in addition to the layered `layers` structure to allow
         quick iteration or lookups over all regions.
+    rot_angle : float
+        The rotation angle (in degrees) of the GEOM object wrt the X-axis.
     """
     def __init__(self) -> None:
         super().__init__(None)
@@ -648,6 +660,75 @@ class Fillable(Compound, Layout):
             A copy of the current instance.
         """
         return deepcopy(self)
+
+    def show(self, *args: Any) -> None:
+        """
+        Method for displaying the geometry layout of the cell in the 3D viewer
+        of SALOME according to the ``PropertyType`` and ``GeometryType``
+        settings provided as input regardless of the order.
+        Regions are displayed using a color map according to the values of
+        ``PropertyType`` associated to them. If no ``PropertyType`` is
+        specified, the regions are displayed without any color.
+        By default this method builds (if needed) and displays the regions of
+        the technological geometry. If a different ``GeometryType`` is given,
+        the method also displays the GEOM compound of the edges decribing the
+        cell's refined geometry.
+
+        Parameters
+        ----------
+        *args : Any
+            Positional arguments providing the display settings.
+
+        Notes
+        -----
+        Allowed arguments to this method are:
+
+        - ``PropertyType``, used to derive the color map associated to the
+          regions of the technological geometry;
+        - ``GeometryType``, used to indicate the type of geometry of the
+          layouts of the cell.
+        """
+        # Initialize the display settings with default values
+        prop_type = None
+        geom_type = GeometryType.TECHNOLOGICAL
+        # Extract the display settings from the parameters of the method
+        settings = list(args)
+        for setting in settings:
+            if isinstance(setting, PropertyType):
+                prop_type = setting
+            elif isinstance(setting, GeometryType):
+                geom_type = setting
+            else:
+                raise RuntimeError(f"Unknown '{setting}'.")
+
+        # Erase all objects from the current view
+        clear_view()
+        # If the GEOM compound is already present in the current SALOME study,
+        # remove it
+        if self.entry_id and get_object_from_id(self.entry_id):
+            remove_from_study(self.entry_id)
+        # Re-build the regions, if needed
+        self.build_regions()
+        # Add the updated GEOM compound of the cell to the study
+        add_to_study(self.geom_obj, self.name)
+
+        # Assign the same color to all the regions having the same property
+        # value, if any has been specified to show
+        try:
+            associate_colors_to_regions(prop_type, self.regions)
+        except Exception as e:
+            # Add all the regions of the layout to the study, with the faulty
+            # ones (i.e. those without the property) colored in red
+            self._show_regions()
+            # Re-raise the exception
+            raise RuntimeError from e
+        # Add all the regions of the layout to the study, each with its color,
+        # if any
+        self._show_regions()
+        # Update the displayed geometry type
+        self.displayed_geom = geom_type
+        # Set update flag to False
+        self.is_update_needed = False
 
     def update(self, layout: Compound | Face) -> None:
         """
@@ -797,6 +878,26 @@ class Fillable(Compound, Layout):
         layer_shape = make_face(boundaries)
         # Apply the cut on the layout objects of the sub-layer
         self._apply_cut_to_layouts_in_layer(sub_layer, layer_shape)
+
+    def _show_regions(self) -> None:
+        """
+        Method that adds all the regions of the layout to the current SALOME
+        study. In the Object Browser they are available as children of the
+        GEOM compound representative of the technological geometry of the
+        layout.
+        Each region is displayed with a colour defined beforehands.
+        """
+        for region in self.regions:
+            # Set the region color in the viewer
+            set_color_face(region.geom_obj, region.color)
+            # Add the cell region to the study
+            region.entry_id = add_to_study_in_father(
+                self.geom_obj, region, region.name)
+            # Display the region in the current view, if needed
+            display_shape(region.entry_id)
+
+        # Show everything on the SALOME application
+        update_salome_study()
 
 
 def is_layout_contained(

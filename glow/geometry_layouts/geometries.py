@@ -105,7 +105,7 @@ class Surface(Face, Layout):
         self.geom_obj = make_scale(self, self.o, factor)
         self.borders = extract_sub_shapes(self.geom_obj, ShapeType.EDGE)
 
-    def show(self, *args: Any, **kwargs: Any) -> None:
+    def show(self, *args: Any) -> None:
         """
         Method for displaying the layout in the 3D viewer of SALOME
         according to the given settings.
@@ -114,16 +114,14 @@ class Surface(Face, Layout):
         ----------
         *args : Any
             Positional arguments. Must be empty.
-        **kwargs : Any
-            Key arguments. Must be empty.
 
         Raises
         ------
         ValueError
-            If any positional or keyword arguments are provided.
+            If any positional arguments are provided.
         """
-        # Check that no args or kwargs are provided
-        if args or kwargs:
+        # Check that no args are provided
+        if args:
             raise ValueError(f"No arguments are accepted for 'show()'.")
         # Erase all objects from the current view
         clear_view()
