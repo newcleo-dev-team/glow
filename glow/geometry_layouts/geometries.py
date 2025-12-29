@@ -73,7 +73,8 @@ class Surface(Face, Layout):
         Method that rotates the surface geometry. The face, its border
         edges, vertices and construction circle are rotated by the given
         angle expressed in degrees around the given axis, if any is provided,
-        otherwise the Z-axis.
+        otherwise around the axis perpendicular to the surface and passing
+        through its centre.
 
         Parameters
         ----------

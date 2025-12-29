@@ -18,7 +18,8 @@ from glow.interface.geom_interface import add_to_study, clear_view, \
     update_salome_study
 from glow.support.types import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType
-from glow.support.utility import generate_unique_random_colors
+from glow.support.utility import build_z_axis_from_vertex, \
+    generate_unique_random_colors
 
 
 DEFAULT_REGION_COLOR: Tuple[int, int, int] = (167, 167, 167)
@@ -63,30 +64,18 @@ class Layout(ABC):
         self.rot_angle: float = 0.0
 
     @abstractmethod
-    def rotate(self, angle: float) -> None:
+    def rotate(self, angle: float, axis: Edge | None = None) -> None:
         """
         Abstract method for rotating the layout by the given angle (in
-        degrees) around the axis perpendicular to the layout and passing
-        through its centre.
+        degrees) around the given axis, if any is provided, otherwise the
+        axis perpendicular to the layout and passing through its centre.
 
         Parameters
         ----------
         angle : float
             The rotation angle in degrees.
-        """
-
-    @abstractmethod
-    def _rotate_from_axis(self, angle: float, axis: Edge) -> None:
-        """
-        Abstract method for rotating the layout by the given angle (in
-        degrees) around the given axis.
-
-        Parameters
-        ----------
-        angle : float
-            The rotation angle in degrees.
-        axis : Edge
-            An ``Edge`` object representing the rotation axis.
+        axis : Edge | None = None
+            The ``Edge`` object representing the rotation axis, if any.
         """
 
     @abstractmethod
@@ -229,44 +218,28 @@ class Region(Face, Layout):
         """
         self.color = DEFAULT_REGION_COLOR
 
-    def rotate(self, angle: float) -> None:
+    def rotate(self, angle: float, axis: Edge | None = None) -> None:
         """
-        Method for rotating the layout by the given angle (in degrees)
-        around the axis perpendicular to the layout and passing through
-        its centre.
+        Method for rotating the region by the given angle (in degrees) around
+        the given axis, if any is provided, otherwise around the axis
+        perpendicular to the region and passing through its centre.
 
         Parameters
         ----------
         angle : float
             The rotation angle in degrees.
+        axis : Edge | None = None
+            The ``Edge`` object representing the rotation axis, if any.
         """
-        # Get the figure center coordinates
-        center = get_point_coordinates(self.o)
-        # Build the Z-axis of rotation positioned in the figure center
-        z_axis = wrap_shape(
-            make_vector_from_points(
-                self.o, make_vertex((center[0], center[1], 1))
-            )
-        )
+        # Return immediately if the angle is zero
+        if math.isclose(angle, 0.0, abs_tol=1e-6):
+            return
+        # Build a Z-axis, if none is provided
+        if not axis:
+            # Build the Z-axis of rotation positioned in the figure center
+            axis = wrap_shape(build_z_axis_from_vertex(self.o))
         # Rotate the surface elements
-        self._rotate_from_axis(angle, z_axis)
-
-    def _rotate_from_axis(self, angle: float, axis: Edge) -> None:
-        """
-        Method for rotating the region by the given angle (in degrees)
-        around the given axis.
-
-        Parameters
-        ----------
-        angle : float
-            The rotation angle in degrees.
-        axis : Edge
-            An ``Edge`` object representing the rotation axis.
-        """
-        # Convert the rotation angle in radians
-        self.rot_angle = math.radians(angle)
-        # Rotate the geometric elements of the surface
-        self.geom_obj = make_rotation(self, axis, self.rot_angle)
+        self._rotate_from_axis(angle, axis)
 
     def scale(self, factor: float) -> None:
         """
@@ -350,6 +323,23 @@ class Region(Face, Layout):
         """
         self.geom_obj = layout.geom_obj
         self.o = wrap_shape(make_cdg(layout))
+
+    def _rotate_from_axis(self, angle: float, axis: Edge) -> None:
+        """
+        Method for rotating the region by the given angle (in degrees)
+        around the given axis.
+
+        Parameters
+        ----------
+        angle : float
+            The rotation angle in degrees.
+        axis : Edge
+            The ``Edge`` object representing the rotation axis.
+        """
+        # Convert the rotation angle in radians
+        self.rot_angle = math.radians(angle)
+        # Rotate the GEOM face of the region
+        self.geom_obj = make_rotation(self, axis, self.rot_angle)
 
     def __add__(self, other: Self | Sequence[Self]) -> Self:
         """

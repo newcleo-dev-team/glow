@@ -10,16 +10,17 @@ from typing import Any, Dict, List, Self, Tuple
 
 from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
     associate_colors_to_regions
-from glow.interface.geom_entities import Compound, Face, wrap_shape
+from glow.interface.geom_entities import Compound, Edge, Face, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_closed_free_boundary, get_min_distance, get_object_from_id, \
     get_point_coordinates, get_shape_type, make_cdg, make_compound, \
-    make_cut, make_face, make_partition, make_translation, \
+    make_cut, make_face, make_partition, make_rotation, make_translation, \
     make_vector_from_points, make_vertex, remove_from_study, set_color_face, \
     update_salome_study
 from glow.support.types import GeometryType, PropertyType, SymmetryType
-from glow.support.utility import compute_point_by_reference
+from glow.support.utility import build_z_axis_from_vertex, \
+    compute_point_by_reference
 
 
 class Fillable(Compound, Layout):
@@ -190,14 +191,8 @@ class Fillable(Compound, Layout):
                     layout.build_regions()
         # Collapse all the layers and cut out the overlapping regions
         self._collapse_layers()
-        # Clear and rebuild the list of regions from those of each layer
-        self.regions.clear()
-        for layer in reversed_layers:
-            for layout in layer:
-                if isinstance(layout, Region):
-                    self.regions.append(layout)
-                elif isinstance(layout, Fillable):
-                    self.regions.extend(layout.regions)
+        # Clear and rebuild the list of regions
+        self._collect_regions(reversed_layers)
 
         # Update the GEOM compound object of this instance
         self.geom_obj = make_partition(self.regions, [], ShapeType.FACE)
@@ -214,6 +209,29 @@ class Fillable(Compound, Layout):
             A copy of the current instance.
         """
         return deepcopy(self)
+
+    def rotate(self, angle: float, axis: Edge | None = None) -> None:
+        """
+        Method for rotating the layout by the given angle (in degrees) around
+        the given axis, if any is provided, otherwise around the axis
+        perpendicular to the layout and passing through its centre.
+
+        Parameters
+        ----------
+        angle : float
+            The rotation angle in degrees.
+        axis : Edge | None = None
+            The ``Edge`` object representing the rotation axis, if any.
+        """
+        # Return immediately if the angle is zero
+        if math.isclose(angle, 0.0, abs_tol=1e-6):
+            return
+        # Build a Z-axis, if none is provided
+        if not axis:
+            # Build the Z-axis of rotation positioned in the figure center
+            axis = wrap_shape(build_z_axis_from_vertex(self.o))
+        # Rotate the surface elements
+        self._rotate_from_axis(angle, axis)
 
     def show(self, *args: Any) -> None:
         """
@@ -355,7 +373,7 @@ class Fillable(Compound, Layout):
           ``Region`` and the original instance is removed;
         - if the layout object is a ``Fillable`` instance, its GEOM compound
           is updated with the result of the cut and the same operation is
-          recursively applied to its ``Region`` objects;
+          recursively applied to its layers;
         - lastly, the layout objects completely overlapped are removed by the
           list of objects of the given sub-layer.
 
@@ -397,12 +415,14 @@ class Fillable(Compound, Layout):
                         layer.insert(
                             i+j, Region(face, layout.name, layout.properties))
                     continue
-                layer[i].update(wrap_shape(cut_layout))
+                layout.update(wrap_shape(cut_layout))
             elif isinstance(layout, Fillable):
-                layer[i].update(wrap_shape(cut_layout))
-                # Recursively apply the cut
-                self._apply_cut_to_layouts_in_layer(
-                    layer[i].regions, cutting_tool)
+                layout.update(wrap_shape(cut_layout))
+                # Recursively apply the cut to each layer of the layout
+                for l in layout.layers:
+                    self._apply_cut_to_layouts_in_layer(l, cutting_tool)
+                # Update the regions of the layout
+                layout._collect_regions(layout.layers)
 
         # Remove the layouts completely overlapped by the superior layer
         for index in sorted(layouts_to_remove, reverse=True):
@@ -435,6 +455,34 @@ class Fillable(Compound, Layout):
                     continue
                 # Overlap the current layer onto the layers below
                 self._overlap_layer_to(reversed_layers[i], sub_layer)
+
+    def _collect_regions(self, layers: List[List[Region | Self]]) -> None:
+        """
+        Method that collects all the ``Region`` objects from the given layers.
+        The ``regions`` list is cleared from any existing regions and
+        rebuilded from the collected ones.
+        For each layer, it iterates through its layouts and append any
+        ``Region`` instances directly, or extends the list with the regions
+        from ``Fillable`` objects.
+
+        Parameters
+        ----------
+        layers : List[Region | Self]
+            A list containing the ``Region`` or ``Fillable`` objects to
+            process.
+        """
+        # Clear and collect all the regions from each layout object in the
+        # layers
+        self.regions = [
+            r
+            for layer in layers
+            for layout in layer
+            for r in (
+                [layout] if isinstance(layout, Region)
+                else layout.regions if isinstance(layout, Fillable)
+                else []
+            )
+        ]
 
     def _overlap_layer_to(
             self, layer: List[Region | Self], sub_layer: List[Region | Self]
@@ -471,6 +519,35 @@ class Fillable(Compound, Layout):
         layer_shape = make_face(boundaries)
         # Apply the cut on the layout objects of the sub-layer
         self._apply_cut_to_layouts_in_layer(sub_layer, layer_shape)
+
+    def _rotate_from_axis(self, angle: float, axis: Edge) -> None:
+        """
+        Method for rotating the layout and its geometric elements by the
+        given angle (in degrees) around the given axis.
+
+        Parameters
+        ----------
+        angle : float
+            The rotation angle in degrees.
+        axis : Edge
+            The ``Edge`` object representing the rotation axis.
+        """
+        # Convert the rotation angle in radians
+        self.rot_angle = math.radians(angle)
+        # Rotate the layouts in each layer araound the given axis
+        for layer in self.layers:
+            for layout in layer:
+                layout.rotate(angle, axis)
+
+        # Update the GEOM compounds representing the different geometry
+        # layout types
+        self.geom_obj = make_rotation(self, axis, self.rot_angle)
+        self.geometry_maps.update({
+            geom_type: make_rotation(layout, axis, self.rot_angle)
+            for geom_type, layout in self.geometry_maps.items()
+        })
+        # Set the update flag to False
+        self.state.is_update_needed = False
 
     def _show_regions(self) -> None:
         """
