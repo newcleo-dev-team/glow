@@ -5,17 +5,19 @@ geometry layouts built in GLOW.
 import math
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from copy import deepcopy
 from typing import Any, Dict, List, Self, Sequence, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
 from glow.interface.geom_interface import add_to_study, clear_view, \
-    display_shape, get_basic_properties, get_bounding_box, get_object_from_id, \
-    get_point_coordinates, make_cdg, make_common, make_rotation, \
-    make_scale, make_translation, make_vector_from_points, make_vertex, \
-    make_vertex_inside_face, remove_from_study, update_salome_study
-from glow.support.types import PropertyType
+    display_shape, get_object_from_id, get_point_coordinates, make_cdg, \
+    make_rotation, make_scale, make_translation, make_vector_from_points, \
+    make_vertex, make_vertex_inside_face, remove_from_study, \
+    update_salome_study
+from glow.support.types import GeometryType, LatticeGeometryType, \
+    PropertyType, SymmetryType
 from glow.support.utility import generate_unique_random_colors
 
 
@@ -461,6 +463,31 @@ class Region(Face, Layout):
             wrap_shape(self.geom_obj) - wrap_shape(other).geom_obj,
             properties=deepcopy(self.properties)
         )
+
+
+@dataclass
+class LayoutState():
+    """
+    Dataclass storing the state of the layout in the SALOME study according
+    to the geometry displayed, the need to update the layout, the type of
+    applied symmetry and the index identifing the layout in DRAGON5.
+    """
+    displayed_geom : GeometryType = GeometryType.TECHNOLOGICAL
+    """
+    Identifying the type of geometry of the elements of the layout currently
+    displayed in the SALOME 3D viewer.
+    """
+    is_update_needed : bool = False
+    """
+    Indicating whether the layout needs to be updated (e.g., rebuilding the
+    entire geometry layout).
+    """
+    symmetry_type : SymmetryType = SymmetryType.FULL
+    """Identifying the currently applied type of symmetry."""
+    type_geo : LatticeGeometryType = LatticeGeometryType.ISOTROPIC
+    """
+    Identifying the type of layout (in terms of symmetry and BCs) in DRAGON5.
+    """
 
 
 def associate_colors_to_regions(

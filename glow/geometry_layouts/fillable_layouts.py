@@ -5,16 +5,16 @@ geometry layouts that can be described according to a hierarchical structure.
 from copy import deepcopy
 import math
 from typing import Any, Dict, List, Self, Tuple
-from glow.geometry_layouts.layouts import Layout, Region, \
+from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
     associate_colors_to_regions
 from glow.interface.geom_entities import Compound, Face, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_closed_free_boundary, get_min_distance, get_object_from_id, \
-    get_point_coordinates, get_shape_type, make_cdg, make_compound, make_cut, \
-    make_face, make_partition, remove_from_study, set_color_face, \
-    update_salome_study
-from glow.support.types import GeometryType, PropertyType
+    get_point_coordinates, get_shape_type, make_cdg, make_common, \
+    make_compound, make_cut, make_face, make_partition, remove_from_study, \
+    set_color_face, update_salome_study
+from glow.support.types import GeometryType, PropertyType, SymmetryType
 
 
 class Fillable(Compound, Layout):
@@ -41,8 +41,6 @@ class Fillable(Compound, Layout):
     ----------
     dimensions : Tuple[float, float]
         The X-Y characteristic dimensions of the GEOM object.
-    displayed_geom : GeometryType
-        The currently ``GeometryType`` displayed in the SALOME 3D viewer.
     entry_id : str | None
         The ID attributed by SALOME when the GEOM object is added to the
         study.
@@ -51,9 +49,6 @@ class Fillable(Compound, Layout):
         entry provides a different representation for the geometry layout this
         instance refers. It is used to switch between different visualisation
         types (e.g., technological, sectorized).
-    is_update_needed : bool
-        Flag that indicates whether an update is required (e.g., geometry
-        layout rebuilding).
     layers : List[List[Region | Self]]
         A list of layers, each layer itself being a list of ``Region`` objects
         or nested ``Fillable`` instances. Layers represent the hierarchical
@@ -66,15 +61,17 @@ class Fillable(Compound, Layout):
         quick iteration or lookups over all regions.
     rot_angle : float
         The rotation angle (in degrees) of the GEOM object wrt the X-axis.
+    state : LayoutState
+        Providing the state of the layout in the SALOME study.
     """
     def __init__(self) -> None:
         super().__init__(None)
         # Initialize attributes
         self.layers: List[List[Region | Self]] = []
         self.geometry_maps: Dict[GeometryType, Compound] = {}
-        self.is_update_needed: bool = False
-        self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
+        self.state = LayoutState()
         self.regions: List[Region] = []
+        self.symmetry_map: Dict[SymmetryType, Face] = {}
 
     def add(self,
             layout: Region | Self,
@@ -150,7 +147,7 @@ class Fillable(Compound, Layout):
             raise ValueError(f"Invalid layer index {layer_index}.")
 
         # Indicate the need to update the layout by building its regions
-        self.is_update_needed = True
+        self.state.is_update_needed = True
 
     def build_regions(self) -> None:
         """
@@ -176,7 +173,7 @@ class Fillable(Compound, Layout):
         objects.
         """
         # Return immediately if there is no need to update the layout
-        if not self.is_update_needed:
+        if not self.state.is_update_needed:
             return
         # Reverse the layers
         reversed_layers = self.layers[::-1]
@@ -200,7 +197,7 @@ class Fillable(Compound, Layout):
         # Update the GEOM compound object of this instance
         self.geom_obj = make_partition(self.regions, [], ShapeType.COMPOUND)
         # Update the flag stating there is no need to rebuild the regions
-        self.is_update_needed = False
+        self.state.is_update_needed = False
 
     def clone(self) -> Self:
         """
@@ -278,9 +275,9 @@ class Fillable(Compound, Layout):
         # if any
         self._show_regions()
         # Update the displayed geometry type
-        self.displayed_geom = geom_type
+        self.state.displayed_geom = geom_type
         # Set update flag to False
-        self.is_update_needed = False
+        self.state.is_update_needed = False
 
     def update(self, layout: Compound | Face) -> None:
         """
