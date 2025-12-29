@@ -2,19 +2,24 @@
 Module containing the class enabling the creation and the visualisation of
 geometry layouts that can be described according to a hierarchical structure.
 """
-from copy import deepcopy
 import math
+
+from abc import abstractmethod
+from copy import deepcopy
 from typing import Any, Dict, List, Self, Tuple
+
 from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
     associate_colors_to_regions
 from glow.interface.geom_entities import Compound, Face, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_closed_free_boundary, get_min_distance, get_object_from_id, \
-    get_point_coordinates, get_shape_type, make_cdg, make_common, \
-    make_compound, make_cut, make_face, make_partition, remove_from_study, \
-    set_color_face, update_salome_study
+    get_point_coordinates, get_shape_type, make_cdg, make_compound, \
+    make_cut, make_face, make_partition, make_translation, \
+    make_vector_from_points, make_vertex, remove_from_study, set_color_face, \
+    update_salome_study
 from glow.support.types import GeometryType, PropertyType, SymmetryType
+from glow.support.utility import compute_point_by_reference
 
 
 class Fillable(Compound, Layout):
@@ -195,7 +200,7 @@ class Fillable(Compound, Layout):
                     self.regions.extend(layout.regions)
 
         # Update the GEOM compound object of this instance
-        self.geom_obj = make_partition(self.regions, [], ShapeType.COMPOUND)
+        self.geom_obj = make_partition(self.regions, [], ShapeType.FACE)
         # Update the flag stating there is no need to rebuild the regions
         self.state.is_update_needed = False
 
@@ -277,6 +282,45 @@ class Fillable(Compound, Layout):
         # Update the displayed geometry type
         self.state.displayed_geom = geom_type
         # Set update flag to False
+        self.state.is_update_needed = False
+
+    def translate(self, new_cntr: Tuple[float, float, float]) -> None:
+        """
+        Method for translating the geometric elements of the current layout,
+        i.e. the corresponding GEOM compound, the centre and the layouts in
+        each layer. If any of the layouts of a layer is an instance of the
+        subclasses of ``Fillable``, this method is applied recursively.
+
+        Parameters
+        ----------
+        new_cntr : Tuple[float, float, float]
+            The XYZ coordinates of the new center of the layout.
+        """
+        # Build a vector from the current center to the new one
+        transl_vect = make_vector_from_points(
+            self.o, make_vertex(new_cntr)
+        )
+        prev_o = self.o
+        # Translate all the characteristic geometric elements
+        self.o = wrap_shape(make_translation(self.o, transl_vect))
+        self._translate_layout_specific_elems(new_cntr)
+        # Translate the layouts in each layer so that its relative position
+        # wrt the translated centre is kept
+        for layer in self.layers:
+            for layout in layer:
+                layout_center = compute_point_by_reference(
+                    layout.o, prev_o, new_cntr
+                )
+                layout.translate(layout_center)
+
+        # Update the GEOM compounds representing the different geometry
+        # layout types
+        self.geom_obj = make_translation(self.geom_obj, transl_vect)
+        self.geometry_maps.update({
+            geom_type: make_translation(layout, transl_vect)
+            for geom_type, layout in self.geometry_maps.items()
+        })
+        # Set the update flag to False
         self.state.is_update_needed = False
 
     def update(self, layout: Compound | Face) -> None:
@@ -447,3 +491,18 @@ class Fillable(Compound, Layout):
 
         # Show everything on the SALOME application
         update_salome_study()
+
+    @abstractmethod
+    def _translate_layout_specific_elems(
+        self, new_cntr: Tuple[float, float, float]
+    ) -> None:
+        """
+        Abstract method for translating layout-specific elements, considering
+        the centre of the translated layout is positioned at the given XYZ
+        coordinates.
+
+        Parameters
+        ----------
+        new_cntr : Tuple[float, float, float]
+            The XYZ coordinates of the centre of the translated layout.
+        """
