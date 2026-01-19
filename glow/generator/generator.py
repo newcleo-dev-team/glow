@@ -406,9 +406,10 @@ def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     # Check if the MATERIAL property type is included; if not, raise an
     # exception
     if PropertyType.MATERIAL not in tdt_data.properties:
-        raise("Error while writing the material indices of the layout's "
-              "regions. No 'PropertyType.MATERIAL' has been defined for any "
-              "of the layout's regions.")
+        raise RuntimeError(
+            "Error while writing the material indices of the layout's "
+            "regions. No 'PropertyType.MATERIAL' has been defined for any "
+            "of the layout's regions.")
     # Write the names of the materials that are present in the layout on
     # separate lines. Each line starts with a '#' so to be ignored.
     mat_names = tdt_data.properties[PropertyType.MATERIAL]

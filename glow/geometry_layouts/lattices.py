@@ -2579,6 +2579,9 @@ class Lattice():
                 )
                 index_0 += 1
 
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
+
 
 def get_compound_from_geometry(
         geo_type: GeometryType, lattice_cells: List[Cell]) -> Any:
