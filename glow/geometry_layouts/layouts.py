@@ -284,7 +284,7 @@ class Region(Face, Layout):
         """
         # Check that no args are provided
         if args:
-            raise ValueError(f"No arguments are accepted for 'show()'.")
+            raise ValueError("No arguments are accepted for 'show()'.")
         # Erase all objects from the current view
         clear_view()
         # Delete the region from the study if already present
@@ -366,8 +366,7 @@ class Region(Face, Layout):
             at least one of them uses a different value.
         """
         # Extract a list of the given regions
-        regions = [
-            o for o in (other if isinstance(other, Sequence) else [other])]
+        regions = list(other if isinstance(other, Sequence) else [other])
         # Properties belonging to the fused region
         fused_properties = deepcopy(self.properties)
         # If the regions have different values for the same properties,
@@ -495,6 +494,12 @@ def associate_colors_to_regions(
     regions : List[Region]
         The list of ``Region`` objects to colour according to the value of
         the associated property type.
+
+    Raises
+    ------
+    RuntimeError
+        Showing the coordinates of the points of the regions having any
+        issue with their properties.
     """
     # If no colorset to display, reset the region colors
     if not property_type:
@@ -548,7 +553,7 @@ def get_unique_values_for_property(
     ------
     RuntimeError
         Showing the coordinates of the points of the regions having any
-        issue.
+        issue with their properties.
     """
     values = set()
     missing_regions_points = []

@@ -740,6 +740,26 @@ def make_fuse(shapes: List[Any]) -> Any:
     return geompy.MakeFuseList(shapes, True, True)
 
 
+def make_intersection(shape1: Any, shape2: Any) -> Any:
+    """
+    Function that performs the intersection boolean operation between the two
+    given shapes and returns the resulting GEOM object.
+
+    Parameters
+    ----------
+    shape1 : Any
+        The GEOM object being the first argument of the intersection.
+    shape2 : Any
+        The GEOM object being the second argument of the intersection.
+
+    Returns
+    -------
+    Any
+        The GEOM object resulting from the intersection of the two shapes.
+    """
+    return geompy.MakeSection(shape1, shape2)
+
+
 def make_line(point1: Any, point2: Any) -> Any:
     """
     Function that returns a line object (i.e. a straight edge), given

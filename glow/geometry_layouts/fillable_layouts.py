@@ -2,25 +2,27 @@
 Module containing the class enabling the creation and the visualisation of
 geometry layouts that can be described according to a hierarchical structure.
 """
+import logging
 import math
 
 from abc import abstractmethod
 from copy import deepcopy
-from typing import Any, Dict, List, Self, Tuple
+from typing import Any, Dict, Iterator, List, Self, Tuple
 
+from glow.geometry_layouts.geometries import Circle, Rectangle, Surface
 from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
     associate_colors_to_regions
 from glow.interface.geom_entities import Compound, Edge, Face, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
-    get_closed_free_boundary, get_min_distance, get_object_from_id, \
-    get_point_coordinates, get_shape_type, make_cdg, make_compound, \
-    make_cut, make_face, make_partition, make_rotation, make_translation, \
-    make_vector_from_points, make_vertex, remove_from_study, set_color_face, \
-    update_salome_study
+    get_bounding_box, get_closed_free_boundary, get_min_distance, \
+    get_object_from_id, get_point_coordinates, get_shape_type, make_cdg, \
+    make_common, make_compound, make_cut, make_face, make_partition, \
+    make_rotation, make_translation, make_vector_from_points, make_vertex, \
+    remove_from_study, set_color_face, update_salome_study
 from glow.support.types import GeometryType, PropertyType, SymmetryType
 from glow.support.utility import build_z_axis_from_vertex, \
-    compute_point_by_reference
+    compute_point_by_reference, flatten_list
 
 
 class Fillable(Compound, Layout):
@@ -36,7 +38,7 @@ class Fillable(Compound, Layout):
     herein or in subclasses of ``Fillable``.
 
     This class offers to its subclasses the capability to represent their
-    geometry layout as the superimposition of multiple layers made either by
+    geometry layout as the superimposition of multiple layers made either of
     ``Region`` or ``Fillable`` objects. By relying on this layer concept,
     the whole layout can be represented in a tree-like structure where nodes
     are represented by ``Fillable`` objects, while leaves by ``Region`` ones.
@@ -50,6 +52,9 @@ class Fillable(Compound, Layout):
     entry_id : str | None
         The ID attributed by SALOME when the GEOM object is added to the
         study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the layout this instance
+        refers to.
     geometry_maps : Dict[GeometryType, Compound]
         A mapping from ``GeometryType`` values to ``Compound`` objects. Each
         entry provides a different representation for the geometry layout this
@@ -59,6 +64,10 @@ class Fillable(Compound, Layout):
         A list of layers, each layer itself being a list of ``Region`` objects
         or nested ``Fillable`` instances. Layers represent the hierarchical
         structure of the geometry layout.
+    name : str | None = None
+        The name of the GEOM object identifying the layout this instance
+        refers to. It is used when the layout is added to the current SALOME
+        study.
     o : Vertex
         The ``Vertex`` object representing the centre of the GEOM object.
     regions : List[Region]
@@ -67,8 +76,15 @@ class Fillable(Compound, Layout):
         quick iteration or lookups over all regions.
     rot_angle : float
         The rotation angle (in degrees) of the GEOM object wrt the X-axis.
+    shape : Surface | None = None
+        The ``Surface`` object representing the characteristic shape of the
+        layout.
     state : LayoutState
         Providing the state of the layout in the SALOME study.
+    symmetry_map : Dict[SymmetryType, Face]
+        A mapping from ``SymmetryType`` values to ``Face`` objects. Each
+        entry provides the characteristic shape of the corresponding symmetry
+        type.
     """
     def __init__(self) -> None:
         super().__init__(None)
@@ -78,6 +94,7 @@ class Fillable(Compound, Layout):
         self.state = LayoutState()
         self.regions: List[Region] = []
         self.symmetry_map: Dict[SymmetryType, Face] = {}
+        self.shape: Surface | None = None
 
     def add(self,
             layout: Region | Self,
@@ -134,10 +151,14 @@ class Fillable(Compound, Layout):
         # position is provided.
         if not position:
             position = get_point_coordinates(self.o)
-        # Translate the given layout if its position differs from the compound
+        # Update the hierarchical structure of the given layout, if needed,
+        # and clone it
+        if isinstance(layout, Fillable):
+            layout.update_hierarchical_structure()
+        layout = layout.clone()
+        # Translate the given layout if its position differs from the layout
         # centre
-        if not all(math.isclose(i, 0.0) for i in position):
-            layout = layout.clone()
+        if not all(math.isclose(i, 0.0, abs_tol=1e-6) for i in position):
             layout.translate(position)
 
         # Include the given layout at the end of the sublist specified by the
@@ -155,49 +176,43 @@ class Fillable(Compound, Layout):
         # Indicate the need to update the layout by building its regions
         self.state.is_update_needed = True
 
-    def build_regions(self) -> None:
+    def apply_symmetry(self, symmetry: SymmetryType) -> None:
         """
-        Method that processes the layers of the current instance object to
-        construct a list of ``Region`` objects that are representative of
-        the technological geometry layout.
-        These regions are the result of collapsing all the layers by
-        traversing the entire hierarchical structure in reverse order, and
-        cutting the regions of the layers that are overlapped. This operation
-        is skipped and the method exits without changes if there is no need
-        to update the technological geometry layout (i.e. the value of the
-        attribute ``is_update_needed`` is ``False``).
+        Method for deriving the portion of the geometry layout that represents
+        the given type of symmetry.
+        According to the type, the shape that identifies the symmetry is
+        derived and stored in the corresponding instance attribute mapping
+        types and shapes.
+        The ``state`` attribute, which indicates the state of the layout, is
+        modified by properly setting the active symmetry type.
 
-        The operation of assembling all the layers requires that each layout
-        is up-to-date. This means that each ``Fillable`` object in the list
-        of layers is further processed by recursively calling this method to
-        collapse its own layers.
-
-        Given the updated layout objects for each layer, the corresponding
-        ``Region`` objects are retrieved and a flat list is populated.
-        Finally, the GEOM compound object representative of this instance is
-        updated by performing a partition with all the built ``Region``
-        objects.
+        Parameters
+        ----------
+        symmetry : SymmetryType
+            The type of symmetry to handle.
         """
-        # Return immediately if there is no need to update the layout
-        if not self.state.is_update_needed:
-            return
-        # Reverse the layers
-        reversed_layers = self.layers[::-1]
-        # Ensure the layout is up-to-date for each 'Fillable' object by
-        # recursively calling this method
-        for layer in reversed_layers:
-            for layout in layer:
-                if isinstance(layout, Fillable):
-                    layout.build_regions()
-        # Collapse all the layers and cut out the overlapping regions
-        self._collapse_layers()
-        # Clear and rebuild the list of regions
-        self._collect_regions(reversed_layers)
-
-        # Update the GEOM compound object of this instance
-        self.geom_obj = make_partition(self.regions, [], ShapeType.FACE)
-        # Update the flag stating there is no need to rebuild the regions
+        # Get the XY dimensions of the bounding box for the geometry layout
+        x_min, x_max, y_min, y_max = get_bounding_box(self.shape)
+        o_xyz = get_point_coordinates(self.o)
+        # Build the shape of the symmetry
+        symm_shape = self._build_symmetry_shape(
+            symmetry,
+            (x_min, x_max),
+            (y_min, y_max),
+            o_xyz
+        )
+        # Rotate the shape of the symmetry, if needed
+        if not math.isclose(self.rot_angle, 0.0, abs_tol=1e-6):
+            axis = make_vector_from_points(
+                self.o,
+                make_vertex((o_xyz[0], o_xyz[1], 1.0))
+            )
+            symm_shape.rotate(self.rot_angle, axis)
+        # Store the shape of the symmetry in the mapping
+        self.symmetry_map[symmetry] = symm_shape
+        # Update the state of the layout
         self.state.is_update_needed = False
+        self.state.symmetry_type = symmetry
 
     def clone(self) -> Self:
         """
@@ -209,6 +224,78 @@ class Fillable(Compound, Layout):
             A copy of the current instance.
         """
         return deepcopy(self)
+
+    def get_geometry_map(self, geom_type: GeometryType) -> Compound:
+        """
+        Method that gets the ``Compound`` object associated to the given
+        ``GeometryType`` for the current instance. It defaults to the
+        compound made by collecting all the mappings between the given
+        ``GeometryType`` and the corresponding ``Compound`` object for every
+        ``Fillable`` in the hierarchy tree of this instance.
+        If an empty object is found, an exception is raised.
+
+        Parameters
+        ----------
+        geom_type : GeometryType
+            The type of geometry to look for.
+
+        Returns
+        -------
+        Compound
+            Grouping all the mappings between the given ``GeometryType`` and
+            the corresponding ``Compound`` object for every ``Fillable`` in
+            the hierarchy tree of this instance.
+
+        Raises
+        ------
+        RuntimeError
+            If no ``Compound`` object is associated to the indicated
+            ``GeometryType`` element.
+        """
+        # Get the compound associated to the geometry type, it defaults to the
+        # compound collecting those of its layouts in the layers
+        geom_map = self.geometry_maps.get(
+            geom_type,
+            wrap_shape(
+                make_compound(
+                    list(self._iterate_over_geom_mappings(geom_type))
+                )
+            )
+        )
+        # Raise an exception if the 'Compound' has no edges
+        if not extract_sub_shapes(geom_map, ShapeType.EDGE):
+            raise RuntimeError(
+                f"No mapping from '{geom_type}' to geometry layout is "
+                "currently present."
+            )
+        return geom_map
+
+    def get_regions(self) -> List[Region]:
+        """
+        Method that collects and returns all the ``Region`` objects from the
+        layers of the current instance.
+        For each layer, it iterates through its layouts and collect any
+        ``Region`` instances directly, or recursively calls this method for
+        each ``Fillable`` object found along the hierarchy.
+        The result of the collection is a flat list of all the ``Region``
+        objects that are representative of the technological geometry layout.
+
+        Returns
+        ----------
+        List[Region]
+            A list containing the ``Region`` objects representative of the
+            technological geometry layout.
+        """
+        return [
+            r
+            for layer in self.layers
+            for layout in layer
+            for r in (
+                [layout] if isinstance(layout, Region)
+                else layout.get_regions() if isinstance(layout, Fillable)
+                else []
+            )
+        ]
 
     def rotate(self, angle: float, axis: Edge | None = None) -> None:
         """
@@ -235,37 +322,54 @@ class Fillable(Compound, Layout):
 
     def show(self, *args: Any) -> None:
         """
-        Method for displaying the geometry layout of the cell in the 3D viewer
-        of SALOME according to the ``PropertyType`` and ``GeometryType``
-        settings provided as input regardless of the order.
-        Regions are displayed using a color map according to the values of
+        Method for displaying the geometry layout in the 3D viewer of SALOME
+        according to the ``PropertyType`` and ``GeometryType`` settings,
+        provided as input regardless of their order.
+        Regions representative of the technological geometry layout are
+        displayed using a color map according to the values of the indicated
         ``PropertyType`` associated to them. If no ``PropertyType`` is
         specified, the regions are displayed without any color.
-        By default this method builds (if needed) and displays the regions of
-        the technological geometry. If a different ``GeometryType`` is given,
-        the method also displays the GEOM compound of the edges decribing the
-        cell's refined geometry.
+
+        In addition, the displayed regions correspond to those of the last
+        applied ``SymmetryType``. Given the regions of the entire layout, a
+        common operation with the shape of the symmetry provides the regions
+        to display.
+
+        By default this method displays the regions of the technological
+        geometry. If a different ``GeometryType`` is given, the method also
+        displays the GEOM compound of the edges describing the layout's
+        refined geometry.
 
         Parameters
         ----------
         *args : Any
             Positional arguments providing the display settings.
 
+        Raises
+        ------
+        RuntimeError
+            If any parameter other than the expected ones in provided.
+        RuntimeError
+            If any displayed ``Region`` object does not declare a value for
+            the indicated ``PropertyType``, if any.
+        RuntimeError
+            If this instance does not have any ``Compound`` object associated
+            to the given ``GeometryType``.
+
         Notes
         -----
         Allowed arguments to this method are:
 
-        - ``PropertyType``, used to derive the color map associated to the
+        - ``PropertyType``, used to derive the colour map associated to the
           regions of the technological geometry;
-        - ``GeometryType``, used to indicate the type of geometry of the
-          layouts of the cell.
+        - ``GeometryType``, used to indicate the type of geometry of this
+          layout.
         """
         # Initialize the display settings with default values
         prop_type = None
         geom_type = GeometryType.TECHNOLOGICAL
         # Extract the display settings from the parameters of the method
-        settings = list(args)
-        for setting in settings:
+        for setting in args:
             if isinstance(setting, PropertyType):
                 prop_type = setting
             elif isinstance(setting, GeometryType):
@@ -279,27 +383,42 @@ class Fillable(Compound, Layout):
         # remove it
         if self.entry_id and get_object_from_id(self.entry_id):
             remove_from_study(self.entry_id)
-        # Re-build the regions, if needed
-        self.build_regions()
-        # Add the updated GEOM compound of the cell to the study
-        add_to_study(self.geom_obj, self.name)
+        # Update the layout's tree, if needed
+        self.update_hierarchical_structure()
+        # Add the updated GEOM compound of the layout to the study
+        self.entry_id = add_to_study(self.geom_obj, self.name)
 
-        # Assign the same color to all the regions having the same property
-        # value, if any has been specified to show
+        # Collect the regions according to the applied symmetry, if any, and
+        # display them with colour map associated to the property type
+        self.regions = self._get_regions_with_symmetry()
         try:
+            # Assign the same color to all the regions having the same
+            # property value, if any has been specified to show
             associate_colors_to_regions(prop_type, self.regions)
-        except Exception as e:
+            # Add all the regions of the layout to the study
+            self._show_regions()
+        except RuntimeError as e:
             # Add all the regions of the layout to the study, with the faulty
-            # ones (i.e. those without the property) colored in red
+            # ones (i.e. those without the property) coloured in red
             self._show_regions()
             # Re-raise the exception
-            raise RuntimeError from e
-        # Add all the regions of the layout to the study, each with its color,
-        # if any
-        self._show_regions()
-        # Update the displayed geometry type
+            raise RuntimeError(
+                "Error while displaying the regions of the geometry layout."
+            ) from e
+
+        # Handle the visualization of the edges of the selected geometry type,
+        # if different from the technological one
+        try:
+            self._show_geometry_type_edges(geom_type)
+        except RuntimeError as e:
+            # Re-raise the exception
+            raise RuntimeError(
+                "Error while displaying the edges associated to the "
+                f"indicated '{geom_type.name}' geometry type."
+            ) from e
+
+        # Update the state of the layout
         self.state.displayed_geom = geom_type
-        # Set update flag to False
         self.state.is_update_needed = False
 
     def translate(self, new_cntr: Tuple[float, float, float]) -> None:
@@ -343,15 +462,73 @@ class Fillable(Compound, Layout):
 
     def update(self, layout: Compound | Face) -> None:
         """
-        Method for updating the GEOM object this instance refers to.
+        Method for updating the current instance by updating the GEOM object
+        this instance refers to, the centre of the layout and any mapping
+        between ``GeometryType`` values and ``Compound`` objects.
 
         Parameters
         ----------
         layout : Compound | Face
             The new layout to update the current instance with.
+
+        Notes
+        -----
+        This method does not update the layouts stored in the ``layers``
+        instance attribute accordingly with the GEOM object of this instance.
         """
-        self.geom_obj = layout.geom_obj
+        self.geom_obj = make_compound(layout.geom_obj)
         self.o = wrap_shape(make_cdg(layout))
+        # Update the mappings
+        self.geometry_maps = {
+            geom_type: make_common(
+                self.geometry_maps[geom_type], self.geom_obj
+            ) for geom_type in self.geometry_maps
+        }
+
+    def update_hierarchical_structure(self) -> None:
+        """
+        Method that processes the layers of the current instance object to
+        update the entire geometric hierarchical structure which represents
+        the technological geometry layout.
+        This method collapses all the layers by traversing the entire tree
+        in reverse order, and cutting the ``Region`` or the ``Fillable``
+        objects that are overlapped.
+        This operation is skipped and the method exits without changes if
+        there is no need to update the technological geometry layout (i.e.
+        the ``is_update_needed`` value of the ``state`` attribute is
+        ``False``).
+
+        The operation of assembling all the layers requires that each layout
+        is up-to-date. This means that each ``Fillable`` object in the list
+        of layers is further processed by recursively calling this method to
+        collapse its own layers.
+
+        Finally, the GEOM compound object representative of this instance is
+        updated by performing a partition operation among all the ``Region``
+        objects retrieved from the layouts in each layer.
+        """
+        # Return immediately if there is no need to update the layout
+        if not self.state.is_update_needed:
+            logging.info(
+                f"{self.__class__.__name__} - ({self.name}): "
+                "No need to update...")
+            return
+        # Reverse the layers
+        reversed_layers = self.layers[::-1]
+        # Ensure the layout is up-to-date for each 'Fillable' object by
+        # recursively calling this method
+        for layer in reversed_layers:
+            for layout in layer:
+                if isinstance(layout, Fillable):
+                    layout.update_hierarchical_structure()
+        # Collapse all the layers and cut out the overlapping layouts
+        if len(reversed_layers) > 1:
+            self._collapse_layers(reversed_layers)
+
+        # Update the GEOM compound object of this instance
+        self.geom_obj = make_partition(self.get_regions(), [], ShapeType.FACE)
+        # Update the state of the layout
+        self.state.is_update_needed = False
 
     def _apply_cut_to_layouts_in_layer(
             self, layer: List[Region | Self], cutting_tool: Face) -> None:
@@ -421,68 +598,176 @@ class Fillable(Compound, Layout):
                 # Recursively apply the cut to each layer of the layout
                 for l in layout.layers:
                     self._apply_cut_to_layouts_in_layer(l, cutting_tool)
-                # Update the regions of the layout
-                layout._collect_regions(layout.layers)
 
         # Remove the layouts completely overlapped by the superior layer
         for index in sorted(layouts_to_remove, reverse=True):
             layer.pop(index)
 
-    def _collapse_layers(self) -> None:
+    def _build_symmetry_shape(
+            self,
+            symmetry: SymmetryType,
+            x_min_max: Tuple[float, float],
+            y_min_max: Tuple[float, float],
+            o_xyz: Tuple[float, float, float]
+        ) -> Surface:
         """
-        Method that collapses all the layers (a list containing lists of
-        ``Region`` or ``Fillable`` objects) of the current instance by
-        traversing them in reverse order.
-        If any compound object of a layer overlaps any layer below it, its
-        ``Region`` objects are cut by the higher layer compound.
+        Method that builds the geometric shape corresponding to the given
+        symmetry type for a generic layout.
+
+        Supported symmetries are:
+        - FULL: returns the characteristic shape of the layout.
+        - HALF: builds a rectangle representing half of the layout.
+        - QUARTER: builds a rectangle representing one quarter of the layout.
+
+        Parameters
+        ----------
+        symmetry : SymmetryType
+            The symmetry type for which the characteristic shape is built.
+        x_min_max : tuple[float, float]
+            The minimum and maximum extension of the geometry bounding box
+            along X-axis.
+        y_min_max : tuple[float, float]
+            The minimum and maximum extension of the geometry bounding box
+            along Y-axis.
+        o_xyz : tuple[float, float, float]
+            The XYZ coordinates of the layout centre.
+
+        Returns
+        -------
+        Surface
+            A geometric shape representing the requested symmetry.
+
+        Raises
+        ------
+        RuntimeError
+            If the indicated symmetry type is not supported for a generic
+            layout.
+        """
+        # Get the XY dimensions of the bounding box for the geometry layout
+        x_min, x_max = x_min_max
+        y_min, y_max = y_min_max
+        # Get the coordinates of the layout centre
+        o_x, o_y, o_z = o_xyz
+        # Match the shape with the type of symmetry
+        match symmetry:
+            case SymmetryType.FULL:
+                return deepcopy(self.shape)
+            case SymmetryType.HALF:
+                return Rectangle(
+                    (o_x + (x_max - o_x)/2, o_y, o_z),
+                    y_max - y_min,
+                    x_max - o_x
+                )
+            case SymmetryType.QUARTER:
+                return Rectangle(
+                    (o_x + (x_max - o_x)/2, o_y + (y_max - o_y)/2, o_z),
+                    (y_max - y_min)/2,
+                    (x_max - x_min)/2
+                )
+            case _:
+                raise RuntimeError(
+                    f"Symmetry {symmetry} not supported for a "
+                    f"'{self.__class__.__name__}'."
+                )
+
+    def _collapse_layers(self, layers: List[List[Region | Self]]) -> None:
+        """
+        Method that collapses all the given layers (a list containing lists
+        of ``Region`` or ``Fillable`` objects).
+        If any compound object of a layer overlaps any layer below it, the
+        layouts contained in the overlapped layer are cut by the layer
+        compound at a higher level.
 
         Notes
         -----
         Layout objects belonging to the same layer should not overlap each
         other.
         """
-        # Reverse the list of layers
-        reversed_layers = self.layers[::-1]
-        for i, layer in enumerate(reversed_layers):
+        logging.info(
+            f"{self.__class__.__name__} - ({self.name}): "
+            "Collapsing its layers...")
+        # Loop through all the layers
+        for i, layer in enumerate(layers):
             # Skip the layer, if empty
             if not layer:
                 continue
             # Loop through all the layers below the current one to cut all the
             # layout objects of each sublayer, if any is overlapped.
-            for sub_layer in reversed_layers[i + 1:]:
+            for sub_layer in layers[i + 1:]:
                 # Skip the layer, if empty
                 if not sub_layer:
                     continue
                 # Overlap the current layer onto the layers below
-                self._overlap_layer_to(reversed_layers[i], sub_layer)
+                self._overlap_layer_to(layer, sub_layer)
 
-    def _collect_regions(self, layers: List[List[Region | Self]]) -> None:
+    def _get_regions_with_symmetry(self) -> List[Region]:
         """
-        Method that collects all the ``Region`` objects from the given layers.
-        The ``regions`` list is cleared from any existing regions and
-        rebuilded from the collected ones.
-        For each layer, it iterates through its layouts and append any
-        ``Region`` instances directly, or extends the list with the regions
-        from ``Fillable`` objects.
+        Method that collects and returns all the ``Region`` objects from the
+        layers of the current instance that are representative of the
+        technological geometry layout.
+        If any symmetry type other than ``SymmetryType.FULL`` is applied,
+        only the regions (or their portions) in common with the shape
+        identifying the symmetry type are returned.
+
+        Returns
+        ----------
+        List[Region]
+            A list containing the ``Region`` objects representative of the
+            technological geometry layout according to the currently applied
+            type of symmetry.
+        """
+        # Get the regions of the full technological layout
+        regions = self.get_regions()
+        # Return the regions in common with the shape of the symmetry
+        if self.state.symmetry_type != SymmetryType.FULL:
+            common_regions = []
+            for region in regions:
+                common = wrap_shape(
+                    make_common(
+                        region,
+                        self.symmetry_map[self.state.symmetry_type]
+                    )
+                )
+                if isinstance(common, Face):
+                    r = region.clone()
+                    r.update(common)
+                    common_regions.append(r)
+            return common_regions
+        return regions
+
+    def _iterate_over_geom_mappings(
+            self, geom_type: GeometryType) -> Iterator[Compound]:
+        """
+        Method that traverses the hierarchical structure of this instance to
+        collect all the geometry mappings for the given geometry type.
+
+        This method recursively descends into all nested ``Fillable`` objects
+        contained in this instance's ``layers`` attribute. For each nested
+        ``Fillable``, the needed geometry mapping is yielded before yielding
+        the one of the current object (i.e. a post-order traversal is
+        adopted).
 
         Parameters
         ----------
-        layers : List[Region | Self]
-            A list containing the ``Region`` or ``Fillable`` objects to
-            process.
+        geom_type : GeometryType
+            The geometry type whose compounds should be returned.
+
+        Yields
+        ------
+        Compound
+            The flattened sequence of ``Compound`` objects associated with
+            the indicated ``GeometryType`` for all descendant ``Fillable``
+            objects, followed by the one of the current instance.
         """
-        # Clear and collect all the regions from each layout object in the
-        # layers
-        self.regions = [
-            r
-            for layer in layers
-            for layout in layer
-            for r in (
-                [layout] if isinstance(layout, Region)
-                else layout.regions if isinstance(layout, Fillable)
-                else []
-            )
-        ]
+        # Recurse into 'Fillable' objects of each layer
+        for layer in self.layers:
+            for layout in layer:
+                if isinstance(layout, Fillable):
+                    # Depth-first into nested 'Fillable' objects
+                    yield from layout._iterate_over_geom_mappings(geom_type)
+
+        # Yield this Fillable's compound after children
+        yield from flatten_list(self.geometry_maps.get(geom_type, []))
 
     def _overlap_layer_to(
             self, layer: List[Region | Self], sub_layer: List[Region | Self]
@@ -532,8 +817,9 @@ class Fillable(Compound, Layout):
         axis : Edge
             The ``Edge`` object representing the rotation axis.
         """
+        self.rot_angle += angle
         # Convert the rotation angle in radians
-        self.rot_angle = math.radians(angle)
+        rot_angle = math.radians(angle)
         # Rotate the layouts in each layer araound the given axis
         for layer in self.layers:
             for layout in layer:
@@ -541,13 +827,57 @@ class Fillable(Compound, Layout):
 
         # Update the GEOM compounds representing the different geometry
         # layout types
-        self.geom_obj = make_rotation(self, axis, self.rot_angle)
+        self.geom_obj = make_rotation(self, axis, rot_angle)
         self.geometry_maps.update({
-            geom_type: make_rotation(layout, axis, self.rot_angle)
+            geom_type: make_rotation(layout, axis, rot_angle)
             for geom_type, layout in self.geometry_maps.items()
         })
         # Set the update flag to False
         self.state.is_update_needed = False
+
+    def _show_geometry_type_edges(self, geom_type: GeometryType) -> None:
+        """
+        Method that handles the visualization of the edges of the given
+        geometry type, if different from the technological one.
+        It gets the ``Compound`` object associated to the ``GeometryType``,
+        extracting the common part with the shape of the symmetry currently
+        applied, and it adds it to the SALOME study.
+        In the Object Browser, the added compound is available as child of
+        the GEOM compound representative of the technological geometry of the
+        layout this instance refers to.
+
+        Parameters
+        ----------
+        geom_type : GeometryType
+            The geometry type whose ``Compound`` object to display.
+
+        Raises
+        ------
+        RuntimeError
+            If this instance does not have any ``Compound`` object associated
+            to the given ``GeometryType``.
+        """
+        # Return if the given geometry type is the technological one
+        if geom_type == GeometryType.TECHNOLOGICAL:
+            return
+        # Get the 'Compound' object associated to the indicated geometry type
+        geom_map = self.get_geometry_map(geom_type)
+        # Update the mapping of the current instance
+        self.geometry_maps[geom_type] = geom_map
+        # Get only the portion in common with the symmetry shape
+        if self.state.symmetry_type != SymmetryType.FULL:
+            geom_map = make_common(
+                geom_map, self.symmetry_map[self.state.symmetry_type]
+            )
+        # Display the compound by colouring the edges with black color
+        set_color_face(geom_map, (0,0,0))
+        display_shape(
+            add_to_study_in_father(
+                self.geom_obj, geom_map, f"{geom_type.name} edges"
+            )
+        )
+        # Update the SALOME's study to display all the GEOM compound object
+        update_salome_study()
 
     def _show_regions(self) -> None:
         """
@@ -560,13 +890,12 @@ class Fillable(Compound, Layout):
         for region in self.regions:
             # Set the region color in the viewer
             set_color_face(region.geom_obj, region.color)
-            # Add the cell region to the study
+            # Add the layout region to the study
             region.entry_id = add_to_study_in_father(
                 self.geom_obj, region, region.name)
             # Display the region in the current view, if needed
             display_shape(region.entry_id)
-
-        # Show everything on the SALOME application
+        # Update the SALOME's study to display all the GEOM objects
         update_salome_study()
 
     @abstractmethod

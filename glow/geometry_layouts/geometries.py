@@ -41,6 +41,9 @@ class Surface(Face, Layout):
     entry_id : str | None
         The ID attributed by SALOME when the geometric surface is added
         to the study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the surface this instance
+        refers to.
     name : str
         The name assigned to the geometric surface when added to the study.
     o : Vertex
@@ -66,6 +69,7 @@ class Surface(Face, Layout):
         self.borders: List[Edge] = []
         self.o = wrap_shape(make_vertex(center))
         self.name = "Surface"
+        # FIXME To remove as useless
         self.out_circle: Edge | None = None
 
     def rotate(self, angle: float, axis: Edge | None = None) -> None:
@@ -228,6 +232,9 @@ class Circle(Surface):
         The characteristic dimensions of the circle along the X-Y axes.
     entry_id : str | None
         The ID associated to the surface in the SALOME study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the surface this instance
+        refers to.
     name : str
         The name of the surface when displayed in the SALOME study.
     o : Vertex
@@ -333,6 +340,9 @@ class Rectangle(Surface):
         i.e. the width and the height).
     entry_id : str | None
         The ID associated to the surface in the SALOME study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the surface this instance
+        refers to.
     name : str
         The name of the surface when displayed in the SALOME study.
     o : Vertex
@@ -493,6 +503,9 @@ class Hexagon(Surface):
         the edge and the apothem).
     entry_id : str | None
         The ID associated to the surface in the SALOME study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the surface this instance
+        refers to.
     name : str
         The name of the surface when displayed in the SALOME study.
     o : Vertex
@@ -520,8 +533,8 @@ class Hexagon(Surface):
         # Build the list of edges connecting successive vertices
         self.borders = [
             wrap_shape(
-                make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
-            )
+                make_edge(vertices[i], vertices[(i+1) % 6])
+            ) for i in range(6)
         ]
         # Build the hexagon face
         self._initialize_geom_object(make_face(self.borders))
@@ -602,6 +615,9 @@ class GenericSurface(Surface):
         axes (i.e. the dimensions of the bounding box).
     entry_id : str | None
         The ID associated to the surface in the SALOME study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the surface this instance
+        refers to.
     name : str
         The name of the surface when displayed in the SALOME study.
     o : Vertex
@@ -694,6 +710,66 @@ def build_hexagon_from_apothem(
     return Hexagon(center, hex_side)
 
 
+def build_parallelogram(
+        side_x: float,
+        side_y: float,
+        left_corner_angle: float,
+        left_corner: Tuple[float, float, float] | None = None
+    ) -> GenericSurface:
+    """
+    Function that builds a ``GenericSurface`` instance representing a
+    parallelogram from the given values for its sides and the angle (in
+    degrees) of the left-most corner wrt the X-axis.
+    The resulting face is placed with its left corner that coincides with the
+    given coordinates, if any, otherwise the corner is the XYZ space origin.
+
+    Parameters
+    ----------
+    side_x : float
+        The length of the side parallel to the X-axis.
+    side_y : float
+        The length of the side parallel to the Y-axis.
+    left_corner_angle : float
+        The value of the angle (in degrees) of the left-most corner wrt
+        the X-axis.
+    left_corner : Tuple[float, float, float] | None = None
+        The XYZ coordinates of the left corner, if any.
+
+    Returns
+    -------
+    GenericSurface
+        The ``GenericSurface`` instance representing a parallelogram.
+    """
+    # Convert the angle in radians
+    angle_rad = math.radians(left_corner_angle)
+    # Calculate the X-Y projections of the oblique side
+    prj_x = side_y*math.cos(angle_rad)
+    prj_y = side_y*math.sin(angle_rad)
+    # Build the vertices of the parallelogram starting from the left corner
+    vertices = [
+        make_vertex(left_corner),
+        make_vertex(
+            (left_corner[0] + side_x, left_corner[1], left_corner[2])
+        ),
+        make_vertex(
+            (
+                left_corner[0] + side_x + prj_x,
+                left_corner[1] + prj_y,
+                left_corner[2]
+            )
+        ),
+        make_vertex(
+            (
+                left_corner[0] + prj_x,
+                left_corner[1] + prj_y,
+                left_corner[2]
+            )
+        )
+    ]
+    # Build the face object
+    return GenericSurface(make_face(build_contiguous_edges(vertices)))
+
+
 def build_right_triangle(
         hypotenuse: float,
         cathetus: float,
@@ -737,6 +813,46 @@ def build_right_triangle(
         make_vertex(left_corner),
         make_vertex((lc_x + hypotenuse, lc_y, 0.0)),
         make_vertex((lc_x + hypotenuse - proj, lc_y + height, 0.0))
+    ]
+    # Build the face object
+    return GenericSurface(make_face(build_contiguous_edges(vertices)))
+
+
+def build_right_triangle_from_catheti(
+        cathetus_x: float,
+        cathetus_y: float,
+        left_corner: Tuple[float, float, float] | None = None
+    ) -> GenericSurface:
+    """
+    Function that builds a ``GenericSurface`` instance representing a right
+    triangle from the given values for the two catheti, one parallel to the
+    X-axis, the other to the Y-axis.
+    The resulting face is placed with its left corner that coincides with the
+    given coordinates, if any, otherwise the corner is the XYZ space origin.
+
+    Parameters
+    ----------
+    cathetus_x : float
+        The length of the cathetus parallel to the X-axis.
+    cathetus_y : float
+        The length of the cathetus parallel to the Y-axis.
+    left_corner : Tuple[float, float, float] | None = None
+        The XYZ coordinates of the left corner, if any.
+
+    Returns
+    -------
+    GenericSurface
+        The ``GenericSurface`` instance representing a right triangle.
+    """
+    # Build the vertices of the right triangle, considering the coordinates
+    # of the left corner, if any
+    if not left_corner:
+        left_corner = (0.0, 0.0, 0.0)
+    lc_x, lc_y = left_corner[0], left_corner[1]
+    vertices = [
+        make_vertex(left_corner),
+        make_vertex((lc_x + cathetus_x, lc_y, 0.0)),
+        make_vertex((lc_x + cathetus_x, lc_y + cathetus_y, 0.0))
     ]
     # Build the face object
     return GenericSurface(make_face(build_contiguous_edges(vertices)))

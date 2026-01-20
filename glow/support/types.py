@@ -98,6 +98,8 @@ class SymmetryType(Enum):
     """Identifying an eighth of the lattice."""
     TWELFTH: int = 12
     """Identifying an twelfth of the lattice."""
+    DIAG: int = 13
+    """Identifying an half of the lattice along its diagonal."""
 
 
 class CellType(Enum):

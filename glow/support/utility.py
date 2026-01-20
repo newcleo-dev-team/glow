@@ -6,13 +6,13 @@ import math
 import random
 
 from types import CellType
-from typing import Any, List, Tuple
+from typing import Any, Generator, Iterable, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, extract_sorted_sub_shapes, \
     extract_sub_shapes, fuse_edges_in_wire, get_angle_between_shapes, \
     get_basic_properties, get_closed_free_boundary, get_kind_of_shape, \
     get_min_distance, get_point_coordinates, get_selected_object, \
-    get_shape_name, get_shape_type, is_gui_available, make_arc_edge, make_cdg, \
+    get_shape_name, get_shape_type, is_gui_available, make_arc_edge, make_cdg, make_compound, \
     make_cut, make_edge, make_face, make_fuse, make_partition, \
     make_translation, make_vector_from_points, make_vertex
 from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, LatticeGeometryType, \
@@ -385,6 +385,34 @@ def compute_point_by_reference(
         relative_vctr))
 
 
+def flatten_list(nested_list: List[Any]) -> Generator[Any, Any, None]:
+    """
+    Function that recursively flattens an arbitrarily nested structure of
+    lists into a one-dimensional generator of elements.
+
+    This function performs a depth-first traversal over the given list of
+    nested elements, yielding non-list elements in the order they are
+    encountered. Nested lists are recursively expanded, while ``None`` values
+    are skipped.
+
+    Parameters
+    ----------
+    nested_list : list of Any
+        A list of arbitrarily nested list of objects. Elements may themselves
+        be lists, in which case they are recursively traversed and flattened.
+
+    Yields
+    ------
+    Any
+        The next non-list element found during the depth-first traversal.
+    """
+    if isinstance(nested_list, list):
+        for item in nested_list:
+            yield from flatten_list(item)
+    elif nested_list is not None:
+        yield nested_list
+
+
 def generate_unique_random_colors(
         no_colors: int) -> List[Tuple[int, int, int]]:
     """
@@ -498,6 +526,131 @@ def get_id_from_shape(shape: Any) -> int:
     if not name:
         raise RuntimeError("No name has been assigned to the shape.")
     return get_id_from_name(name)
+
+def get_vertex_polar_position(
+        point: Any,
+        origin: Any,
+        ref_vec: Tuple[float, float] = (1, 0),
+        is_cw: bool = True
+    ) -> Tuple[float, float]:
+    """
+    Function returning the angle and the distance of the given GEOM vertex
+    wrt the indicated origin, and starting from the direction of the
+    reference vector.
+    The angle is calculated according to the ``is_cw`` parameter, a flag
+    stating whether a clockwise or a counterclockwise order is considered.
+
+    Parameters
+    ----------
+    point : Any
+        The GEOM vertex whose angle and distance wrt the origin is calculated.
+    origin : Any
+        The GEOM vertex representing the origin.
+    ref_vec : Tuple[float, float] = (1, 0)
+        The XY components of the reference vector indicating the starting
+        position.
+    is_cw : bool = True
+        Flag indicating whether a clockwise or a counterclockwise order is
+        considered.
+
+    Returns
+    -------
+    Tuple[float, float]
+        The angle and the distance of the given GEOM vertex wrt the origin.
+
+    Raises
+    ------
+    ValueError
+        If the indicated reference vector have a zero length.
+
+    Notes
+    -----
+    The result can be used as sorting key for clockwise (default behaviour)
+    or counterclockwise ordering of vertices around an origin.
+    """
+    # Calculate the components of the vector from origin to point
+    point_coords = get_point_coordinates(point)
+    origin_coords = get_point_coordinates(origin)
+    vx, vy = (
+        point_coords[0] - origin_coords[0],
+        point_coords[1] - origin_coords[1]
+    )
+    # Calculate the length of the distance vector; if zero, return -pi, 0.0
+    r = math.sqrt(vx*vx + vy*vy)
+    if math.isclose(r, 0.0, abs_tol=1e-6):
+        return -math.pi, 0.0
+    # Calculate the length of the reference vector
+    rvx, rvy = (ref_vec[0], ref_vec[1])
+    rlen = math.sqrt(rvx*rvx + rvy*rvy)
+    if math.isclose(rlen, 0.0, abs_tol=1e-6):
+        raise ValueError(
+            "The indicated reference vector must have a non-zero length."
+        )
+    # Normalize the components of the distance and reference vectors
+    nx, ny = (vx / r, vy / r)
+    rvx, rvy = (rvx / rlen, rvy / rlen)
+
+    # Calculate the signed angle between the reference and the distance
+    # vectors (right-hand rule):
+    # diffprod = x1*y2 - y1*x2; dotprod = x1*x2 + y1*y2
+    dot_prod  = rvx * nx + rvy * ny
+    diff_prod = rvx * ny - rvy * nx
+    angle = math.atan2(diff_prod, dot_prod)
+
+    # Handle the sorting direction and convert the angle to the [0, 2*pi)
+    # range to enable sorting
+    if is_cw:
+        angle = (-angle) % (2 * math.pi)
+    else:
+        if angle < 0:
+            angle += 2 * math.pi
+    # Return angle and distance from origin
+    return (round(angle, 6), round(r, 6))
+
+
+def get_vertices_on_edges(
+        edges_1: List[Any],
+        edges_2: List[Any],
+        ref_vertex: Any
+    ) -> List[Any]:
+    """
+    Method that extracts vertices from the first list of edges that lie on
+    the edges of the second list. These vertices are returned sorted in
+    counterclockwise order around a reference vertex.
+
+    Parameters
+    ----------
+    edges_1 : List[Any]
+        A list of GEOM edge objects from which vertices are extracted.
+    edges_2 : List[Any]
+        A list of GEOM edge objects representing the reference edges.
+        Vertices from `edges_1` are checked against these edges to determine
+        the vertices lying on them.
+    ref_vertex : Any
+        The reference vertex used to sort the resulting vertices in
+        counterclockwise order.
+
+    Returns
+    -------
+    List[Any]
+        A list of GEOM vertex objects that lie on the edges of `edges_2`,
+        sorted in counterclockwise order around `ref_vertex`.
+    """
+    vertices = []
+    cell_borders = make_compound(edges_2)
+    for edge in edges_1:
+        v1, v2 = extract_sub_shapes(edge, ShapeType.VERTEX)
+        if math.isclose(
+            get_min_distance(v1, cell_borders), 0.0, abs_tol=1e-6
+        ):
+            vertices.append(v1)
+        else:
+            vertices.append(v2)
+    # Sort vertices in counterclockwise order
+    return sorted(
+        vertices,
+        key=lambda v: get_vertex_polar_position(v, ref_vertex, is_cw=False)
+    )
 
 
 def is_collinear(edge: Any, collinear_edges: List[Any]) -> bool:
