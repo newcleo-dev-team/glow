@@ -7,7 +7,7 @@ import math
 from typing import Any, List, Tuple
 
 from glow.geometry_layouts.layouts import Layout
-from glow.interface.geom_entities import Edge, Face, wrap_shape
+from glow.interface.geom_entities import Edge, Face, Vertex, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
     display_shape, extract_sub_shapes, get_angle_between_shapes, \
     get_basic_properties, get_bounding_box, get_min_distance, \
@@ -97,17 +97,26 @@ class Surface(Face, Layout):
         # Rotate the surface elements
         self._rotate_from_axis(angle, axis)
 
-    def scale(self, factor: float) -> None:
+    def scale(self, factor: float, origin: Vertex | None = None) -> None:
         """
-        Method for scaling the surface by the given factor.
+        Method for scaling the surface by the given factor wrt the ``Vertex``
+        object, if any. If no reference vertex is provided, the scaling is
+        performed wrt the centre of the surface.
 
         Parameters
         ----------
         factor : float
             The scaling factor.
+        origin : Vertex | None = None
+            Identifying the point wrt the scaling is performed. If ``None``,
+            the reference point is the surface's centre.
         """
+        # Perform the scaling wrt to the given origin, otherwise the surface's
+        # centre
+        if origin is None:
+            origin = self.o
         # Apply the scaling and re-build the borders
-        self.geom_obj = make_scale(self, self.o, factor)
+        self.geom_obj = make_scale(self, origin, factor)
         self.borders = extract_sub_shapes(self.geom_obj, ShapeType.EDGE)
 
     def show(self, *args: Any) -> None:

@@ -147,18 +147,6 @@ class Cell(Fillable):
             self.o
         )
 
-    def scale(self, factor: float) -> None:
-        """
-        Method for scaling the layout by the given factor.
-
-        Parameters
-        ----------
-        factor : float
-            The scaling factor.
-        """
-        # TODO Add implementation
-        pass
-
     def sectorize(
             self, sectors_no: List[int], angles: List[float], **kwargs: Any
         ) -> None:

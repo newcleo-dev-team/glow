@@ -9,17 +9,18 @@ from abc import abstractmethod
 from copy import deepcopy
 from typing import Any, Dict, Iterator, List, Self, Tuple
 
-from glow.geometry_layouts.geometries import Circle, Rectangle, Surface
+from glow.geometry_layouts.geometries import Rectangle, Surface
 from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
     associate_colors_to_regions
-from glow.interface.geom_entities import Compound, Edge, Face, wrap_shape
+from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
+    wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_bounding_box, get_closed_free_boundary, get_min_distance, \
     get_object_from_id, get_point_coordinates, get_shape_type, make_cdg, \
     make_common, make_compound, make_cut, make_face, make_partition, \
-    make_rotation, make_translation, make_vector_from_points, make_vertex, \
-    remove_from_study, set_color_face, update_salome_study
+    make_rotation, make_scale, make_translation, make_vector_from_points, \
+    make_vertex, remove_from_study, set_color_face, update_salome_study
 from glow.support.types import GeometryType, PropertyType, SymmetryType
 from glow.support.utility import build_z_axis_from_vertex, \
     compute_point_by_reference, flatten_list
@@ -297,6 +298,35 @@ class Fillable(Compound, Layout):
             )
         ]
 
+    def restore(self) -> None:
+        """
+        Method that restores the geometry layout of this instance.
+        It removes all the layouts stored in the layers while keeping the
+        characteristic shape intact.
+        Any symmetry and geometry types mappings are completely cleared.
+        The result is that the layout is set to a GEOM face built from the
+        borders of the current layout, while the ``layers`` and ``regions``
+        lists are filled only by the corresponding ``Region`` without any
+        associated property.
+        """
+        # Clear all the mappings and the lists
+        self.geometry_maps.clear()
+        self.symmetry_map.clear()
+        self.layers.clear()
+        self.regions.clear()
+        # Update the GEOM object this instance refers to by building a face
+        # from the borders of the current layout
+        boundaries = get_closed_free_boundary(self.geom_obj)
+        if len(boundaries) > 1:
+            boundaries = get_closed_free_boundary(
+                make_partition(self.geom_obj, [], ShapeType.FACE)
+            )
+        region = Region(make_face(boundaries))
+        self.update(region)
+        # Update the layers with only one containing the region based on the
+        # restored layout
+        self.layers = [[region]]
+
     def rotate(self, angle: float, axis: Edge | None = None) -> None:
         """
         Method for rotating the layout by the given angle (in degrees) around
@@ -319,6 +349,43 @@ class Fillable(Compound, Layout):
             axis = wrap_shape(build_z_axis_from_vertex(self.o))
         # Rotate the surface elements
         self._rotate_from_axis(angle, axis)
+
+    def scale(self, factor: float, origin: Vertex | None = None) -> None:
+        """
+        Method for scaling the layout by the given factor wrt the ``Vertex``
+        object, if any. If no reference vertex is provided, the scaling is
+        performed wrt the centre of the region.
+        The GEOM object this instance refers to, all the layout objects in
+        each layer, and the mappings, are scaled by the same factor.
+
+        Parameters
+        ----------
+        factor : float
+            The scaling factor.
+        origin : Vertex | None = None
+            Identifying the point wrt the scaling is performed. If ``None``,
+            the reference point is the region's centre.
+        """
+        # Perform the scaling wrt to the given origin, otherwise the layout's
+        # centre
+        if origin is None:
+            origin = self.o
+        # Scale the GEOM object this instance refers to together with the
+        # layouts in the layers
+        self.geom_obj = make_scale(self.geom_obj, origin, factor)
+        for layer in self.layers:
+            for layout in layer:
+                layout.scale(factor, origin)
+
+        # Scale the Compound objects in the mappings
+        self.geometry_maps.update({
+            geom_type: wrap_shape(make_scale(layout, origin, factor))
+            for geom_type, layout in self.geometry_maps.items()
+        })
+        self.symmetry_map.update({
+            symm_type: wrap_shape(make_scale(layout, origin, factor))
+            for symm_type, layout in self.symmetry_map.items()
+        })
 
     def show(self, *args: Any) -> None:
         """
@@ -454,7 +521,7 @@ class Fillable(Compound, Layout):
         # layout types
         self.geom_obj = make_translation(self.geom_obj, transl_vect)
         self.geometry_maps.update({
-            geom_type: make_translation(layout, transl_vect)
+            geom_type: wrap_shape(make_translation(layout, transl_vect))
             for geom_type, layout in self.geometry_maps.items()
         })
         # Set the update flag to False
@@ -829,7 +896,7 @@ class Fillable(Compound, Layout):
         # layout types
         self.geom_obj = make_rotation(self, axis, rot_angle)
         self.geometry_maps.update({
-            geom_type: make_rotation(layout, axis, rot_angle)
+            geom_type: wrap_shape(make_rotation(layout, axis, rot_angle))
             for geom_type, layout in self.geometry_maps.items()
         })
         # Set the update flag to False

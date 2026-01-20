@@ -79,14 +79,19 @@ class Layout(ABC):
         """
 
     @abstractmethod
-    def scale(self, factor: float) -> None:
+    def scale(self, factor: float, origin: Vertex | None = None) -> None:
         """
-        Abstract method for scaling the layout by the given factor.
+        Abstract method for scaling the region by the given factor wrt the
+        ``Vertex`` object, if any. If no reference vertex is provided, the
+        scaling is performed wrt the centre of the region.
 
         Parameters
         ----------
         factor : float
             The scaling factor.
+        origin : Vertex | None = None
+            Identifying the point wrt the scaling is performed. If ``None``,
+            the reference point is the region's centre.
         """
 
     @abstractmethod
@@ -241,16 +246,25 @@ class Region(Face, Layout):
         # Rotate the surface elements
         self._rotate_from_axis(angle, axis)
 
-    def scale(self, factor: float) -> None:
+    def scale(self, factor: float, origin: Vertex | None = None) -> None:
         """
-        Method for scaling the region by the given factor.
+        Method for scaling the region by the given factor wrt the ``Vertex``
+        object, if any. If no reference vertex is provided, the scaling is
+        performed wrt the centre of the region.
 
         Parameters
         ----------
         factor : float
             The scaling factor.
+        origin : Vertex | None = None
+            Identifying the point wrt the scaling is performed. If ``None``,
+            the reference point is the region's centre.
         """
-        self.geom_obj = make_scale(self.geom_obj, self.o, factor)
+        # Perform the scaling wrt to the given origin, otherwise the region's
+        # centre
+        if origin is None:
+            origin = self.o
+        self.geom_obj = make_scale(self.geom_obj, origin, factor)
 
     def set_region_color(self, color: Tuple[int, int, int]) -> None:
         """
