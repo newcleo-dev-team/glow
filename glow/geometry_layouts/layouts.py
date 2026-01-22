@@ -2,6 +2,7 @@
 Module containing the classes enabling the creation and the visualisation of
 geometry layouts built in GLOW.
 """
+import logging
 import math
 
 from abc import ABC, abstractmethod
@@ -12,10 +13,10 @@ from typing import Any, Dict, List, Self, Sequence, Tuple
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
 from glow.interface.geom_interface import add_to_study, clear_view, \
-    display_shape, get_object_from_id, get_point_coordinates, make_cdg, \
-    make_rotation, make_scale, make_translation, make_vector_from_points, \
-    make_vertex, make_vertex_inside_face, remove_from_study, \
-    update_salome_study
+    display_shape, get_basic_properties, get_bounding_box, get_object_from_id, \
+    get_point_coordinates, make_cdg, make_common, make_rotation, make_scale, \
+    make_translation, make_vector_from_points, make_vertex, \
+    make_vertex_inside_face, remove_from_study, update_salome_study
 from glow.support.types import GeometryType, LatticeGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import build_z_axis_from_vertex, \
@@ -189,7 +190,7 @@ class Region(Face, Layout):
         self.color: Tuple[int, int, int] = DEFAULT_REGION_COLOR
         self.properties: Dict[PropertyType, str] | None = properties
         self.region_id: int = id(self._geom_obj)
-        self.name = name if name else f"Region {self.region_id}"
+        self.name = name if name else f"Region_{self.region_id}"
         # Initialize superclass attributes
         self.entry_id = None
         self.o = wrap_shape(make_cdg(self.geom_obj))
@@ -587,9 +588,75 @@ def get_unique_values_for_property(
             f"coordinates: ")
         for point in missing_regions_points[:-1]:
             message += f"'{point}', "
-        message += (f"'{missing_regions_points[-1]}'. Please, call the "
-            + "'show()' method to show the regions, select the one with "
-            + "a missing property and call the 'set_region_property()' "
-            + "method to assign the property to.")
+        message += (
+            f"'{missing_regions_points[-1]}'. Please, for each of the "
+            + f"higlighted regions with the missing {property_type.name} "
+            + "call the method 'set_region_properties()', after selecting "
+            + "each of them, to assign the property to."
+        )
         raise RuntimeError(message)
     return list(values)
+
+
+# -------------------------------------------------------------------------- #
+#                                FUNCTIONS                                   #
+# -------------------------------------------------------------------------- #
+
+def is_layout_contained(
+        container: Compound | Face,
+        candidate: Compound | Face,
+        tolerance: float = 1e-6
+    ) -> bool:
+
+    """
+    Function that checks whether a `candidate` planar shape is entirely
+    contained within a `container` planar shape.
+
+    This containment check is based on three successive steps:
+    - areas comparison;
+    - bounding box comparison;
+    - exact geometric intersection area check.
+
+    The candidate is considered contained if the candidate passes all the
+    checks with the last one verifying if the area of the geometric
+    intersection equals the candidate's area within the given relative
+    tolerance.
+
+    Parameters
+    ----------
+    container : Compound | Face
+        The outer planar shape that is expected to contain the `candidate`.
+    candidate : Compound | Face
+        The inner planar shape to be tested for containment.
+    tolerance : float = 1e-6
+        Relative tolerance used for area comparisons and bounding-box guards.
+        Its default value is ``1e-6``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the `candidate` is fully contained in the `container`
+        (within the specified tolerance), otherwise ``False``.
+    """
+    # Compare areas of container and candidate
+    area_container = get_basic_properties(container)[1]
+    area_candidate = get_basic_properties(candidate)[1]
+    if area_candidate > area_container + tolerance * area_container:
+        return False
+
+    # Compare bounding box extensions of container and candidate
+    bbox_container = get_bounding_box(container)
+    bbox_candidate = get_bounding_box(candidate)
+    if any([
+        bbox_candidate[i] - bbox_container[i] <= -tolerance for i in [0, 2]
+    ]) or any([
+        bbox_candidate[i] - bbox_container[i] >= tolerance for i in [1, 3]
+    ]):
+        return False
+
+    # Compare areas of common part between container and candidate with the
+    # one of the candidate
+    area_common = get_basic_properties(
+        make_common(container, candidate)
+    )[1]
+    return abs(area_common - area_candidate) < tolerance * area_candidate

@@ -11,19 +11,20 @@ from typing import Any, Dict, Iterator, List, Self, Tuple
 
 from glow.geometry_layouts.geometries import Rectangle, Surface
 from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
-    associate_colors_to_regions
+    associate_colors_to_regions, is_layout_contained
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_bounding_box, get_closed_free_boundary, get_min_distance, \
-    get_object_from_id, get_point_coordinates, get_shape_type, make_cdg, \
-    make_common, make_compound, make_cut, make_face, make_partition, \
-    make_rotation, make_scale, make_translation, make_vector_from_points, \
-    make_vertex, remove_from_study, set_color_face, update_salome_study
+    get_object_from_id, get_point_coordinates, get_shape_name, get_shape_type, \
+    is_point_inside_shape, make_cdg, make_common, make_compound, make_cut, \
+    make_face, make_partition, make_rotation, make_scale, make_translation, \
+    make_vector_from_points, make_vertex, make_vertex_inside_face, \
+    remove_from_study, set_color_face, update_salome_study
 from glow.support.types import GeometryType, PropertyType, SymmetryType
-from glow.support.utility import build_z_axis_from_vertex, \
-    compute_point_by_reference, flatten_list
+from glow.support.utility import are_same_shapes, build_z_axis_from_vertex, \
+    compute_point_by_reference, flatten_list, retrieve_selected_object
 
 
 class Fillable(Compound, Layout):
@@ -146,8 +147,6 @@ class Fillable(Compound, Layout):
         ``build_regions``. To build and display the geometry layout, call the
         method ``show``.
         """
-        # Set the given layout name to include the one of the current compound
-        layout.name = f"{self.name}_{layout.name}"
         # Set the given layout position to the current compound centre, if no
         # position is provided.
         if not position:
@@ -157,6 +156,8 @@ class Fillable(Compound, Layout):
         if isinstance(layout, Fillable):
             layout.update_hierarchical_structure()
         layout = layout.clone()
+        # Set the given layout name to include the one of the current compound
+        layout.name = f"{self.name}_{layout.name}"
         # Translate the given layout if its position differs from the layout
         # centre
         if not all(math.isclose(i, 0.0, abs_tol=1e-6) for i in position):
@@ -298,6 +299,63 @@ class Fillable(Compound, Layout):
             )
         ]
 
+    def print_region_info(self, shape: Any | None = None) -> None:
+        """
+        Method that retrieves and prints descriptive information about the
+        region of the layout this instance refers to according to the given
+        GEOM face, if any, otherwise the one currently selected in the SALOME
+        study.
+        The printed information is related to:
+        - the tree representation of the hierarchical structure up to the
+          target ``Region`` object;
+        - the values for each of the ``PropertyType`` items associated to the
+          target ``Region`` object.
+
+        Parameters
+        ----------
+        shape : Any | None = None
+            The GEOM face indicating the region belonging to the technological
+            geometry of the layout this instance refers to and whose
+            information have to be retrieved and printed. When not provided,
+            the GEOM face currently selected in the SALOME study is
+            considered.
+
+        Raises
+        ------
+        RuntimeError
+            When no GEOM face, or more than one, is selected.
+        RuntimeError
+            If the given GEOM face does not correspond to any of the
+            ``Region`` objects belonging to the hierarichal tree of this
+            instance.
+        """
+        # Extract the geometrical object currently selected in the current
+        # SALOME study, if any
+        if shape is None:
+            shape = retrieve_selected_object(
+                "Please, select a single region whose data to show.")
+        # Get the path to the region that corresponds to the given shape, if
+        # any can be found
+        path = find_region_path_in_tree(self.layers, shape)
+        if not path:
+            raise RuntimeError(
+                f"The indicated region, named '{get_shape_name(shape)}', "
+                "could not be found among any of the regions along the "
+                f"hierarchical structure of the layout named '{self.name}'."
+            )
+        # Get the region by following the path up to it
+        region = follow_path_to_node(self, path)
+
+        # Print information about the subtree from the root to the target
+        print_subtree(self, region, path)
+
+        # Print the information about the properties of the region
+        print(f"Properties of '{region.name}':")
+        if not region.properties:
+            print("   No associated properties.")
+        for prop_type, value in region.properties.items():
+            print(f"   {prop_type.name}: {value}\n")
+
     def restore(self) -> None:
         """
         Method that restores the geometry layout of this instance.
@@ -386,6 +444,63 @@ class Fillable(Compound, Layout):
             symm_type: wrap_shape(make_scale(layout, origin, factor))
             for symm_type, layout in self.symmetry_map.items()
         })
+
+    def set_region_properties(
+            self,
+            properties: Dict[PropertyType, str],
+            region: Any | None = None
+        ) -> None:
+        """
+        Method that enables setting the values of the given property types
+        for the region of the layout whose GEOM face is passed as input.
+        Alternatively, if no one is provided, the method gets the GEOM face
+        currently selected in the SALOME study, if any.
+        The whole hierarchical tree of the layout is traversed to find the
+        ``Region`` object that matches the GEOM face and its properties
+        updated with the given dictionary.
+
+        Parameters
+        ----------
+        properties : Dict[PropertyType, str]
+            The dictionary associating the ``PropertyType`` items to the
+            corresponding values with which the properties of the region
+            have to be updated.
+        region : Any | None = None
+            The GEOM face indicating the region belonging to the technological
+            geometry of the layout this instance refers to and whose
+            properties have to be updated. When not provided, the GEOM face
+            currently selected in the SALOME study is considered.
+
+        Raises
+        ------
+        RuntimeError
+            When no GEOM face, or more than one, is selected.
+        RuntimeError
+            If the given GEOM face does not correspond to any of the
+            ``Region`` objects belonging to the hierarichal tree of this
+            instance.
+        """
+        # If no geometric object is passed, get the one currently selected in
+        # the SALOME study, if any
+        if region is None:
+            region = retrieve_selected_object(
+                "Please, select a single region."
+            )
+
+        # Get the 'Region' object that corresponds to the GEOM face by
+        # traversing the tree up to the region, if any
+        found_region = get_region_in_tree(self.layers, region)
+        if not found_region:
+            raise RuntimeError(
+                f"The indicated region, named '{get_shape_name(region)}', "
+                "could not be found among any of the regions along the "
+                f"hierarchical structure of the layout named '{self.name}'."
+            )
+        # Set the properties of the found 'Region' object
+        if found_region.properties is None:
+            found_region.properties = properties
+        else:
+            found_region.properties.update(properties)
 
     def show(self, *args: Any) -> None:
         """
@@ -979,3 +1094,211 @@ class Fillable(Compound, Layout):
         new_cntr : Tuple[float, float, float]
             The XYZ coordinates of the centre of the translated layout.
         """
+
+
+# -------------------------------------------------------------------------- #
+#                                FUNCTIONS                                   #
+# -------------------------------------------------------------------------- #
+
+def find_region_path_in_tree(
+        layers: List[List[Region | Fillable]],
+        shape: Any,
+        path: List[Tuple[int, int]] | None = None
+    ) -> List[Tuple[int, int]] | None:
+    """
+    Function that traverses the given hierarchical tree as a list of possibly
+    nested lists to find the path to the ``Region`` object that matches the
+    given shape.
+    A positive match occurs either if their shapes are identical or if a
+    vertex built within the input shape is within a ``Region`` object in the
+    tree. If no match is found, ``None`` is returned.
+
+    For each ``Fillable`` object that contains the given GEOM face, the
+    indices of the list of lists of its parent ``Fillable`` in which the
+    current one is found are stored.
+    The final result is a list of tuples of indices that helps to reconstruct
+    the entire path from the root to the matching ``Region``.
+
+    Parameters
+    ----------
+    layers : List[List[Region | Fillable]]
+        The hierarchical tree as list of nested lists of ``Region`` (leaves)
+        and ``Fillable`` objects (nodes).
+    shape : Any
+        The GEOM face whose corresponding ``Region`` has to be found.
+    path : List[Tuple[int, int]] | None = None
+        The path storing the indices to progressively reach the parent of the
+        current ``Fillable`` object. It defaults to ``None``, indicating the
+        beginning of the search.
+
+    Returns
+    -------
+    List[Tuple[int, int]] | None
+        The list of tuples of indices used in each of the nested lists from
+        the root ``Fillable`` to the matching ``Region``. If no match is found
+        ``None`` is returned.
+    """
+    # Initialize the list of indices if not passed
+    if path is None:
+        path = []
+    # Traverse the list of lists of the current node
+    for layer_i, layer in enumerate(layers):
+        for elem_i, layout in enumerate(layer):
+            # Skip layouts that do not contain the shape
+            if not is_layout_contained(layout, shape):
+                continue
+            # Update the path with the indices to the layout containing the
+            # given shape
+            path += [(layer_i, elem_i)]
+            # Recursively call this function to descend deeper in the tree, if
+            # the container is a 'Fillable'
+            if isinstance(layout, Fillable):
+                return find_region_path_in_tree(
+                    layout.layers,
+                    shape,
+                    path
+                )
+            else:
+                # Check if a match with any of the regions of the node occurs
+                if (are_same_shapes(shape, layout, ShapeType.FACE)
+                    or is_point_inside_shape(
+                        make_vertex_inside_face(shape), layout
+                    )
+                ):
+                    # Return the path to the found region
+                    return path
+    # Return None if no matches are found in this tree
+    return None
+
+
+def follow_path_to_node(
+        root: Fillable, path: List[Tuple[int, int]]
+    ) -> Region | Fillable:
+    """
+    Function that traverses the nested hierarchical trees starting from the
+    root ``Fillable`` object up to the node that results from following the
+    provided path.
+
+    Parameters
+    ----------
+    root : Fillable
+        Root node of the hierarchical tree.
+    path : List[Tuple[int, int]]
+        Sequence of pairs of indices describing the path up to the node.
+
+    Returns
+    -------
+    Region | Fillable
+        The layout (either a ``Region`` or a ``Fillable`` object) at the end
+        of the path.
+
+    Raises
+    ------
+    IndexError
+        If a layer or element index is out of range.
+    TypeError
+        If the path attempts to descend into a non-``Fillable`` node.
+    """
+    # Set the root as the starting node
+    node = root
+    # Traverse the tree from the root object
+    for depth, (i, j) in enumerate(path):
+        # Return if the current node is a 'Region' object
+        if isinstance(node, Region):
+            return node
+        # Try accessing the node at the current indices
+        try:
+            node = node.layers[i][j]
+        except IndexError as e:
+            raise IndexError(
+                f"Invalid path at depth {depth}: "
+                f"layers[{i}][{j}] is out of range."
+            ) from e
+
+    return node
+
+
+def get_region_in_tree(
+        tree: List[List[Region | Fillable]],
+        shape: Any,
+    ) -> Region | None:
+    """
+    Function that traverses the given hierarchical tree as a list of possibly
+    nested lists to find the ``Region`` object that matches the given shape.
+    A positive match occurs either if their shapes are identical or if a
+    vertex built within the input shape is within a ``Region`` object in the
+    tree. If no match is found, ``None`` is returned.
+
+    Parameters
+    ----------
+    tree : List[List[Region | Fillable]]
+        The hierarchical tree as list of nested lists of ``Region`` (leaves)
+        and ``Fillable`` objects (nodes).
+    shape : Any
+        The GEOM face whose corresponding ``Region`` has to be found.
+
+    Returns
+    -------
+    Region | None
+        The ``Region`` contained in the hierarchical tree matching the given
+        shape, or ``None`` if no one is found.
+    """
+    # Get the region that corresponds to the given shape
+    for subtree in tree:
+        for layout in subtree:
+            # Continue with the next layout if the current one does not
+            # contain the shape
+            if not is_layout_contained(layout, shape):
+                continue
+            if isinstance(layout, Fillable):
+                # Return the found region, if any, by traversing the tree of
+                # the current layout
+                return get_region_in_tree(layout.layers, shape)
+            else:
+                # Return the region if the matching conditions are met
+                if (are_same_shapes(shape, layout, ShapeType.FACE)
+                    or is_point_inside_shape(
+                        make_vertex_inside_face(shape), layout)
+                ):
+                    return layout
+    # No region has been found, hence None is returned
+    return None
+
+
+def print_subtree(
+        root: Fillable,
+        target: Region | Fillable,
+        path: List[Tuple[int, int]]
+    ) -> None:
+    """
+    Function that prints to console the portion of the hierarchical tree from
+    the given root ``Fillable`` object to the target (either a ``Region`` or
+    a ``Fillable`` object) according to the path containing the list of tuples
+    of indices allowing to traverse the tree up to the target.
+
+    Parameters
+    ----------
+    root : Fillable
+        The root ``Fillable`` object.
+    target: Region | Fillable
+        The target (either a ``Region`` or a ``Fillable`` object) the path
+        points to.
+    path: List[Tuple[int, int]]
+        The sequence of tuples of indices that allows to traverse the tree
+        from root to target.
+    """
+    print(
+        f"\n--- TREE PATH FROM {root.__class__.__name__} '{root.name}' "
+        f"TO {target.__class__.__name__} '{target.name}' ---\n"
+    )
+    # Print visual indented tree and the access command to target
+    print(f"{root.name} (root)")
+    access_code = "<root-instance-name>"
+    for depth, (l, i) in enumerate(path, 1):
+        indent = "  " * depth
+        print(
+            f"{indent}└── layers[{l}][{i}] -> "
+            f"{follow_path_to_node(root, path[:depth]).name}"
+        )
+        access_code += f".layers[{l}][{i}]"
+    print(f"\nAccess Code: {access_code}\n")

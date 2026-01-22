@@ -750,6 +750,13 @@ def retrieve_selected_object(error_msg: str) -> Any:
     -------
     Any
         The GEOM object currently selected in the SALOME study.
+
+    Raises
+    ------
+    RuntimeError
+        If this function is called outside of the SALOME GUI.
+    RuntimeError
+        If no GEOM object could be retrieved from the current SALOME study.
     """
     if not is_gui_available():
         raise RuntimeError(
