@@ -9,7 +9,7 @@ from abc import abstractmethod
 from copy import deepcopy
 from typing import Any, Dict, Iterator, List, Self, Tuple
 
-from glow.geometry_layouts.geometries import Rectangle, Surface
+from glow.geometry_layouts.geometries import GenericSurface, Rectangle, Surface
 from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
     associate_colors_to_regions, is_layout_contained
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
@@ -23,7 +23,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     make_vector_from_points, make_vertex, make_vertex_inside_face, \
     remove_from_study, set_color_face, update_salome_study
 from glow.support.types import GeometryType, PropertyType, SymmetryType
-from glow.support.utility import are_same_shapes, build_z_axis_from_vertex, \
+from glow.support.utility import are_same_shapes, build_compound_borders, build_z_axis_from_vertex, \
     compute_point_by_reference, flatten_list, retrieve_selected_object
 
 
@@ -193,9 +193,22 @@ class Fillable(Compound, Layout):
         ----------
         symmetry : SymmetryType
             The type of symmetry to handle.
+
+        Raises
+        ------
+        RuntimeError
+            If no GEOM object for the layout has been created yet.
         """
+        # Update the layout characteristic shape from its regions, if needed
+        if self.geom_obj is None:
+            raise RuntimeError(
+                "Before applying a symmetry operation to the layout "
+                f"'{self.name}', call the method "
+                "'update_hierarchical_structure()' first to update the "
+                "GEOM object of the layout."
+            )
         # Get the XY dimensions of the bounding box for the geometry layout
-        x_min, x_max, y_min, y_max = get_bounding_box(self.shape)
+        x_min, x_max, y_min, y_max = get_bounding_box(self.geom_obj)
         o_xyz = get_point_coordinates(self.o)
         # Build the shape of the symmetry
         symm_shape = self._build_symmetry_shape(
@@ -209,7 +222,6 @@ class Fillable(Compound, Layout):
         # Store the shape of the symmetry in the mapping
         self.symmetry_map[symmetry] = symm_shape
         # Update the state of the layout
-        # self.state.is_update_needed = False
         self.state.symmetry_type = symmetry
 
     def clone(self) -> Self:
@@ -900,8 +912,8 @@ class Fillable(Compound, Layout):
                 )
             case _:
                 raise RuntimeError(
-                    f"Symmetry {symmetry} not supported for a "
-                    f"'{self.__class__.__name__}'."
+                    f"Symmetry '{symmetry}' not supported for a "
+                    f"'{self.__class__.__name__}' instance."
                 )
 
     def _collapse_layers(self, layers: List[List[Region | Self]]) -> None:
