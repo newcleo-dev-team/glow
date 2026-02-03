@@ -2,7 +2,6 @@
 Module containing the classes enabling the creation and the visualisation of
 geometry layouts built in GLOW.
 """
-import logging
 import math
 
 from abc import ABC, abstractmethod
@@ -189,7 +188,7 @@ class Region(Face, Layout):
         # Initialize attributes
         self.color: Tuple[int, int, int] = DEFAULT_REGION_COLOR
         self.properties: Dict[PropertyType, str] | None = properties
-        self.region_id: int = id(self._geom_obj)
+        self.region_id: int = id(self)
         self.name = name if name else f"Region_{self.region_id}"
         # Initialize superclass attributes
         self.entry_id = None

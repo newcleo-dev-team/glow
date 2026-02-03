@@ -142,10 +142,11 @@ class Fillable(Compound, Layout):
         This method simply updates the list of layers of the technological
         geometry layout with the given layout without collapsing the layers
         and updating the entire GEOM compound object this instance refers to.
-        To collapse the layers and build the regions of this instance without
-        displaying the geometry in the 3D viewer of SALOME, call the method
-        ``build_regions``. To build and display the geometry layout, call the
-        method ``show``.
+        To collapse the layers and update all the contained layouts of this
+        instance without displaying the geometry in the 3D viewer of SALOME,
+        call the method ``update_hierarchical_structure``.
+        To update the and display the geometry layout with all the regions of
+        the technological geometry, call the method ``show``.
         """
         # Set the given layout position to the current compound centre, if no
         # position is provided.
@@ -204,16 +205,11 @@ class Fillable(Compound, Layout):
             o_xyz
         )
         # Rotate the shape of the symmetry, if needed
-        if not math.isclose(self.rot_angle, 0.0, abs_tol=1e-6):
-            axis = make_vector_from_points(
-                self.o,
-                make_vertex((o_xyz[0], o_xyz[1], 1.0))
-            )
-            symm_shape.rotate(self.rot_angle, axis)
+        symm_shape.rotate(self.rot_angle, build_z_axis_from_vertex(self.o))
         # Store the shape of the symmetry in the mapping
         self.symmetry_map[symmetry] = symm_shape
         # Update the state of the layout
-        self.state.is_update_needed = False
+        # self.state.is_update_needed = False
         self.state.symmetry_type = symmetry
 
     def clone(self) -> Self:
@@ -397,10 +393,21 @@ class Fillable(Compound, Layout):
             The rotation angle in degrees.
         axis : Edge | None = None
             The ``Edge`` object representing the rotation axis, if any.
+
+        Raises
+        ------
+        RuntimeError
+            If no GEOM object for the layout has been created yet.
         """
         # Return immediately if the angle is zero
         if math.isclose(angle, 0.0, abs_tol=1e-6):
             return
+        if self.geom_obj is None:
+            raise RuntimeError(
+                f"Before rotating the layout '{self.name}', call the "
+                "method 'update_hierarchical_structure()' first to update "
+                "the GEOM object of the layout."
+            )
         # Build a Z-axis, if none is provided
         if not axis:
             # Build the Z-axis of rotation positioned in the figure center
@@ -423,14 +430,33 @@ class Fillable(Compound, Layout):
         origin : Vertex | None = None
             Identifying the point wrt the scaling is performed. If ``None``,
             the reference point is the region's centre.
+
+        Raises
+        ------
+        ValueError
+            If the scaling factor is less than or equal to zero.
+        RuntimeError
+            If no GEOM object for the layout has been created yet.
         """
+        # Check the validity of the scaling factor
+        if factor <= 0.0:
+            raise ValueError(
+                f"The indicated scaling factor of {factor} is not valid. "
+                "Please, provide a value greater than zero."
+            )
+        if self.geom_obj is None:
+            raise RuntimeError(
+                f"Before scaling the layout '{self.name}', call the "
+                "method 'update_hierarchical_structure()' first to update "
+                "the GEOM object of the layout."
+            )
         # Perform the scaling wrt to the given origin, otherwise the layout's
         # centre
         if origin is None:
             origin = self.o
         # Scale the GEOM object this instance refers to together with the
         # layouts in the layers
-        self.geom_obj = make_scale(self.geom_obj, origin, factor)
+        self.geom_obj = make_scale(self, origin, factor)
         for layer in self.layers:
             for layout in layer:
                 layout.scale(factor, origin)
@@ -569,14 +595,27 @@ class Fillable(Compound, Layout):
         self.update_hierarchical_structure()
         # Add the updated GEOM compound of the layout to the study
         self.entry_id = add_to_study(self.geom_obj, self.name)
+        logging.info(
+            f"{self.__class__.__name__} - ({self.name}): "
+            + "Added GEOM object to study"
+        )
 
         # Collect the regions according to the applied symmetry, if any, and
         # display them with colour map associated to the property type
         self.regions = self._get_regions_with_symmetry()
+        logging.info(
+            f"{self.__class__.__name__} - ({self.name}): "
+            + f"Got {len(self.regions)} regions of the layout"
+        )
         try:
             # Assign the same color to all the regions having the same
             # property value, if any has been specified to show
             associate_colors_to_regions(prop_type, self.regions)
+            logging.info(
+                f"{self.__class__.__name__} - ({self.name}): "
+                + f"Associated {prop_type.name if prop_type else 'None'} "
+                + "color map to regions"
+            )
             # Add all the regions of the layout to the study
             self._show_regions()
         except RuntimeError as e:
@@ -614,11 +653,24 @@ class Fillable(Compound, Layout):
         ----------
         new_cntr : Tuple[float, float, float]
             The XYZ coordinates of the new center of the layout.
+
+        Raises
+        ------
+        RuntimeError
+            If no GEOM object for the layout has been created yet.
         """
+        # Return immediately if the new centre coincides with the current one
+        new_cntr_vrtx = make_vertex(new_cntr)
+        if are_same_shapes(self.o, new_cntr_vrtx, ShapeType.VERTEX):
+            return
+        if self.geom_obj is None:
+            raise RuntimeError(
+                f"Before translating the layout '{self.name}', call the "
+                "method 'update_hierarchical_structure()' first to update "
+                "the GEOM object of the layout."
+            )
         # Build a vector from the current center to the new one
-        transl_vect = make_vector_from_points(
-            self.o, make_vertex(new_cntr)
-        )
+        transl_vect = make_vector_from_points(self.o, new_cntr_vrtx)
         prev_o = self.o
         # Translate all the characteristic geometric elements
         self.o = wrap_shape(make_translation(self.o, transl_vect))
@@ -634,7 +686,7 @@ class Fillable(Compound, Layout):
 
         # Update the GEOM compounds representing the different geometry
         # layout types
-        self.geom_obj = make_translation(self.geom_obj, transl_vect)
+        self.geom_obj = make_translation(self, transl_vect)
         self.geometry_maps.update({
             geom_type: wrap_shape(make_translation(layout, transl_vect))
             for geom_type, layout in self.geometry_maps.items()
@@ -708,7 +760,7 @@ class Fillable(Compound, Layout):
             self._collapse_layers(reversed_layers)
 
         # Update the GEOM compound object of this instance
-        self.geom_obj = make_partition(self.get_regions(), [], ShapeType.FACE)
+        self.geom_obj = make_compound(self.get_regions())
         # Update the state of the layout
         self.state.is_update_needed = False
 
@@ -1069,12 +1121,16 @@ class Fillable(Compound, Layout):
         layout.
         Each region is displayed with a colour defined beforehands.
         """
-        for region in self.regions:
+        for i, region in enumerate(self.regions):
             # Set the region color in the viewer
             set_color_face(region.geom_obj, region.color)
             # Add the layout region to the study
             region.entry_id = add_to_study_in_father(
                 self.geom_obj, region, region.name)
+            logging.info(
+                f"{self.__class__.__name__} - ({self.name}): "
+                + f"Added {region.name} (no. {i}) to the study"
+            )
             # Display the region in the current view, if needed
             display_shape(region.entry_id)
         # Update the SALOME's study to display all the GEOM objects

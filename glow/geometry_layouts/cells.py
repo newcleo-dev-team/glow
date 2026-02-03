@@ -11,13 +11,13 @@ from glow.geometry_layouts.geometries import Circle, Hexagon, Surface, \
     Rectangle, build_parallelogram, build_regular_triangle, \
     build_right_triangle, build_right_triangle_from_catheti
 from glow.geometry_layouts.layouts import Region
-from glow.interface.geom_entities import Edge, Vertex, wrap_shape
+from glow.interface.geom_entities import Edge, wrap_shape
 from glow.interface.geom_interface import get_bounding_box, get_min_distance, \
     get_point_coordinates, make_cdg, make_compound, make_edge, \
-    make_intersection, make_vertex_on_curve
+    make_intersection
 from glow.support.types import GeometryType, PropertyType, SymmetryType
-from glow.support.utility import get_vertices_on_edges, \
-    sort_shapes_from_vertex
+from glow.support.utility import build_subdvision_vertices_on_edge, \
+    get_vertices_on_edges, sort_shapes_from_vertex
 
 
 class Cell(Fillable):
@@ -109,7 +109,8 @@ class Cell(Fillable):
             name: str = "Cell"
         ) -> None:
         super().__init__()
-        # Append the ID of this instance to the name of the GEOM object
+        # Set the name of this instance and of the corresponding GEOM object
+        # by appending the ID of this instance to the provided name
         self.name = f"{name}_{id(self)}"
         # Store the shape of cell and build the corresponding region
         self.shape = shape
@@ -238,58 +239,20 @@ class Cell(Fillable):
                 # Continue as no subdivision has to be performed on the
                 # current region
                 continue
-            # Build subdivision points on the circle containing the region
-            sbdv_pnts = self._build_sectorization_points(
-                circle.borders[0], angle, sector, rotation
-            )
-            # Intersect the edges built from the centre of the cell to the
-            # found subdivision points with the region and collect the result
-            for e in [make_edge(self.o, pnt) for pnt in sbdv_pnts]:
-                sect_edges.append(wrap_shape(make_intersection(region, e)))
-
+            # Build subdivision points on the circle containing the region.
+            # The intersections between the region and each edge from the cell
+            # centre to the subdivision points are sectorization edges to
+            # collect
+            for pnt in build_subdvision_vertices_on_edge(
+                sector, circle.borders[0], angle/360.0 + rotation
+            ):
+                sect_edges.append(
+                    wrap_shape(
+                        make_intersection(region, make_edge(self.o, pnt))
+                    )
+                )
         # Return the built list of edges
         return sect_edges
-
-    def _build_sectorization_points(
-            self,
-            circle: Edge,
-            starting_angle: float,
-            no_sectors: int,
-            rotation: float
-        ) -> List[Vertex]:
-        """
-        Method that builds a list of vertex objects on the given ``Edge``
-        object (representing a circle), each on a different position given
-        by the sector index, the starting angle and the ``rotation``
-        parameter.
-
-        Parameters
-        ----------
-        circle : Edge
-            The ``Edge`` object being the circle on which points have to
-            be built.
-        starting_angle : float
-            The angle (in degrees) from which to build points.
-        no_sectors : int
-            The number of subdivision points to build.
-        rotation : float
-            A parameter in the [0-1] range identifying where to built a point.
-            It is based on the rotation angle of the cell.
-
-        Returns
-        -------
-        List[Vertex]
-            A list of ``Vertex`` objects subdividing the given circle.
-        """
-        return [
-            wrap_shape(
-                make_vertex_on_curve(
-                    circle,
-                    starting_angle/360.0 + float(i)/no_sectors + rotation
-                )
-            )
-            for i in range(no_sectors)
-        ]
 
     def _check_sectorization_elements_len(
             self,

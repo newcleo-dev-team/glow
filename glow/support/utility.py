@@ -6,15 +6,16 @@ import math
 import random
 
 from types import CellType
-from typing import Any, Generator, Iterable, List, Tuple
+from typing import Any, Generator, List, Tuple
 
-from glow.interface.geom_interface import ShapeType, extract_sorted_sub_shapes, \
-    extract_sub_shapes, fuse_edges_in_wire, get_angle_between_shapes, \
-    get_basic_properties, get_closed_free_boundary, get_kind_of_shape, \
-    get_min_distance, get_point_coordinates, get_selected_object, \
-    get_shape_name, get_shape_type, is_gui_available, make_arc_edge, make_cdg, make_compound, \
-    make_cut, make_edge, make_face, make_fuse, make_partition, \
-    make_translation, make_vector_from_points, make_vertex
+from glow.interface.geom_interface import ShapeType, add_to_study, \
+    extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
+    get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, \
+    get_kind_of_shape, get_min_distance, get_point_coordinates, \
+    get_selected_object, get_shape_name, get_shape_type, is_gui_available, \
+    make_arc_edge, make_cdg, make_compound, make_cut, make_edge, make_face, \
+    make_fuse, make_partition, make_translation, make_vector_from_points, \
+    make_vertex, make_vertex_on_curve
 from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, LatticeGeometryType, \
     SymmetryType
 
@@ -196,33 +197,37 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
 
     # Suppress vertices internal to the edges of the wire
     borders_wire = fuse_edges_in_wire(closed_boundaries[0])
-    # Initialize a list of list each containing the edges lying on the same
-    # border
-    groups_of_collinear_edges: List[List[Any]] = []
-    # Loop through all the sorted edges
-    for edge in extract_sorted_sub_shapes(borders_wire, ShapeType.EDGE):
-        if str(get_kind_of_shape(edge)[0]) != 'SEGMENT':
-            groups_of_collinear_edges.append([edge])
-            continue
-        # Check if the current edge belongs to any group of collinear edges
-        for group in groups_of_collinear_edges:
-            if is_collinear(edge, group):
-                group.append(edge)
-                break
-        else:
-            groups_of_collinear_edges.append([edge])
-    # Build the borders edges as single edge objects
-    border_edges = []
-    for edge in groups_of_collinear_edges:
-        if len(edge) > 1 and str(get_kind_of_shape(edge[0])[0]) == 'SEGMENT':
-            # Get start-end vertices of the edges on the border
-            v1 = extract_sorted_sub_shapes(edge[0], ShapeType.VERTEX)[0]
-            v2 = extract_sorted_sub_shapes(edge[-1], ShapeType.VERTEX)[1]
-            border_edges.append(make_edge(v1, v2))
-        else:
-            border_edges.append(edge[0])
 
-    return border_edges
+    # Extract the vertices and sort them in counterclockwise order
+    vertices = extract_sub_shapes(borders_wire, ShapeType.VERTEX)
+    vertices = sorted(
+        vertices,
+        key=lambda v: get_vertex_polar_position(
+            v, make_cdg(cmpd), is_cw=False
+        )
+    )
+    # Loop through edges to find vertices belonging to arcs of circle edges
+    arc_edges_vs_vertices = {}
+    for e in extract_sub_shapes(borders_wire, ShapeType.EDGE):
+        if str(get_kind_of_shape(e)[0]) == 'ARC_CIRCLE':
+            arc_edges_vs_vertices[e] = extract_sub_shapes(
+                e, ShapeType.VERTEX
+            )
+    # Build edges between vertices
+    edges = build_contiguous_edges(vertices)
+    # Substitute those edges whose vertices coincides with those belonging to
+    # the found arcs of circle
+    for arc, vs in arc_edges_vs_vertices.items():
+        # Build a segment between the two vertices of the arc
+        cord = make_edge(vs[0], vs[1])
+        # If any edge coincides with the one built over the arc, substitute
+        # the edge in the list
+        for i, edge in enumerate(edges):
+            if are_same_shapes(cord, edge, ShapeType.EDGE):
+                edges[i] = arc
+                break
+    # Return the list of segment + arc edges
+    return edges
 
 
 def build_contiguous_edges(vertices: List[Any]) -> List[Any]:
@@ -284,6 +289,35 @@ def build_z_axis_from_vertex(vertex: Any) -> Any:
     v_x, v_y, _ = get_point_coordinates(vertex)
     # Return the vector
     return make_vector_from_points(vertex, make_vertex((v_x, v_y, 1.0)))
+
+
+def build_subdvision_vertices_on_edge(
+        no_vertices: int, edge: Any, i_0: float = 0.0
+    ) :
+    """
+    Function that builds and returns a list of vertex objects placed at
+    subdivision points along the given edge object.
+    Each position is determined by the number of evenly spaced vertices to
+    derive starting from an initial given position.
+
+    Parameters
+    ----------
+    no_vertices : int
+        The number of evenly spaced vertices to subdivide the edge into.
+    edge : Any
+        The edge object on which vertices are derived.
+    i_0 : float = 0.0
+        The starting position along the edge from which points are built.
+
+    Returns
+    -------
+    List[Any]
+        A list of vertex objects built on the given edge.
+    """
+    vertices = []
+    for i in range(no_vertices):
+        vertices.append(make_vertex_on_curve(edge, i_0 + i/no_vertices))
+    return vertices
 
 
 def check_shape_expected_types(shape: Any,
