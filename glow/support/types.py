@@ -1,6 +1,6 @@
 """
 Module containing enumeration classes for expressing different types (e.g.
-BCs, geometry, etc.) used throughout the code.
+BCs, geometry, etc.) used throughout the source code.
 """
 from enum import Enum
 from typing import Dict, List, Tuple
@@ -8,8 +8,8 @@ from typing import Dict, List, Tuple
 
 class BoundaryType(Enum):
     """
-    Enumeration for defining the types of the lattice's boundary condition
-    applied to the borders of its geometry layout.
+    Enumeration for defining the types of the boundary conditions applied to
+    the borders of the geometry layout.
     """
     VOID:int = 0
     """Indicating a vacuum + albedo BC."""
@@ -39,20 +39,23 @@ class EdgeType(Enum):
 
 class GeometryType(Enum):
     """
-    Enumeration for defining either the lattice or the single cell
-    geometry type.
+    Enumeration for identifying the type of geometry layout.
+    Available values are the technological geometry, which describes the
+    layout in terms of the regions identified by the different materials, and
+    the refined geometry.
     """
     TECHNOLOGICAL: int = 0
-    """Identifying the cell/lattice technological geometry."""
+    """Identifying the technological geometry of the layout."""
     SECTORIZED: int = 1
-    """Identifying the cell/lattice sectorized geometry."""
+    """Identifying the sectorized geometry of the layout."""
 
 
-class LatticeGeometryType(Enum):
+class LayoutGeometryType(Enum):
     """
-    Enumeration for defining the lattice's geometry types. Values higher than
-    2, i.e. ``ROTATION``, refer to geometry layouts for which a cycling
-    tracking needs to be applied (`TSPC` type).
+    Enumeration for defining the geometry types of the layout as requested by
+    the ``SALT:`` module of DRAGON5.
+    Values higher than 2, i.e. ``ROTATION``, refer to geometry layouts for
+    which a cycling tracking needs to be applied (`TSPC` type).
     The values from ``0`` to ``2`` included, refer to geometry layouts for
     which a uniform tracking needs to be applied (`TISO` type).
     """
@@ -77,81 +80,81 @@ class LatticeGeometryType(Enum):
     R120: int = 11
     """Lozenge geometry with rotation and translation."""
     S30: int = 12
-    """Triangle geometry identifying a symmetry of 1/12 of an assembly."""
+    """Triangle geometry identifying a symmetry of 1/12 of the layout."""
 
 
 class SymmetryType(Enum):
     """
-    Enumeration for defining the lattice's symmetry types.
+    Enumeration for defining the symmetry types of the layout.
     """
     FULL: int = 0
-    """Identifying a complete lattice."""
+    """Identifying a complete layout."""
     HALF: int = 2
-    """Identifying an half of the lattice."""
+    """Identifying an half of the layout."""
     THIRD: int = 3
-    """Identifying a third of the lattice."""
+    """Identifying a third of the layout."""
     QUARTER: int = 4
-    """Identifying a quarter of the lattice."""
+    """Identifying a quarter of the layout."""
     SIXTH: int = 6
-    """Identifying a sixth of the lattice."""
+    """Identifying a sixth of the layout."""
     EIGHTH: int = 8
-    """Identifying an eighth of the lattice."""
+    """Identifying an eighth of the layout."""
     TWELFTH: int = 12
-    """Identifying an twelfth of the lattice."""
+    """Identifying an twelfth of the layout."""
     DIAG: int = 13
-    """Identifying an half of the lattice along its diagonal."""
+    """Identifying an half of the layout along its diagonal."""
 
 
-class CellType(Enum):
+class LayoutType(Enum):
     """
-    Enumeration for defining the geometric types of cells.
+    Enumeration for defining the geometric types of the layout.
     """
     RECT: int = 0
-    """Identifying a cartesian (i.e. rectangular) cell."""
+    """Identifying a cartesian (i.e. rectangular) layout."""
     HEX: int = 1
-    """Identifying a hexagonal cell."""
+    """Identifying a hexagonal layout."""
 
 
 class PropertyType(Enum):
     """
     Enumeration for defining the property types that can be associated
-    to each cell/lattice region.
+    to each region of the technological geometry layout.
     """
     MATERIAL: int = 0
     """Identifying the material property type."""
 
 
-# Dictionary associating for each type of cells, the valid combinations of
-# types of symmetry and lattice types of geometry
-CELL_VS_SYMM_VS_TYP_GEO : Dict[
-    CellType, Dict[SymmetryType, List[LatticeGeometryType]]] = {
-    CellType.HEX : {
+# Dictionary associating for each type of layout, the valid combinations of
+# types of symmetry and layout types of geometry
+LAYOUT_VS_SYMM_VS_TYP_GEO : Dict[
+    LayoutType, Dict[SymmetryType, List[LayoutGeometryType]]] = {
+    LayoutType.HEX : {
         SymmetryType.FULL : [
-            LatticeGeometryType.ISOTROPIC, LatticeGeometryType.HEXAGON_TRAN],
+            LayoutGeometryType.ISOTROPIC, LayoutGeometryType.HEXAGON_TRAN],
         SymmetryType.THIRD : [
-            LatticeGeometryType.ROTATION, LatticeGeometryType.R120],
+            LayoutGeometryType.ROTATION, LayoutGeometryType.R120],
         SymmetryType.SIXTH : [
-            LatticeGeometryType.SYMMETRIES_TWO,
-            LatticeGeometryType.ROTATION,
-            LatticeGeometryType.SA60,
-            LatticeGeometryType.RA60],
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.ROTATION,
+            LayoutGeometryType.SA60,
+            LayoutGeometryType.RA60],
         SymmetryType.TWELFTH : [
-            LatticeGeometryType.SYMMETRIES_TWO, LatticeGeometryType.S30],
+            LayoutGeometryType.SYMMETRIES_TWO, LayoutGeometryType.S30],
     },
-    CellType.RECT : {
+    LayoutType.RECT : {
         SymmetryType.FULL : [
-            LatticeGeometryType.ISOTROPIC,
-            LatticeGeometryType.RECTANGLE_TRAN,
-            LatticeGeometryType.RECTANGLE_SYM],
+            LayoutGeometryType.ISOTROPIC,
+            LayoutGeometryType.RECTANGLE_TRAN,
+            LayoutGeometryType.RECTANGLE_SYM],
         SymmetryType.HALF : [
-            LatticeGeometryType.SYMMETRIES_TWO,
-            LatticeGeometryType.RECTANGLE_SYM],
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_SYM],
         SymmetryType.QUARTER : [
-            LatticeGeometryType.SYMMETRIES_TWO,
-            LatticeGeometryType.RECTANGLE_SYM],
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_SYM],
         SymmetryType.EIGHTH : [
-            LatticeGeometryType.SYMMETRIES_TWO,
-            LatticeGeometryType.RECTANGLE_EIGHT],
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_EIGHT],
     }
 }
 

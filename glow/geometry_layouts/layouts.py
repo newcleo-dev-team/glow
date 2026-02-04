@@ -16,7 +16,7 @@ from glow.interface.geom_interface import add_to_study, clear_view, \
     get_point_coordinates, make_cdg, make_common, make_rotation, make_scale, \
     make_translation, make_vector_from_points, make_vertex, \
     make_vertex_inside_face, remove_from_study, update_salome_study
-from glow.support.types import GeometryType, LatticeGeometryType, \
+from glow.support.types import GeometryType, LayoutGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import build_z_axis_from_vertex, \
     generate_unique_random_colors
@@ -487,7 +487,7 @@ class LayoutState():
     """
     symmetry_type : SymmetryType = SymmetryType.FULL
     """Identifying the currently applied type of symmetry."""
-    type_geo : LatticeGeometryType = LatticeGeometryType.ISOTROPIC
+    type_geo : LayoutGeometryType = LayoutGeometryType.ISOTROPIC
     """
     Identifying the type of layout (in terms of symmetry and BCs) in DRAGON5.
     """

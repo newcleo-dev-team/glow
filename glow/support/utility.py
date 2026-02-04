@@ -16,7 +16,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     make_arc_edge, make_cdg, make_compound, make_cut, make_edge, make_face, \
     make_fuse, make_partition, make_translation, make_vector_from_points, \
     make_vertex, make_vertex_on_curve
-from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, LatticeGeometryType, \
+from glow.support.types import LAYOUT_VS_SYMM_VS_TYP_GEO, LayoutGeometryType, \
     SymmetryType
 
 
@@ -346,7 +346,7 @@ def check_shape_expected_types(shape: Any,
 
 
 def check_type_geo_consistency(
-        type_geo: LatticeGeometryType,
+        type_geo: LayoutGeometryType,
         cell_type: CellType,
         symmetry_type: SymmetryType
     ) -> None:
@@ -371,7 +371,7 @@ def check_type_geo_consistency(
     """
     try:
         # Get the list of types of geometry available for the lattice
-        types_geo = CELL_VS_SYMM_VS_TYP_GEO[cell_type][symmetry_type]
+        types_geo = LAYOUT_VS_SYMM_VS_TYP_GEO[cell_type][symmetry_type]
         if type_geo not in types_geo:
             raise KeyError
     except KeyError:
