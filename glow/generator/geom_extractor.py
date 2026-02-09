@@ -1,8 +1,9 @@
 """
 Module containing classes that deals with the extraction of the geometric
-information from the lattice built in SALOME. The functionalities in this
+information from the layout built in SALOME. The functionalities in this
 module serve for preparing all the data for the output TDT file generation.
 """
+import logging
 import math
 
 from copy import deepcopy
@@ -10,18 +11,20 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Self
 
 from glow.geometry_layouts.cells import Region
-from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, CellType, \
-    EdgeType, GeometryType, LatticeGeometryType, PropertyType, SymmetryType
-from glow.geometry_layouts.lattices import Lattice
-from glow.support.utility import build_compound_borders, \
+from glow.geometry_layouts.fillable_layouts import Fillable
+from glow.interface.geom_entities import Edge, wrap_shape
+from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, LayoutType, \
+    EdgeType, GeometryType, LayoutGeometryType, PropertyType, SymmetryType
+from glow.support.utility import are_same_shapes, build_compound_borders, \
     check_shape_expected_types, get_id_from_name, get_id_from_shape, \
     translate_wrt_reference
 from glow.interface.geom_interface import ShapeType, add_to_study, \
-    extract_sorted_sub_shapes, extract_sub_shapes, get_bounding_box, get_in_place, \
-    get_kind_of_shape, get_min_distance, get_point_coordinates, \
+    extract_sorted_sub_shapes, extract_sub_shapes, get_bounding_box, \
+    get_in_place, get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
-    make_face, make_partition, make_vertex, make_vertex_inside_face, \
-    make_vertex_on_curve, set_shape_name, update_salome_study
+    make_face, make_partition, make_translation, make_vector_from_points, \
+    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
+    set_shape_name, update_salome_study
 from glow.main import TdtSetup
 
 
@@ -31,28 +34,32 @@ EPSILON = 1e-05
 
 
 @dataclass(order=True)
-class Face():
+class FaceData():
     """
-    Class that provides a data representation for a subface of the lattice,
-    which represents a calculation zone containing a list of properties.
+    Class that provides a data representation for a face object of the layout,
+    i.e. a `Region` object, which represents a calculation zone containing a
+    list of properties.
     This dataclass can be ordered on the basis of the ``no`` attribute, which
-    provides a global index for the faces in the lattice.
+    provides a global index for the faces in the layout.
     """
-    face: Any
-    """A GEOM face object representing a region of the lattice."""
-    property: str
-    """The value of the property associated to the region."""
-    no: int = field(init=False)
+    region: Region
+    """
+    A ``Region`` object associating a GEOM face of the layout to its
+    properties.
+    """
+    no: int
     """Global index of the face."""
+    property_types: List[PropertyType] = field(default_factory=list)
+    """List of property types that must be associated with the region."""
     inner_point: Tuple[float, float, float] = field(init=False)
     """XYZ coordinates of a point within the GEOM face object."""
     edge_vs_id: Dict[Any, str] = field(default_factory=dict, init=False)
     """
-    Dictionary associating the GEOM edge objects of the lattice subface to
-    the corresponding ID, based on the edge geometrical characteristics.
+    Dictionary associating the GEOM edge objects of the current face object
+    to the corresponding IDs, based on the edges geometrical characteristics.
     """
     sort_index: int = field(init=False, repr=False)
-    """Indicating the attribute used to sort ``Face`` objects."""
+    """Indicating the attribute used to sort ``FaceData`` objects."""
 
     def __post_init__(self) -> None:
         """
@@ -60,42 +67,65 @@ class Face():
         for setting all the attributes that depends on others. In addition,
         the attribute that allows to order instances of this class on the
         basis of the ``no`` attribute is set as well.
+
+        Raises
+        ------
+        RuntimeError
+            If no properties or none of the requested properties or no value
+            for the property have been assigned to the region of the current
+            instance.
         """
         # Build a point inside the face
         self.inner_point = get_point_coordinates(
-            make_vertex_inside_face(self.face))
-        try:
-            # Check the type of the received face is correct
-            check_shape_expected_types(self.face, [ShapeType.FACE])
-            # Extract the face number from the corresponding GEOM name
-            # attribute
-            self.no = get_id_from_shape(self.face)
-        except RuntimeError as e:
+            make_vertex_inside_face(self.region))
+        # Check the region has the required properties
+        if not self.region.properties:
             raise RuntimeError(
-                f"Error with 'Face' whose inner point is: {self.inner_point}"
-            ) from e
+                "No properties have been assigned for the region "
+                f"'{self.region.name}' of {self}."
+            )
+        for p_type in self.property_types:
+            try:
+                value = self.region.properties[p_type]
+            except KeyError:
+                raise RuntimeError(
+                    f"No '{p_type.name}' property type has been defined for "
+                    f"the region '{self.region.name}' of {self}."
+                )
+            if not value:
+                raise RuntimeError(
+                    "No value for the '{p_type.name}' property type has been "
+                    f"defined for the region '{self.region.name}' of {self}."
+                )
+        # try:
+        #     # Extract the face number from the corresponding GEOM name
+        #     # attribute
+        #     self.no = get_id_from_shape(self.region)
+        #     # get_id_from_name(name)
+        # except RuntimeError as e:
+        #     raise RuntimeError(
+        #         f"Error with 'FaceData' related to region '{self.region}'."
+        #     ) from e
         # Define the attribute for sorting instances of this class
         self.sort_index = self.no
         # Extract the edges and associate an ID to each
-        edges = extract_sorted_sub_shapes(self.face, ShapeType.EDGE)
+        edges = extract_sorted_sub_shapes(self.region, ShapeType.EDGE)
         for edge in edges:
-            # Build the ID of the edge, based on the geometrical
-            # characteristics  --> two edges share the same entry
-            edge_id = build_edge_id(edge)
-            self.edge_vs_id[edge] = edge_id
+            # Build the ID of the edge, based on its geometric characteristics
+            self.edge_vs_id[edge] = build_edge_id(edge)
 
     def __str__(self) -> str:
-        return f"Region {self.no}, name={get_shape_name(self.face)}, " + \
-               f"property={self.property}"
+        return f"Region {self.no}, name={get_shape_name(self.region)}, " + \
+               f"properties={self.region.properties}"
 
 
-class Edge():
+class EdgeData():
     """
-    Class that provides a data representation for an edge of a face in
-    the lattice.
-    It provides an global index allowing to uniquely identify the edge,
-    and two ``Face`` attributes, allowing to identify the face on the left
-    and right of the edge.
+    Class that provides the data representation for an edge object of the
+    layout.
+    It provides an global index allowing to uniquely identify the edge, and
+    two ``FaceData`` attributes, allowing to identify the face on the left
+    and on the right of the edge.
     The identification of the left/right faces is performed by building
     a point on the edge's normal so that it is sligtly on the left of the
     edge.
@@ -104,8 +134,8 @@ class Edge():
     ----------
     edge : Any
         The GEOM object of type EDGE representing an edge.
-    faces : Tuple[Face, ...]
-        Providing the ``Face`` objects the edge belongs to.
+    faces : Tuple[FaceData, ...]
+        Providing the ``FaceData`` objects the edge belongs to.
 
     Attributes
     ----------
@@ -118,75 +148,139 @@ class Edge():
     kind : str
         Indicating the type of edge with admitted values being ``CIRCLE``,
         ``ARC_CIRCLE``, ``SEGMENT``.
-    right : Face | None
-        A ``Face`` object providing the information for the face to the right
-        of the edge, or ``None`` if the edge does not have any face on its
-        right.
-    left : Face | None
-        A ``Face`` object providing the information for the face to the left
-        of the edge, or ``None`` if the edge does not have any face on its
-        left.
+    right : FaceData | None
+        A ``FaceData`` object providing the information for the face to the
+        right of the edge, or ``None`` if the edge does not have any face on
+        its right.
+    left : FaceData | None
+        A ``FaceData`` object providing the information for the face to the
+        left of the edge, or ``None`` if the edge does not have any face on
+        its left.
     """
-    def __init__(self, edge: Any, *faces: Face) -> None:
+    def __init__(self, edge: Any, *faces: FaceData) -> None:
         # Store all the information of the given GEOM edge object
         self.data: List[Any] = get_kind_of_shape(edge)
+        no_faces = len(faces)
         try:
             # Check the type of the received edge is correct
             check_shape_expected_types(edge, [ShapeType.EDGE])
             # Get the number of the edge directly from the name attribute of
             # the corresponding GEOM edge object
             self.no: int = get_id_from_shape(edge)
+            # Check the number of associated faces is one or two
+            if no_faces not in [1, 2]:
+                raise RuntimeError(
+                    f"An invalid number of face objecs ({no_faces}) is "
+                    "associated to the edge."
+                )
         except RuntimeError as e:
             raise RuntimeError(
-                f"Error with 'Edge' whose data is: {self.data}") from e
+                f"Error with 'EdgeData' whose data is: {self.data}"
+            ) from e
         # Store the edge object
         self.edge: Any  = edge
-        # Get the type of edge as a string
+        # Get the type of edge
         self.kind: EdgeType = EDGE_NAME_VS_TYPE[str(self.data[0])][0]
-        # Initialize to 'None' both the right and the left 'Face' objects
-        self.right: Face | None = None
-        self.left: Face | None = None
+        # Initialize to 'None' both the right and the left 'FaceData' objects
+        self.right: FaceData | None = None
+        self.left: FaceData | None = None
         # Loop through all the given GEOM face objects associated to the
         # current edge. This allows to define the faces on the right and
         # those on the left wrt the edge.
         for f in faces:
             # Add a face connected to the edge
-            self.__add_face(f)
+            self._determine_face_position(f)
         # Check that both right and left faces have been assigned, if the
         # edge is shared by two faces
-        if len(faces) > 1 and (not self.right or not self.left):
+        if no_faces > 1 and (not self.right or not self.left):
             raise RuntimeError(
-                f"The edge no. {self.no} have 2 faces (no. "
+                f"The edge no. {self.no} has 2 faces (no. "
                 f"{[face.no for face in faces]}), but they have not be "
                 "correctly assigned to the left and right attributes "
-                f"(left = {self.left}, right = {self.right}).")
+                f"(left = {self.left}, right = {self.right})."
+            )
 
-    def __origin(self) -> Tuple[float, float, float]:
+    def _build_point_on_edge_normal(self, epsilon: float = EPSILON) -> Any:
         """
-        Method that retrieves the 'origin' point (X-Y-Z coordinates) of
-        the edge (i.e. the edge starting point) according to its type.
-        This information is retrieved from the instance attribute storing
-        the characteristic data of the edge.
+        Method that builds a vertex object positioned at an infinitesimal
+        distance from the edge object this instance refers to.
+        Depending on the edge type, this point is built according to the
+        following rules:
+        - ``CIRCLE``: the point is positioned slightly on the left wrt the
+          X-coordinate of the point laying on the right-most position of
+          the circle (identified by the centre X-coordinate + the radius).
+        - ``ARC_CIRCLE``: given a point positioned at the middle of the arc,
+          another point is built on the vector connecting the arc centre and
+          the first point. This second point has both its X-Y coordinates
+          slightly scaled down by a reduction factor so that its distance
+          from the arc centre is less than the radius.
+        - ``SEGMENT``: the normalized left-oriented vector normal to the edge
+          is calculated. Its X-Y components are used to determine a point
+          slightly to the left of a point positioned at the middle of the
+          segment.
+
+        Parameters
+        ----------
+        epsilon : float
+            Indicating a value small enough to determine a point to the left
+            of the edge.
 
         Returns
         -------
-        Tuple[float, float, float]
-            A tuple with the X-Y-Z coordinates of the edge starting point.
+        Any
+            A vertex object representing a point slightly to the left of the
+            middle point of the edge.
         """
-        # Handle the point retrieval differently if the edge is a circle
         if self.kind == EdgeType.CIRCLE:
-            # Get the X-Y-Z coordinates of the circle center
-            x1, y1, z1  = self.data[1:4]
-            # Get the circle radius
-            r = self.data[-1]
-            # Return the point (cx + r, cy, cz) with cx, cy, cz the centre
-            # of the circle and r its radius.
-            return x1 + r, y1, z1
-        # Handle the other edge types by returning the X-Y-Z coordinates of
-        # the first point of the edge
-        return tuple(self.data[-6:-3])
+            # Extract the X-Y-Z coordinates of the circle centre
+            (xc, yc, zc) = self.data[1:4]
+            # Extract the circle radius
+            radius = self.data[7]
+            # Build a point (as a GEOM object) positioned at an infinitesimal
+            # distance from the starting point of the circle
+            return make_vertex((xc+radius-epsilon, yc, zc))
+        if self.kind == EdgeType.ARC_CIRCLE:
+            # Extract the X-Y-Z coordinates of the circle centre the arc
+            # belongs to
+            (xc, yc, zc) = self.data[1:4]
+            # Extract the radius of the arc
+            radius = self.data[7]
+            # Build a GEOM point on the arc, positioned at its middle
+            pm = make_vertex_on_curve(self.edge, 0.5)
+            # Get the X-Y-Z coordinates of the point
+            coord = get_point_coordinates(pm)
+            # Build a 2D vector from the arc centre to the arc middle point,
+            # which is slightly scaled down by a reduction factor so that
+            # its length is less than the radius
+            vm = (
+                (coord[0] - xc)*(1.0 - epsilon/radius),
+                (coord[1] - yc)*(1.0 - epsilon/radius)
+            )
+            # Build a GEOM point along the direction of the just built vector
+            return make_vertex((xc + vm[0], yc + vm[1], zc))
+        if self.kind == EdgeType.SEGMENT:
+            # Extract the X-Y-Z coordinates of the extremes of the segment
+            (x1, y1, z1, x2, y2, _) = self.data[1:7]
+            # Build a GEOM point on the segment, positioned at its middle
+            pm = make_vertex_on_curve(self.edge, 0.5)
+            # Get the X-Y-Z coordinates of the point
+            coord = get_point_coordinates(pm)
+            # Define the left-oriented normal vector of the segment
+            n = ((y1 - y2), (x2 - x1))
+            # Get the length of the normal vector
+            l = math.sqrt(n[0]*n[0] + n[1]*n[1])
+            # Get the coordinates of a point positioned at a distance epsilon
+            # from the segment along its left-oriented normalized normal
+            # vector
+            (xm, ym) = (
+                (coord[0] + epsilon*n[0]/l), (coord[1] + epsilon*n[1]/l)
+            )
+            # Build a GEOM point positioned at the calculated coordinates
+            return make_vertex((xm, ym, z1))
+        # If here, raise an exception as the edge has not a valid type
+        raise ValueError(f"The kind of shape {self.kind} is not valid!")
 
-    def __add_face(self, face: Face) -> None:
+    def _determine_face_position(self, face: FaceData) -> None:
         """
         Method that allows to define whether the given GEOM face object,
         connected to the edge, is placed to the right or to left of the
@@ -206,16 +300,17 @@ class Edge():
 
         Parameters
         ----------
-        face : Face
-            ``Face`` object whose position (right or left) relative to the
-            edge has to be determined.
+        face : FaceData
+            The ``FaceData`` object whose position (right or left) relative
+            to the edge has to be determined.
         epsilon : float
             Margin small enough to place a point wrt the edge.
         """
         # Build the point on the left of the edge and use it to identify the
         # face position relative to the edge
-        if not is_point_inside_shape(self.__build_point_on_edge_normal(),
-                                     face.face):
+        if not is_point_inside_shape(
+            self._build_point_on_edge_normal(), face.region
+        ):
             if self.kind == EdgeType.SEGMENT:
                 self.right = face
             else:
@@ -226,92 +321,41 @@ class Edge():
             else:
                 self.right = face
 
-    def __build_point_on_edge_normal(self, epsilon: float = EPSILON) -> Any:
+    def _get_origin(self) -> Tuple[float, float, float]:
         """
-        Method that builds a vertex object positioned at an infinitesimal
-        distance from the edge object this instance refers to.
-        Depending on the edge type, this point is built according to the
-        following rules:
-        - ``CIRCLE``: the point is positioned slightly on the left wrt the
-          X-coordinate of the point laying on the right-most position of
-          the circle (identified by the center X-coordinate + the radius).
-        - ``ARC_CIRCLE``: given a point positioned at the middle of the arc,
-          another point is built on the vector connecting the arc center and
-          the first point. This second point has both its X-Y coordinates
-          slightly scaled down by a reduction factor so that its distance
-          from the arc center is less than the radius.
-        - ``SEGMENT``: the normalized left-oriented vector normal to the edge
-          is calculated. Its X-Y components are used to determine a point
-          slightly to the left of a point positioned at the middle of the
-          segment.
-
-        Parameters
-        ----------
-        epsilon : float
-            Indicating a value small enough to determine a point to the left
-            of the edge.
+        Method that retrieves the 'origin' point (X-Y-Z coordinates) of
+        the edge (i.e. the edge starting point) according to its type.
+        This information is retrieved from the instance attribute storing
+        the characteristic data of the edge.
 
         Returns
         -------
-        Any
-            A vertex object representing a point slightly to the left of the
-            middle point of the edge.
+        Tuple[float, float, float]
+            A tuple with the X-Y-Z coordinates of the edge starting point.
         """
+        # Handle the point retrieval differently if the edge is a circle
         if self.kind == EdgeType.CIRCLE:
-            # Extract the X-Y-Z coordinates of the circle center
-            (xc, yc, zc) = self.data[1:4]
-            # Extract the circle radius
-            radius = self.data[7]
-            # Build a point (as a GEOM object) positioned at an infinitesimal
-            # distance from the starting point of the circle
-            return make_vertex((xc+radius-epsilon, yc, zc))
-        if self.kind == EdgeType.ARC_CIRCLE:
-            # Extract the X-Y-Z coordinates of the circle center the arc
-            # belongs to
-            (xc, yc, zc) = self.data[1:4]
-            # Extract the radius of the arc
-            radius = self.data[7]
-            # Build a GEOM point on the arc, positioned at its middle
-            pm = make_vertex_on_curve(self.edge, 0.5)
-            # Get the X-Y-Z coordinates of the point
-            coord = get_point_coordinates(pm)
-            # Build a 2D vector from the arc center to the arc middle point,
-            # which is slightly scaled down by a reduction factor so that
-            # its length is less than the radius
-            vm = ((coord[0] - xc)*(1.0 - epsilon/radius),
-                  (coord[1] - yc)*(1.0 - epsilon/radius))
-            # Build a GEOM point along the direction of the just built vector
-            return make_vertex((xc + vm[0], yc + vm[1], zc))
-        if self.kind == EdgeType.SEGMENT:
-            # Extract the X-Y-Z coordinates of the extremes of the segment
-            (x1, y1, z1, x2, y2, _) = self.data[1:7]
-            # Build a GEOM point on the segment, positioned at its middle
-            pm = make_vertex_on_curve(self.edge, 0.5)
-            # Get the X-Y-Z coordinates of the point
-            coord = get_point_coordinates(pm)
-            # Define the left-oriented normal vector of the segment
-            n = ((y1 - y2), (x2 - x1))
-            # Get the length of the normal vector
-            l = math.sqrt(n[0]*n[0] + n[1]*n[1])
-            # Get the coordinates of a point positioned at a distance epsilon
-            # from the segment along its left-oriented normalized normal
-            # vector
-            (xm, ym) = ((coord[0] + epsilon*n[0]/l),
-                        (coord[1] + epsilon*n[1]/l))
-            # Build a GEOM point positioned at the calculated coordinates
-            return make_vertex((xm, ym, z1))
-        # If here, raise an exception as the edge has not a valid type
-        raise ValueError(f"The kind of shape {self.kind} is not valid!")
+            # Get the X-Y-Z coordinates of the circle centre
+            x1, y1, z1  = self.data[1:4]
+            # Get the circle radius
+            r = self.data[-1]
+            # Return the point (cx + r, cy, cz) with cx, cy, cz the centre
+            # of the circle and r its radius.
+            return x1 + r, y1, z1
+        # Handle the other edge types by returning the X-Y-Z coordinates of
+        # the first point of the edge
+        return tuple(self.data[-6:-3])
 
     def __str__(self) -> str:
-        lname = rname = "None"
-        ename = get_shape_name(self.edge)
-        if self.left:
-            rname = str(self.left)
-        if self.right:
-            lname = str(self.right)
-        return (f"Edge {ename} \n\torigin = {self.__origin()},"
-                f"\n\tleft = {lname}, \n\tright = {rname}")
+        # Get the name of the current edge and the string representation of
+        # the associated 'FaceData' objects on its right and on its left
+        name = get_shape_name(self.edge)
+        right = str(self.right) if self.right else "None"
+        left = str(self.left) if self.left else "None"
+        return (
+            f"Edge {name} \n\torigin = {self._get_origin()},"
+            f"\n\tleft face = {left}, \n\tright face = {right}"
+        )
 
     # ------------------------------------------
     # Methods for comparing two 'Edge' instances
@@ -335,26 +379,26 @@ class Edge():
         return self.no >= other.no
 
 
-class Boundary:
+class BoundaryData:
     """
     Class that provides the data structure for a GEOM edge object being a
-    border of the lattice.
+    border of the layout.
 
     Parameters
     ----------
     border : Any
-        A GEOM edge object representing a border of the lattice.
+        A GEOM edge object representing a border of the layout.
     type_geo : LatticeGeometryType
-        Providing the lattice type of geometry.
-    lattice_o : Any
-        A vertex object representing the lattice center point.
+        Providing the layout type of geometry.
+    layout_o : Any
+        A vertex object representing the layout centre point.
     dimensions : Tuple[float, float]
-        The X-Y characteristic dimensions of the lattice the border refers to.
+        The X-Y characteristic dimensions of the layout the border refers to.
 
     Attributes
     ----------
     border : Any
-        A GEOM edge object representing a border of the lattice.
+        A GEOM edge object representing a border of the layout.
     type : BoundaryType
         Providing the type of BCs.
     angle : float
@@ -367,26 +411,73 @@ class Boundary:
     ty : float
         The Y-component of the border axis.
     """
-    def __init__(self,
-                 border: Any,
-                 type_geo: LatticeGeometryType,
-                 lattice_o: Any,
-                 dimensions: Tuple[float, float]) -> None:
+    def __init__(
+            self,
+            border: Any,
+            type_geo: LayoutGeometryType,
+            layout_o: Any,
+            dimensions: Tuple[float, float]
+        ) -> None:
         # Check the received border is an edge
         try:
             check_shape_expected_types(border, [ShapeType.EDGE])
         except RuntimeError as e:
-            raise RuntimeError("Error while initializing the 'Border' "
-                               "instance.") from e
+            raise RuntimeError(
+                "Error while initializing the 'Border' instance."
+            ) from e
         # Initialize instance attributes
-        self.type       : BoundaryType
-        self.border     : Any = border
-        self.angle      : float = 0.0
+        self.type : BoundaryType
+        self.border : Any = border
+        self.angle : float = 0.0
         self.edge_indxs : List[int] = []
-        self.tx         : float = 0.0
-        self.ty         : float = 0.0
+        self.tx : float = 0.0
+        self.ty : float = 0.0
         # Set the border characteristics in terms of type and border axis
-        self.__build_border_characteristics(*dimensions, lattice_o, type_geo)
+        self._build_border_characteristics(*dimensions, layout_o, type_geo)
+
+    def find_edges_on_border(
+            self, boundaries: Any, id_vs_edge: Dict[str, Any]
+        ) -> None:
+        """
+        Method that finds and associates all the GEOM edges related to the
+        layout border this instance refers to.
+        These edges are the ones that are connected to a single face only,
+        as these are the edges on the borders of the layout.
+
+        Parameters
+        ----------
+        boundaries : Any
+            A GEOM compound object made from the list of GEOM edge objects
+            belonging to the layout boundaries.
+        id_vs_edge : Dict[Any, str]
+            A dictionary of all the layout edge IDs VS the corresponding
+            GEOM edge objects.
+
+        Raises
+        ------
+        RuntimeError
+            In case the boundary edge is not of type ``SEGMENT``.
+        """
+        # Loop through all the sub-edges that are part of the layout border
+        # this class instance refers
+        for shape in extract_sorted_sub_shapes(
+            get_in_place(boundaries, self.border), ShapeType.EDGE):
+            # Extract the shape type from all the information about the current
+            # one
+            shape_type = get_kind_of_shape(shape)[0]
+            # Check the retrieved shape is of type 'SEGMENT'
+            if str(shape_type) == 'SEGMENT':
+                # Retrieve the GEOM edge object corresponding to its ID
+                edge_ref = id_vs_edge[build_edge_id(shape)]
+                # Append the edge's global index number to the list
+                self.edge_indxs.append(
+                    get_id_from_name(get_shape_name(edge_ref)))
+            else:
+                # Raise an exception if the found sub-shape type is not
+                # 'SEGMENT'
+                raise RuntimeError(
+                    "Only edges of type 'SEGMENT' can be contained in a "
+                    f"layout border! (found {shape_type})")
 
     def get_bc_type_number(self) -> int:
         """
@@ -401,28 +492,29 @@ class Boundary:
         """
         return self.type.value
 
-    def __build_border_characteristics(
+    def _build_border_characteristics(
             self,
             lx: float,
             ly: float,
-            lattice_o: Any,
-            type_geo: LatticeGeometryType) -> None:
+            layout_o: Any,
+            type_geo: LayoutGeometryType
+        ) -> None:
         """
-        Method that defines the characteristics of a lattice border that
-        represents a boundary for the lattice itself.
+        Method that defines the characteristics of a layout border that
+        represents a boundary for the layout itself.
         These characteristics are defined in terms of the associated BC type
         (value of the ``BoundaryType`` enumeration), the border axes and its
-        angle; these depend on the specific lattice type of geometry (as
+        angle; these depend on the specific layout type of geometry (as
         value of the ``LatticeGeometryType`` enumeration).
 
         Parameters
         ----------
         lx : float
-            The X-characteristic dimension of the lattice.
+            The X-characteristic dimension of the layout.
         ly : float
-            The Y-characteristic dimension of the lattice.
-        lattice_o : Any
-            Vertex object representing the lattice center point.
+            The Y-characteristic dimension of the layout.
+        layout_o : Any
+            Vertex object representing the layout centre point.
         """
         # Get the X-Y coordinates of the two end points of the edge
         x1, y1, _, x2, y2 = get_kind_of_shape(self.border)[1:6]
@@ -449,30 +541,30 @@ class Boundary:
         self.tx = x1
         self.ty = y1
 
-        # Assign the BC type depending on the lattice type of geometry. The
+        # Assign the BC type depending on the layout type of geometry. The
         # geometries identified by 'RECTANGLE_TRAN' and 'HEXAGON_TRAN' need
         # to re-evaluate the border axes.
         match type_geo:
-            case (LatticeGeometryType.SYMMETRIES_TWO |
-                  LatticeGeometryType.RECTANGLE_SYM |
-                  LatticeGeometryType.RECTANGLE_EIGHT |
-                  LatticeGeometryType.SA60 |
-                  LatticeGeometryType.S30):
+            case (LayoutGeometryType.SYMMETRIES_TWO |
+                  LayoutGeometryType.RECTANGLE_SYM |
+                  LayoutGeometryType.RECTANGLE_EIGHT |
+                  LayoutGeometryType.SA60 |
+                  LayoutGeometryType.S30):
                 # Identifying a border characterized by the 'AXIAL_SYMMETRY'
                 # type of BC, which corresponds to the 'REFL' case in DRAGON5
                 self.type = BoundaryType.AXIAL_SYMMETRY
-            case (LatticeGeometryType.RA60 |
-                  LatticeGeometryType.R120 |
-                  LatticeGeometryType.ROTATION):
+            case (LayoutGeometryType.RA60 |
+                  LayoutGeometryType.R120 |
+                  LayoutGeometryType.ROTATION):
                 # Identifying a border characterized by any of the 'ROTATION'
                 # or 'TRANSLATION' types of BC, which correspond to the 'ROTA'
                 # or 'TRAN' cases respectively in DRAGON5. The position of the
-                # border wrt the lattice center guides the choice.
-                if get_min_distance(lattice_o, self.border) > 1e-7:
+                # border wrt the layout centre guides the choice.
+                if get_min_distance(layout_o, self.border) > 1e-7:
                     self.type = BoundaryType.TRANSLATION
                 else:
                     self.type = BoundaryType.ROTATION
-            case LatticeGeometryType.RECTANGLE_TRAN:
+            case LayoutGeometryType.RECTANGLE_TRAN:
                 # The BC information for the case of a cartesian geometry
                 # with TRAN BCs follows the axes definition below:
                 #              M=3 (0,-ly)
@@ -481,7 +573,8 @@ class Boundary:
                 #             ************
                 #              M=1 (0,ly)
                 if math.isclose(
-                        math.sin(math.radians(self.angle)), 0.0, abs_tol=1e-6):
+                    math.sin(math.radians(self.angle)), 0.0, abs_tol=1e-6
+                ):
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=3 (dx < 0)
                     self.tx = 0.0
@@ -495,10 +588,11 @@ class Boundary:
                     raise RuntimeError(
                         f"The border has an angle of {self.angle}° which is "
                         "not one of the admitted values (0°, 90°) for a "
-                        "cartesian geometry with TRAN as BC.")
+                        "cartesian geometry with TRAN as BC."
+                    )
                 # Assign the BC type
                 self.type = BoundaryType.TRANSLATION
-            case LatticeGeometryType.HEXAGON_TRAN:
+            case LayoutGeometryType.HEXAGON_TRAN:
                 # The BC information for the case of an hexagonal geometry
                 # with translation on its sides follows the axes definition
                 # below:
@@ -512,7 +606,8 @@ class Boundary:
                 if math.isclose(math.sin(math.radians(self.angle)), 1.0):
                     raise RuntimeError(
                         "The border refers to a Y-oriented hexagon which "
-                        "is not admitted for tracking.")
+                        "is not admitted for tracking."
+                    )
                 if abs(dy) < 1e-7:
                     # The sign of 'dx' discriminates between the M=1 (dx > 0)
                     # and M=4 (dx < 0)
@@ -532,145 +627,106 @@ class Boundary:
                 self.type = BoundaryType.TRANSLATION
             case _:
                 raise RuntimeError(
-                    f"The {type_geo} lattice geometry type is not "
-                    "currently handled.")
-
-    def find_edges_on_border(self,
-                             boundaries: Any,
-                             id_vs_edge: Dict[str, Any]) -> None:
-        """
-        Method that finds and associates all the GEOM edges related to the
-        lattice border this instance refers to.
-        These edges are the ones that are connected to a single face only,
-        as these are the edges on the borders of the lattice.
-
-        Parameters
-        ----------
-        boundaries : Any
-            A GEOM compound object made from the list of GEOM edge objects
-            belonging to the lattice boundaries.
-        id_vs_edge : Dict[Any, str]
-            A dictionary of all the lattice edge IDs VS the corresponding
-            GEOM edge objects.
-
-        Raises
-        ------
-        RuntimeError
-            In case the boundary edge is not of type ``SEGMENT``.
-        """
-        # Loop through all the sub-edges that are part of the lattice border
-        # this class instance refers
-        for shape in extract_sorted_sub_shapes(
-            get_in_place(boundaries, self.border), ShapeType.EDGE):
-            # Extract the shape type from all the information about the current
-            # one
-            shape_type = get_kind_of_shape(shape)[0]
-            # Check the retrieved shape is of type 'SEGMENT'
-            if str(shape_type) == 'SEGMENT':
-                # Retrieve the GEOM edge object corresponding to its ID
-                edge_ref = id_vs_edge[build_edge_id(shape)]
-                # Append the edge's global index number to the list
-                self.edge_indxs.append(
-                    get_id_from_name(get_shape_name(edge_ref)))
-            else:
-                # Raise an exception if the found sub-shape type is not
-                # 'SEGMENT'
-                raise RuntimeError(
-                    "Only edges of type 'SEGMENT' can be contained in a "
-                    f"lattice border! (found {shape_type})")
+                    f"The {type_geo} layout geometry type is not "
+                    "currently handled."
+                )
 
 
-class LatticeDataExtractor():
+class LayoutDataExtractor():
     """
-    Class that extracts the geometric data from a layout coming either from
-    a given list of lattices or from the compound object representing their
-    portion. These data is used for generating the output TDT file.
-    The process relies on determining:
+    Class that extracts the geometric and properties data from a layout,
+    either provided as an instance of the ``Fillable`` class only, or by
+    additionally indicating a compound object representing a generic portion
+    of the ``Fillable`` object.
 
-    - the association of faces with properties;
-    - the association between edges and the faces they belong to;
-    - the geometric data and BC types applied on the lattices/compound
-      borders.
+    The extraction process relies on determining:
+
+    - the association of GEOM faces with properties;
+    - the association between GEOM edges and the GEOM faces they belong to;
+    - the information about the borders of the layout in terms of their
+      geometric data and applied BC types.
 
     Parameters
     ----------
-    lattices : List[Lattice]
-        A list of ``Lattice`` instances storing the geometric information
+    layout : Fillable
+        A ``Fillable`` instance storing the geometric and properties data
         to extract.
-    geom_type : GeometryType
-        The type of geometry of the cells in the lattices. This setting is
-        used to extract the regions matching the geometry types.
+    tdt_setup : TdtSetup
+        Dataclass providing the settings for extracting the geometric and
+        properties information from the given layout.
     compound_to_analyse: Any | None = None
-        The compound object to analyse. If ``None`` is provided, the lattices
-        are considered instead.
-    type_geo : LatticeGeometryType
-        Identifying the value for the typegeo related to the layout.
+        The compound object to analyse. If ``None`` is provided, the layout
+        given as first parameter is considered instead.
 
     Attributes
     ----------
-    lattices : List[Lattice]
-        The list of ``Lattice`` objects storing the geometric information to
-        extract.
+    geometry_layout : Fillable
+        A ``Fillable`` instance storing the geometric and properties data
+        to extract.
     borders : List[Any]
         The list of edge objects representing the borders of the layout.
-    boundaries : List[Boundary]
-        The list of ``Boundary`` objects storing the geometric and BCs
+    boundaries : List[BoundaryData]
+        The list of ``BoundaryData`` objects storing the geometric and BCs
         information about the layout's borders.
-    subfaces : List[Face]
-        The list of ``Face`` objects storing the geometric information about
-        each region of the layout.
-    edges : List[Edge]
-        The list of ``Edge`` objects storing the geometric information about
-        each edge of the layout and the faces they belong to.
+    subfaces : List[FaceData]
+        The list of ``FaceData`` objects storing the geometric information
+        about each region of the layout.
+    edges : List[EdgeData]
+        The list of ``EdgeData`` objects storing the geometric information
+        about each edge of the layout and the faces they belong to.
     id_vs_edge : Dict[str, Any]
         A dictionary of the IDs for the layout's edges VS the corresponding
         edge objects.
-    lattice_edges : List[Any]
+    layout_edges : List[Any]
         The list of the edge objects contained in the layout.
     type_geo : LatticeGeometryType
-        Identifying the value for the typegeo related to the layout.
-    layout_center : Tuple[float, float, float]
-        The XYZ coordinates of the whole layout center.
+        Identifying the characteristic value associated to the type of
+        symmetry and tracking.
+    layout_centre : Tuple[float, float, float]
+        The XYZ coordinates of the whole layout centre.
     dimensions : Tuple[float, float]
         The XY characteristic dimensions of the layout.
     """
     CASES_FOR_TRANSLATION = {
-        CellType.RECT: [SymmetryType.FULL, SymmetryType.HALF],
-        CellType.HEX: [SymmetryType.THIRD, SymmetryType.SIXTH]
+        LayoutType.GENERIC: [],
+        LayoutType.RECT: [
+            SymmetryType.FULL, SymmetryType.HALF, SymmetryType.DIAG],
+        LayoutType.HEX: [SymmetryType.THIRD, SymmetryType.SIXTH]
     }
     """
-    Identifying the symmetry types for each type of lattice cells for which
-    the lattice translation should be evaluated.
+    Identifying the symmetry types for each type of layout for which the
+    layout translation should be evaluated.
     """
 
     def __init__(
             self,
-            lattices: List[Lattice],
-            geom_type: GeometryType,
-            compound_to_analyse: Any | None,
-            type_geo: LatticeGeometryType) -> None:
-        # Raise an exception if the lattice does not have any cell
-        if any(not lattice.lattice_cells for lattice in lattices):
-            raise RuntimeError("No data extraction can be performed from "
-                               "a lattice without cells.")
+            layout: Fillable,
+            tdt_setup: TdtSetup,
+            compound_to_analyse: Any | None = None
+        ) -> None:
+        # Raise an exception if the layout is empty
+        if all(not layer for layer in layout.layers):
+            raise RuntimeError(
+                "No data extraction can be performed from an empty layout."
+            )
         # Initialize the instance attributes
-        self.lattices: List[Lattice] = deepcopy(lattices)
-        self.borders: List[Any] = []
-        self.lattice_edges: List[Any] = []
-        self.boundaries: List[Boundary] = []
-        self.subfaces: List[Face] = []
-        self.edges: List[Edge] = []
+        self.geometry_layout: Fillable = layout.clone()
+        self.borders: List[Edge] = []
+        self.layout_edges: List[Edge] = []
+        self.boundaries: List[BoundaryData] = []
+        self.subfaces: List[FaceData] = []
+        self.edges: List[EdgeData] = []
         self.regions: List[Region] = []
-        self.layout_center: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self.layout_centre: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self.dimensions: Tuple[float, float] = (0.0, 0.0)
+        self.type_geo: LayoutGeometryType = tdt_setup.type_geo
         # Extract the information to be stored about borders and edges of the
-        # lattice according to the applied symmetry and geometry
-        self.__preprocess(geom_type, compound_to_analyse)
+        # layout according to the applied symmetry and geometry
+        self._preprocess(tdt_setup, compound_to_analyse)
         # Associate each edge with an index and build a dictionary
-        self.id_vs_edge: Dict[str, Any] = classify_lattice_edges(
-            self.lattice_edges)
-
-        self.type_geo: LatticeGeometryType = type_geo
+        self.id_vs_edge: Dict[str, Any] = classify_layout_edges(
+            self.layout_edges
+        )
 
     def build_boundaries(self) -> None:
         """
@@ -681,7 +737,7 @@ class LatticeDataExtractor():
         """
         # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
         # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
-        if self.type_geo == LatticeGeometryType.ISOTROPIC:
+        if self.type_geo == LayoutGeometryType.ISOTROPIC:
             return
         # Initialize the list of 'Boundary' objects
         boundary_edges = []
@@ -695,16 +751,16 @@ class LatticeDataExtractor():
                 # Append the corresponding GEOM edge object to the list
                 boundary_edges.append(edge.edge)
 
-        # Build a compound from all the edges placed on the lattice borders
+        # Build a compound from all the edges placed on the layout borders
         boundary_edgs_cmpd = make_compound(boundary_edges)
-        # Loop through all the edge objects representing the lattice borders
+        # Loop through all the edge objects representing the layout borders
         print("LEN BORDERS:", len(self.borders))
         for border in self.borders:
             # Build an object of the 'Boundary' class
-            boundary = Boundary(
+            boundary = BoundaryData(
                 border=border,
                 type_geo=self.type_geo,
-                lattice_o=make_vertex(self.layout_center),
+                layout_o=make_vertex(self.layout_centre),
                 dimensions=self.dimensions
             )
             # Store all the indices of the edges belonging to the border
@@ -713,9 +769,9 @@ class LatticeDataExtractor():
             self.boundaries.append(boundary)
 
     def build_edges(
-            self, edge_names_vs_faces: Dict[str, List[Any | Face]]) -> None:
+            self, edge_names_vs_faces: Dict[str, List[Any | FaceData]]) -> None:
         """
-        Method that builds a list of ``Edge`` objects from the given
+        Method that builds a list of ``EdgeData`` objects from the given
         dictionary.
         It associates for each edge name a list containing the corresponding
         GEOM edge and the ``Face`` objects; the latter represent the faces
@@ -729,26 +785,27 @@ class LatticeDataExtractor():
         """
         # Loop through all the lists of objects associated to each edge
         for shapes in edge_names_vs_faces.values():
-            # Instantiate an object of the 'Edge' class and append to the
+            # Instantiate an object of the 'EdgeData' class and append to the
             # corresponding list
-            self.edges.append(Edge(*shapes))
+            self.edges.append(EdgeData(*shapes))
 
-    def build_edges_and_faces_association(self) -> Dict[str, List[Face]]:
+    def build_edges_and_faces_association(self) -> Dict[str, List[FaceData]]:
         """
         Method that associates the faces sharing the same edge with the edge
         name. These names contain a global index to identify the edge in the
-        lattice.
+        layout.
 
         Returns
         -------
-        Dict[str, List[Face]]
+        Dict[str, List[FaceData]]
             A dictionary whose entries associate a list of adjacent faces (as
-            ``Face`` objects) to the name of the corresponding shared edge.
+            ``FaceData`` objects) to the name of the corresponding shared
+            edge.
         """
         # Initialize the dictionary storing the edges names VS the list of
         # connected faces
-        edges_name_vs_faces : Dict[str, List[Any | Face]] = {}
-        # Loop through all the lattice subfaces ('Face' objects)
+        edges_name_vs_faces : Dict[str, List[Any | FaceData]] = {}
+        # Loop through all the layout subfaces ('FaceData' objects)
         print("LEN SUBFACES", len(self.subfaces))
         for subface in self.subfaces:
             # Log the 'Face' characteristics
@@ -756,20 +813,19 @@ class LatticeDataExtractor():
             # Loop through all the edges of the current subface
             for subface_edge, edge_id in subface.edge_vs_id.items():
                 # Extract the corresponding GEOM edge object(s)
-                unique_edges = self.__get_unique_edges(subface_edge, edge_id)
+                unique_edges = self._get_unique_edges(subface_edge, edge_id)
                 # Update the dictionary of edge names VS connected faces
-                self.__update_edge_face_association(
+                self._update_edge_face_association(
                     edges_name_vs_faces, subface, unique_edges)
         # Return the dictionary of edge names VS the list of connected faces
         return edges_name_vs_faces
 
     def build_faces(self, property_type: PropertyType) -> None:
         """
-        Method that builds a list of ``Face`` objects from the GEOM face
+        Method that builds a list of ``FaceData`` objects from the GEOM face
         objects, extracted from the layout regions, and the property
-        values. Each region in the layout corresponds to a region in a
-        cell, according to the type of geometry (either technological or
-        sectorized).
+        values. Each parsed ``Region`` object corresponds to a region in the
+        analysed layoutaccording to the considered type of geometry.
         Each region must be associated with a value for the given property
         type. If not the case, an exception is raised.
 
@@ -781,42 +837,24 @@ class LatticeDataExtractor():
         Raises
         ------
         RuntimeError
-            If no properties are associated to a layout region.
+            If no properties or the indicated one are associated to a layout
+            region.
         RuntimeError
             If no value for the given property type is associated to a
             layout region.
         """
-        # Index identifying the 'Face' object
-        subface_indx = 0
         # Loop through all the layout regions and build the corresponding
         # data structure storing the face object and the value of the given
         # type of property
         print("LEN REGIONS:", len(self.regions))
-        for region in self.regions:
-            # Update the subface index
-            subface_indx += 1
-            # Set the subface name by providing its index
-            set_shape_name(region.face, f"FACE_{subface_indx}")
-            # Get the value of the given property type associated to the
-            # region, if any
-            if not region.properties:
-                raise RuntimeError(
-                    "The lattice analysis failed: no properties have been "
-                    f"assigned for region '{region.name}'.")
+        for indx, region in enumerate(self.regions):
+            # Build a 'FaceData' object and append to the corresponding list
             try:
-                value = region.properties[property_type]
-            except KeyError:
-                raise RuntimeError(
-                    f"The lattice analysis failed: no {property_type.name} "
-                    "property type has been defined for region "
-                    f"'{region.name}'")
-            if not value:
-                raise RuntimeError(
-                    "The lattice analysis failed: no value for the property "
-                    f"type {property_type.name} has been defined for region "
-                    f"'{region.name}'")
-            # Build a 'Face' object and append to the corresponding list
-            self.subfaces.append(Face(region.face, value))
+                self.subfaces.append(
+                    FaceData(region, indx+1, [property_type])
+                )
+            except RuntimeError as e:
+                raise RuntimeError("The layout analysis failed.") from e
 
     def print_log_analysis(
             self, edge_name_vs_faces: Dict[str, List[Any]]) -> None:
@@ -848,151 +886,136 @@ class LatticeDataExtractor():
         print("\t# edges w/two faces :", n2)
         print("\t# edges w errors :", n0)
 
-    def __apply_lattice_elements_translation(
+    def _apply_layout_elements_translation(
             self,
-            lattice_cmpd: Any,
-            cur_center: Any,
-            new_center: Tuple[float, float, float]) -> Any:
+            layout_cmpd: Any,
+            cur_centre: Any,
+            new_centre: Tuple[float, float, float]
+        ) -> Any:
         """
-        Method that translates the lattice regions and the given lattice
-        compound so that they are positioned according to the provided new
-        center.
+        Method that translates the layout regions and the given compound so
+        that they are positioned according to the provided new centre.
 
-        If the current lattice center differs from the provided one, all
-        the regions of the lattice are translated so to keep their relative
-        distance from the new position of the lattice center.
-        The same translation is applied also to the given lattice compound.
+        If the current layout centre differs from the provided one, all
+        the regions of the layout are translated so to keep their relative
+        distance from the new position of the layout centre.
+        The same translation is applied also to the given layout compound.
         In addition, a vertex object with the given XYZ coordinates is
-        assigned to the center of the stored ``Lattice`` instance.
+        assigned to the centre of the stored ``Lattice`` instance.
 
         Parameters
         ----------
-        lattice_cmpd : Any
-            The lattice compound object to be translated.
-        cur_center : Any
-            The vertex object representing the current lattice center.
-        new_center : Tuple[float, float, float]
-            The coordinates for the new lattice center.
+        layout_cmpd : Any
+            The layout compound object to be translated.
+        cur_centre : Any
+            The vertex object representing the current layout centre.
+        new_centre : Tuple[float, float, float]
+            The coordinates for the new layout centre.
 
         Returns
         -------
         Any
-            The translated lattice compound, or the same compound if the
-            center has not changed.
+            The translated layout compound, or the same compound if the
+            centre has not changed.
         """
-        # Procede only if the lattice center has changed
-        # lattice = self.lattices[0]
+        # Procede only if the layout centre has changed
         if all(math.isclose(c, nc) for c, nc in zip(
-            get_point_coordinates(cur_center), new_center)):
-            return lattice_cmpd
-        # Translate the regions of the lattice
+            get_point_coordinates(cur_centre), new_centre)):
+            return layout_cmpd
+        # Translate the regions of the layout
         for region in self.regions:
-            region.face = translate_wrt_reference(
-                region.face, cur_center, new_center)
-        # Translate the given lattice compound and return it
+            region.update(
+                wrap_shape(
+                    translate_wrt_reference(region, cur_centre, new_centre)
+                )
+            )
+        # Translate the given layout compound and return it
         return translate_wrt_reference(
-            lattice_cmpd, cur_center, new_center)
+            layout_cmpd, cur_centre, new_centre)
 
-    def __evaluate_lattice_center(self) -> Tuple[float, float, float]:
+    def _evaluate_layout_centre(self) -> Tuple[float, float, float]:
         """
-        Method that evaluates and returns the coordinates of the lattice
-        center so that the lower-left corner of the lattice is positioned
-        in the XYZ space origin.
+        Method that evaluates and returns the coordinates of the centre of the
+        layout so that its lower-left corner is positioned in the XYZ space
+        origin.
 
-        The method constructs a face from the lattice's borders, extracts
+        The method constructs a face from the layout's borders, extracts
         its vertices, and determines the lower-left corner vertex based on
         the minimum X, Y, and Z coordinates.
         If the lower-left corner does not coincide with the XYZ space origin,
-        it computes and returns the coordinates the center should have so
+        it computes and returns the coordinates the centre should have so
         that the lower-left corner is placed in the origin.
-        Otherwise, it returns the current lattice center coordinates.
+        Otherwise, it returns the current layout centre coordinates.
 
         Returns
         -------
         Tuple[float, float, float]
-            A tuple providing the coordinates of the lattice center so that
+            A tuple providing the coordinates of the layout centre so that
             the lower-left corner coincides with the XYZ space origin.
         """
-        # Get the lattice face vertices
-        lattice_vertices = extract_sub_shapes(make_face(self.borders),
-                                              ShapeType.VERTEX)
+        # Get the layout face vertices
+        layout_vertices = extract_sub_shapes(
+            make_face(self.borders), ShapeType.VERTEX
+        )
         # Get the lower-left corner vertex as the one having the minimum value
-        # for the X-Y-Z coordinates
-        coords = [get_point_coordinates(p) for p in lattice_vertices]
-        lower_left = min(coords, key=lambda x: (x[0], x[1], x[2]))
+        # for the XYZ coordinates
+        coords = [get_point_coordinates(p) for p in layout_vertices]
+        lower_left = min(coords, key=lambda c: (c[0], c[1], c[2]))
         # Check if the lower-left corner coincides with the XYZ origin; if
-        # not, evaluate the new lattice center to fulfill the condition
+        # not, evaluate the new layout centre to fulfill the condition
         if any(not math.isclose(c, 0.0, abs_tol=1e-6) for c in lower_left):
-            # Return the coordinates of the new center
+            # Return the coordinates of the new centre
             return (0.0 - lower_left[0]), (0.0 - lower_left[1]), 0.0
-        # Return the current lattice center
-        return get_point_coordinates(self.lattices[0].lattice_center)
+        # Return the current layout centre
+        return get_point_coordinates(self.geometry_layout.o)
 
-    def __build_compound_regions(self, compound: Any) -> None:
+    def _build_compound_regions(
+            self, compound: Any, layout_regions: List[Region]
+        ) -> None:
         """
         Method that builds a ``Region`` object for each face of the given
         compound. Properties are assigned by identifying the corresponding
-        ``Region`` object from the stored ``Lattice`` objects.
+        ``Region`` object from the stored ``Fillable`` object.
 
         Parameters
         ----------
         compound : Any
-            The compound object to build ``Region`` objects for each face.
+            The compound object for whose faces ``Region`` objects are built.
         """
+        # Clear out any previously built regions
+        self.regions.clear()
+        logging.info(
+            f"Got no. {len(layout_regions)} regions from the technological "
+            "geometry."
+        )
         # Build the 'Region' objects corresponding to the faces of the given
         # compound
-        faces = extract_sub_shapes(compound, ShapeType.FACE)
-        for i, face in enumerate(faces):
-            ref_pnt = make_vertex_inside_face(face)
-            for lattice in self.lattices:
-                if not is_point_inside_shape(ref_pnt, lattice.lattice_cmpd):
-                    continue
-                for region in lattice.regions:
-                    if is_point_inside_shape(ref_pnt, region.face):
-                        self.regions.append(
-                            Region(face=face,
-                                   inner_point=ref_pnt,
-                                   name=f"Region {i}",
-                                   properties=deepcopy(region.properties)))
-                        break
-                else:
-                    raise RuntimeError(
-                        f"No region could be found for the subface {i} of "
-                        "the given compound. Please ensure the compound is "
-                        "a portion of the indicated lattices.")
-                break
+        for i, f in enumerate(extract_sub_shapes(compound, ShapeType.FACE)):
+            # Build a reference vertex to match a region
+            ref_vertex = make_vertex_inside_face(f)
+            # Get the 'Region' object that corresponds to the GEOM face by
+            # looping through the regions of the geometry layout
+            for region in layout_regions:
+                if is_point_inside_shape(ref_vertex, region):
+                    # Build and store a new 'Region' having the shape of the
+                    # face and the properties of the found region
+                    self.regions.append(
+                        Region(f, f"Region {i}", deepcopy(region.properties))
+                    )
+                    break
             else:
                 raise RuntimeError(
-                    f"No region could be found for the subface {i} of "
-                    "the given compound. Please ensure the compound is "
-                    "a portion of the indicated lattices.")
+                    f"No region could be found along the hierarchical "
+                    "structure of the layout named "
+                    f"'{self.geometry_layout.name}' that matches the face "
+                    f"object {i} extracted from the given compound object. "
+                    "Please ensure the compound is a portion of the "
+                    "indicated layout."
+                )
 
-    def __get_lattice_compound(self) -> Any:
-        """
-        Method that returns the lattice compound that corresponds to the
-        currently applied symmetry type. It identifies either the full
-        lattice or a part of it, if any symmetry is applied.
-
-        Returns
-        -------
-        Any
-            The lattice compound that corresponds to the currently applied
-            symmetry type.
-        """
-        if not self.lattices[0].symmetry_type == SymmetryType.FULL:
-            return make_partition(
-                [lattice.lattice_symm for lattice in self.lattices],
-                [],
-                ShapeType.FACE
-            )
-        return make_partition(
-            [lattice.lattice_cmpd for lattice in self.lattices],
-            [],
-            ShapeType.FACE
-        )
-
-    def __get_unique_edges(
-            self, subface_edge: Any, edge_id: str) -> List[Any]:
+    def _get_unique_edges(
+            self, subface_edge: Any, edge_id: str
+        ) -> List[Any]:
         """
         Method that retrieves the GEOM edge objects associated to the given
         ID (second argument) from the attribute dictionary of IDs VS GEOM
@@ -1005,7 +1028,7 @@ class LatticeDataExtractor():
         can be associated to different faces from the other.
         In both cases, it is important to retrieve all the corresponding sub
         edges by exploiting the GEOM function ``GetInPlace``; this is used to
-        extract the sub-shape(s) of the lattice unique edges, which are
+        extract the sub-shape(s) of the layout unique edges, which are
         coincident with, or could be a part of, the GEOM edge provided as
         first argument.
         If any edge is retrieved, the corresponding ID is built and used to
@@ -1022,7 +1045,7 @@ class LatticeDataExtractor():
         Raises
         ------
         RuntimeError
-            If no corresponding edge is found in the lattice.
+            If no corresponding edge is found in the layout.
 
         Returns
         -------
@@ -1035,12 +1058,12 @@ class LatticeDataExtractor():
             return [self.id_vs_edge[edge_id]]
         except KeyError as exc:
             # Get the sub-edges the given edge can be subdivided into: these
-            # are associated to a different face of the lattice
-            edge = get_in_place(make_compound(self.lattice_edges),
+            # are associated to a different face of the layout
+            edge = get_in_place(make_compound(self.layout_edges),
                                 subface_edge)
             # Only edge and compound of edges are treated
             edge_type = get_shape_type(edge)
-            error_message = "No corresponding edge in the lattice could " +\
+            error_message = "No corresponding edge in the layout could " +\
                 f"be retrieved for the subface edge whose data is {edge_id}"
             if not edge or edge_type not in [ShapeType.COMPOUND,
                                              ShapeType.EDGE]:
@@ -1057,118 +1080,192 @@ class LatticeDataExtractor():
                 # Raise an exception if the compound does not have edges
                 raise RuntimeError(error_message) from exc
 
-    def __preprocess(self,
-                     geom_type: GeometryType,
-                     compound_to_analyse: Any | None) -> None:
+    def _preprocess(
+            self,
+            tdt_setup: TdtSetup,
+            compound_to_analyse: Any | None
+        ) -> None:
         """
-        Method that initializes the information to be stored from either the
-        lattices or the given compound.
+        Method that initialises the information to be stored from either the
+        ``Fillable`` or the compound objects provided when the class
+        ``LayoutDataExtractor`` is instantiated.
         In case no compound is provided, this information is determined
-        according to the symmetry applied to the lattice and the given
-        geometry type of its cells.
-        It re-builds the regions of the lattice according to the given
-        ``GeometryType``, if it is needed or the indicated geometry type is
-        different from the one used to display them in the SALOME viewer.
-        This allows that analysis on the lattice is always performed on the
-        up-to-date regions.
-        In case the lattice falls in one of the cases identified by the
-        ``CASES_FOR_TRANSLATION`` attribute, its compound is translated
-        together with its regions and the center, so that the lower-left
-        corner coincides with the origin of the XYZ space.
+        according to the symmetry and the geometry types of the layout.
+
+        This method updates the hierarchical structure of the layout, if it
+        is needed, and builds the ``Region`` objects of the layout if the
+        geometry type differs from the ``GeometryType.TECHNOLOGICAL`` one.
+        These regions are the result of partitioning the regions of the
+        technological geometry with the edges of the indicated geometry type.
+
+        If the layout falls in one of the cases identified by the attribute
+        ``CASES_FOR_TRANSLATION``, the stored ``Fillable`` object, and the
+        corresponding compound object (if provided), is translated so that the
+        lower-left corner coincides with the origin of the XYZ space.
 
         Parameters
         ----------
-        geom_type : GeometryType
-            The type of geometry of the lattice cells used to extract the
-            regions.
+        tdt_setup : TdtSetup
+            Dataclass providing the settings for extracting the geometric and
+            properties information from the given layout.
         compound_to_analyse: Any | None = None
-            The compound object to analyse, if present. If ``None`` is given,
-            the lattices are considered instead.
+            The compound object to process, if present. If ``None`` is given,
+            the stored ``Fillable`` object is considered instead.
         """
-        # Consider the first lattice in the stored list as the reference one
-        ref_lattice = self.lattices[0]
-        # Check if any of the geometry layouts of the lattices need to be
-        # rebuilt
-        for lattice in self.lattices:
-            if (lattice.is_update_needed or
-                geom_type != lattice.displayed_geom):
-                lattice.build_regions(geom_type)
+        # Check if the stored layout needs its tree to be updated and get the
+        # updated regions
+        if self.geometry_layout.state.is_update_needed:
+            self.geometry_layout.update_hierarchical_structure()
+        # Get the regions of the technological geometry of the layout
+        # according to indicated symmetry type
+        tech_regions = self.geometry_layout.get_regions_with_symmetry(
+            tdt_setup.symmetry_type
+        )
+        logging.info(
+            f"Extracted no. {len(tech_regions)} regions of the technological "
+            f"geometry from the layout {self.geometry_layout.name}."
+        )
         # Handle the case where the analysis is done on a given compound
         if compound_to_analyse is not None:
             # Build the 'Region' objects corresponding to the given compound
-            self.__build_compound_regions(compound_to_analyse)
-            lattice_cmpd = compound_to_analyse
+            self._build_compound_regions(compound_to_analyse, tech_regions)
+            layout_cmpd = compound_to_analyse
         else:
-            # Get the GEOM compound identifying either the full lattice of a
-            # part of it, if a symmetry is applied
-            lattice_cmpd = self.__get_lattice_compound()
-             # Extract the list of 'Region' objects from all the lattices
-            self.regions = [
-                region for lattice in self.lattices
-                       for region in lattice.regions]
+            self.regions = tech_regions
+            # Get the GEOM compound identifying either the full layout of a
+            # part of it
+            layout_cmpd = make_compound(self.regions)
+            logging.info("Built a compound from the extracted regions.")
+
         # Extract the layout compound borders
-        self.borders = build_compound_borders(lattice_cmpd)
-        # Extract the layout characteristic dimensions depending on the cells
+        self.borders = build_compound_borders(layout_cmpd)
+        logging.info(
+            f"Extracted no. {len(self.borders)} borders from the compound "
+            f"of the layout {self.geometry_layout.name}"
+        )
+        # Extract the layout characteristic dimensions depending on the layout
         # type
-        x_min, x_max, y_min, y_max = get_bounding_box(lattice_cmpd)
+        x_min, x_max, y_min, y_max = get_bounding_box(layout_cmpd)
         self.dimensions = (x_max - x_min, y_max - y_min)
-        if ref_lattice.cells_type == CellType.HEX:
+        if tdt_setup.layout_type == LayoutType.HEX:
             self.dimensions = tuple([d / 2 for d in self.dimensions])
 
         # Handle the layout translation so that the lower-left corner is in
         # the XYZ space origin; this is valid for specific symmetries and
-        # cells geometries or if the layout center does not coincide with
-        # the XYZ origin
+        # layout types or if the layout centre does not coincide with the XYZ
+        # origin
         symm_condition = (
-            ref_lattice.symmetry_type in self.CASES_FOR_TRANSLATION[
-            ref_lattice.cells_type]
+            tdt_setup.symmetry_type
+            in self.CASES_FOR_TRANSLATION[tdt_setup.layout_type]
         )
-        center_condition = (
-            get_min_distance(
-                ref_lattice.lattice_center,
-                make_vertex((0.0, 0.0, 0.0))) > 0.0
+        centre_condition = (
+            not are_same_shapes(
+                self.geometry_layout.o,
+                make_vertex((0.0, 0.0, 0.0)),
+                ShapeType.VERTEX
+            )
         )
-        if symm_condition or center_condition:
-            # Evaluate the new center of the lattice, if it has not been
+        if symm_condition or centre_condition:
+            # Evaluate the new centre of the layout, if it has not been
             # translated yet, and apply the translation to the regions
-            # and the lattice compound
-            self.layout_center = (
-                self.__evaluate_lattice_center() if symm_condition
+            # and the layout compound
+            self.layout_centre = (
+                self._evaluate_layout_centre() if symm_condition
                     else (0.0, 0.0, 0.0))
-            lattice_cmpd = self.__apply_lattice_elements_translation(
-                lattice_cmpd, ref_lattice.lattice_center, self.layout_center)
-            # Re-evaluate the lattice borders
-            self.borders = build_compound_borders(lattice_cmpd)
-        # Extract the lattice edges from the lattice compound to analyse
-        self.lattice_edges = extract_sub_shapes(
-            make_partition([lattice_cmpd], [], ShapeType.FACE),
-            ShapeType.EDGE)
+            logging.info(f"Evaluated new centre '{self.layout_centre}'.")
+            layout_cmpd = self._apply_layout_elements_translation(
+                layout_cmpd, self.geometry_layout.o, self.layout_centre
+            )
+            if tdt_setup.geom_type != GeometryType.TECHNOLOGICAL:
+                ref_map = self.geometry_layout.geometry_maps[
+                    tdt_setup.geom_type
+                ]
+                self.geometry_layout.geometry_maps[tdt_setup.geom_type] = \
+                    make_translation(
+                        ref_map,
+                        make_vector_from_points(
+                            self.geometry_layout.o,
+                            make_vertex(self.layout_centre)
+                        )
+                    )
+            logging.info(
+                "Translated layout elements so to have the lower-left corner "
+                "of the layout in the XYZ origin."
+            )
+            # Re-evaluate the layout borders
+            self.borders = build_compound_borders(layout_cmpd)
+            logging.info(
+                f"Re-extracted no. {len(self.borders)} borders from the "
+                f"compound of the layout {self.geometry_layout.name}"
+            )
 
-        add_to_study(make_compound(self.lattice_edges), "EDGES TO ANALYSE")
+        # Rebuild the regions and the layout compound in case the indicated
+        # geometry type is not the technological one
+        if tdt_setup.geom_type != GeometryType.TECHNOLOGICAL:
+            # Get the compound of edges related to the indicated geometry
+            # type, if any
+            if not tdt_setup.geom_type in self.geometry_layout.geometry_maps:
+                raise RuntimeError(
+                    f"Missing '{tdt_setup.geom_type.name}' type of geometry "
+                    f"for the layout named '{self.geometry_layout.name}'. "
+                    "Call the method 'show()' first with the desired type "
+                    "of geometry to enable the construction of the "
+                    "corresponding edges."
+                )
+            edges = self.geometry_layout.geometry_maps[tdt_setup.geom_type]
+            logging.info(
+                f"Got the edges of the {tdt_setup.geom_type} mapping of the "
+                f"layout {self.geometry_layout.name}."
+            )
+            # Update the compound and the regions
+            layout_cmpd = make_partition(
+                [layout_cmpd], [edges], ShapeType.FACE
+            )
+            logging.info(
+                "Updated the compound of the layout "
+                f"{self.geometry_layout.name} with the edges of the "
+                f"{tdt_setup.geom_type} mapping."
+            )
+            self._build_compound_regions(layout_cmpd, deepcopy(tech_regions))
+            logging.info(
+                f"Re-extracted no. {len(self.regions)} regions from the "
+                f"compound of the layout {self.geometry_layout.name} that "
+                f"matches the {tdt_setup.geom_type} mapping."
+            )
+
+        # Extract the layout edges from the layout compound to analyse
+        self.layout_edges = extract_sub_shapes(layout_cmpd, ShapeType.EDGE)
+        logging.info(
+            f"Extracted no. {len(self.layout_edges)} edges from the "
+            f"compound of the layout {self.geometry_layout.name}"
+        )
+
+        add_to_study(layout_cmpd, "CMPD TO ANALYSE")
+        add_to_study(make_compound(self.layout_edges), "EDGES TO ANALYSE")
         add_to_study(make_compound(self.borders), "BOUNDARIES TO ANALYSE")
-        add_to_study(lattice_cmpd, "CMPD TO ANALYSE")
         update_salome_study()
 
-    def __update_edge_face_association(
+    def _update_edge_face_association(
             self,
-            edges_name_vs_faces: Dict[str, List[Any | Face]],
-            subface: Face,
-            edges: List[Any]) -> None:
+            edges_name_vs_faces: Dict[str, List[Any | FaceData]],
+            subface: FaceData,
+            edges: List[Any]
+        ) -> None:
         """
         Method that updates the given dictionary of edge names VS connected
-        faces with the provided ``Face`` object and the list of edges.
+        faces with the provided ``FaceData`` object and the list of edges.
         For each edge, its ID is checked for its presence among the keys of
         the given dictionary: if so, the corresponding list is updated with
-        the ``Face`` object, otherwise a new entry is created. The entry has
-        as key the edge name, as value a list with the GEOM edge object as
-        first element, followed by the given ``Face`` object.
+        the ``FaceData`` object, otherwise a new entry is created. The entry
+        has as key the edge name, as value a list with the GEOM edge object
+        as first element, followed by the given ``FaceData`` object.
 
         Parameters
         ----------
-        edges_name_vs_faces : Dict[str, List[Any | Face]]
+        edges_name_vs_faces : Dict[str, List[Any | FaceData]]
             A dictionary of edge names VS connected faces.
-        subface : Face
-            A ``Face`` object to associate the given edges to.
+        subface : FaceData
+            A ``FaceData`` object to associate the given edges to.
         edges : List[Any]
             A list of GEOM edge objects each associated to the given face.
         """
@@ -1183,32 +1280,33 @@ class LatticeDataExtractor():
                 edges_name_vs_faces[edge_name] = [edge, subface]
 
 
-def analyse_lattice(
-        lattices: List[Lattice],
-        tdt_config: TdtSetup,
-        compound_to_analyse: Any | None = None) -> LatticeDataExtractor:
+def analyse_layout(
+        layout: Fillable,
+        tdt_setup: TdtSetup,
+        compound_to_analyse: Any | None = None
+    ) -> LayoutDataExtractor:
     """
-    Function that performs the lattice analysis to extract the necessary
-    information about the regions and their associated properties, the edges
-    and their association with the faces they belong to. It also extracts
-    information about the edges representing the lattice boundaries.
+    Function that analyses the given layout to extract the necessary data
+    about the regions and their associated properties, the edges and their
+    association with the faces they belong to. It also extracts information
+    about the edges representing the boundaries of the layout.
 
-    If the ``compound_to_export`` parameter is provided, it will be the one
+    If the ``compound_to_analyse`` parameter is provided, it will be the one
     to be analysed, according to the information stored in the provided
-    lattices. In this way, a colorset of the lattices can be treated.
+    layout. In this way, a generic portion of the given ``Fillable`` object
+    can be treated.
 
     Parameters
     ----------
-    lattice : List[Lattice]
-        The object storing the information about the geometry and the
-        properties of the lattices.
-    tdt_config : TdtSetup
-        Dataclass providing the settings for extracting the geometry
-        information from the lattice layout and the properties assigned
-        to its regions.
+    layout : Fillable
+        The ``Fillable``object storing the information about the geometry and
+        the properties of the entire layout.
+    tdt_setup : TdtSetup
+        Dataclass providing the settings for extracting the geometric and
+        properties information from the given layout.
     compound_to_analyse: Any | None = None
         The compound object to analyse, if present. If ``None`` is given, the
-        lattices are considered instead.
+        given ``Fillable``object is considered instead.
 
     Returns
     -------
@@ -1216,15 +1314,15 @@ def analyse_lattice(
         Object collecting all the information about the geometry and the
         properties extracted from the layout.
     """
-    # Instantiate the class for extracting the geometric data from the lattice
+    # Instantiate the class for extracting the geometric data from the layout
     # according to the given type of geometry
-    data_extractor = LatticeDataExtractor(
-        lattices,
-        tdt_config.geom_type,
-        compound_to_analyse,
-        tdt_config.type_geo)
+    data_extractor = LayoutDataExtractor(
+        layout,
+        tdt_setup,
+        compound_to_analyse
+    )
     # Call its method for performing the analysis
-    data_extractor.build_faces(tdt_config.property_type)
+    data_extractor.build_faces(tdt_setup.property_type)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()
     data_extractor.build_edges(edge_name_vs_faces)
     data_extractor.build_boundaries()
@@ -1243,9 +1341,9 @@ def build_edge_id(edge: Any) -> str:
     According to the shape type we could have:
 
     - `CIRCLE xc yc zc dx dy dz R`
-      (X-Y-Z center coordinates, X-Y-Z normal vector elements, circle radius).
+      (X-Y-Z centre coordinates, X-Y-Z normal vector elements, circle radius).
     - `ARC_CIRCLE xc yc zc dx dy dz R x1 y1 z1 x2 y2 z2`
-      (X-Y-Z center coordinates, X-Y-Z normal vector elements, arc radius,
+      (X-Y-Z centre coordinates, X-Y-Z normal vector elements, arc radius,
       X-Y-Z coordinates of arc starting and ending points).
     - `SEGMENT x1 y1 z1 x2 y2 z2`
       (X-Y-Z coordinates of segment starting and ending points).
@@ -1281,14 +1379,14 @@ def build_edge_id(edge: Any) -> str:
     return "EDGE_" + str(data[0]) + "_" + "_".join(f"{info:.6g}"
                                                    for info in data[1:])
 
-def classify_lattice_edges(edges: List[Any]) -> Dict[str, Any]:
+def classify_layout_edges(edges: List[Any]) -> Dict[str, Any]:
     """
-    Function that classifies the given lattice edges (as GEOM objects)
+    Function that classifies the given layout edges (as GEOM objects)
     by building a dictionary with keys being a unique ID and values the
     corresponding GEOM edge object.
     The IDs are built from the geometric characteristics of the edges;
     for each edge its ``name`` internal attribute is set using a global
-    index over all the lattice's edges.
+    index over all the layout's edges.
 
     Parameters
     ----------
@@ -1317,6 +1415,6 @@ def classify_lattice_edges(edges: List[Any]) -> Dict[str, Any]:
             ids_edges[build_edge_id(edge)] = edge
     except RuntimeError as e:
         raise RuntimeError(
-            "Error while classifying the lattice's edges.") from e
+            "Error while classifying the layout's edges.") from e
     # Return the built dictionary
     return ids_edges

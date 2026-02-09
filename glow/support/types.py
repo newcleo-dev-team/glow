@@ -113,6 +113,8 @@ class LayoutType(Enum):
     """Identifying a cartesian (i.e. rectangular) layout."""
     HEX: int = 1
     """Identifying a hexagonal layout."""
+    GENERIC: int = 2
+    """Identifying a generic layout."""
 
 
 class PropertyType(Enum):
@@ -128,34 +130,65 @@ class PropertyType(Enum):
 # types of symmetry and layout types of geometry
 LAYOUT_VS_SYMM_VS_TYP_GEO : Dict[
     LayoutType, Dict[SymmetryType, List[LayoutGeometryType]]] = {
-    LayoutType.HEX : {
-        SymmetryType.FULL : [
+    LayoutType.HEX: {
+        SymmetryType.FULL: [
             LayoutGeometryType.ISOTROPIC, LayoutGeometryType.HEXAGON_TRAN],
-        SymmetryType.THIRD : [
+        SymmetryType.THIRD: [
             LayoutGeometryType.ROTATION, LayoutGeometryType.R120],
-        SymmetryType.SIXTH : [
+        SymmetryType.SIXTH: [
             LayoutGeometryType.SYMMETRIES_TWO,
             LayoutGeometryType.ROTATION,
             LayoutGeometryType.SA60,
             LayoutGeometryType.RA60],
-        SymmetryType.TWELFTH : [
+        SymmetryType.TWELFTH: [
             LayoutGeometryType.SYMMETRIES_TWO, LayoutGeometryType.S30],
     },
-    LayoutType.RECT : {
-        SymmetryType.FULL : [
+    LayoutType.RECT: {
+        SymmetryType.FULL: [
             LayoutGeometryType.ISOTROPIC,
             LayoutGeometryType.RECTANGLE_TRAN,
             LayoutGeometryType.RECTANGLE_SYM],
-        SymmetryType.HALF : [
+        SymmetryType.HALF: [
             LayoutGeometryType.SYMMETRIES_TWO,
             LayoutGeometryType.RECTANGLE_SYM],
-        SymmetryType.QUARTER : [
+        SymmetryType.DIAG: [
             LayoutGeometryType.SYMMETRIES_TWO,
             LayoutGeometryType.RECTANGLE_SYM],
-        SymmetryType.EIGHTH : [
+        SymmetryType.QUARTER: [
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_SYM],
+        SymmetryType.EIGHTH: [
             LayoutGeometryType.SYMMETRIES_TWO,
             LayoutGeometryType.RECTANGLE_EIGHT],
-    }
+    },
+    LayoutType.GENERIC: {
+        SymmetryType.FULL: [
+            LayoutGeometryType.ISOTROPIC,
+            LayoutGeometryType.HEXAGON_TRAN,
+            LayoutGeometryType.RECTANGLE_TRAN,
+            LayoutGeometryType.RECTANGLE_SYM],
+        SymmetryType.HALF: [
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_SYM],
+        SymmetryType.DIAG: [
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_SYM],
+        SymmetryType.QUARTER: [
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_SYM],
+        SymmetryType.EIGHTH: [
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.RECTANGLE_EIGHT],
+        SymmetryType.THIRD: [
+            LayoutGeometryType.ROTATION, LayoutGeometryType.R120],
+        SymmetryType.SIXTH: [
+            LayoutGeometryType.SYMMETRIES_TWO,
+            LayoutGeometryType.ROTATION,
+            LayoutGeometryType.SA60,
+            LayoutGeometryType.RA60],
+        SymmetryType.TWELFTH: [
+            LayoutGeometryType.SYMMETRIES_TWO, LayoutGeometryType.S30],
+    },
 }
 
 

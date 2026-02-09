@@ -5,10 +5,9 @@ of the geometry layouts.
 import math
 import random
 
-from types import CellType
 from typing import Any, Generator, List, Tuple
 
-from glow.interface.geom_interface import ShapeType, add_to_study, \
+from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
     get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, \
     get_kind_of_shape, get_min_distance, get_point_coordinates, \
@@ -17,7 +16,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
     make_fuse, make_partition, make_translation, make_vector_from_points, \
     make_vertex, make_vertex_on_curve
 from glow.support.types import LAYOUT_VS_SYMM_VS_TYP_GEO, LayoutGeometryType, \
-    SymmetryType
+    LayoutType, SymmetryType
 
 
 # List of the RGB color codes taken by varying each RGB value with steps of 10
@@ -214,10 +213,13 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
                 e, ShapeType.VERTEX
             )
     # Build edges between vertices
-    edges = build_contiguous_edges(vertices)
+    edges = []
+    if len(vertices) > 3:
+        edges = build_contiguous_edges(vertices)
     # Substitute those edges whose vertices coincides with those belonging to
     # the found arcs of circle
     for arc, vs in arc_edges_vs_vertices.items():
+        not_found = False
         # Build a segment between the two vertices of the arc
         cord = make_edge(vs[0], vs[1])
         # If any edge coincides with the one built over the arc, substitute
@@ -226,6 +228,10 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
             if are_same_shapes(cord, edge, ShapeType.EDGE):
                 edges[i] = arc
                 break
+        else:
+            not_found = True
+        if not_found:
+            edges.append(arc)
     # Return the list of segment + arc edges
     return edges
 
@@ -347,38 +353,38 @@ def check_shape_expected_types(shape: Any,
 
 def check_type_geo_consistency(
         type_geo: LayoutGeometryType,
-        cell_type: CellType,
+        layout_type: LayoutType,
         symmetry_type: SymmetryType
     ) -> None:
     """
     Function that checks if the given type of geometry is valid for the
-    indicated type of cell and the type of symmetry.
+    indicated type of layout and the type of symmetry.
 
     Parameters
     ----------
     type_geo : LatticeGeometryType
         The type of geometry of the lattice.
-    cell_type : CellType
-        The type of cell.
+    layout_type : LayoutType
+        The type of layout.
     symmetry_type : SymmetryType
         The type of symmetry.
 
     Raises
     ------
     RuntimeError
-        If the given lattice type of geometry does not match with the
-        indicated cell and symmetry types.
+        If the given layout type of geometry does not match with the
+        indicated layout and symmetry types.
     """
     try:
-        # Get the list of types of geometry available for the lattice
-        types_geo = LAYOUT_VS_SYMM_VS_TYP_GEO[cell_type][symmetry_type]
+        # Get the list of types of geometry available for the layout
+        types_geo = LAYOUT_VS_SYMM_VS_TYP_GEO[layout_type][symmetry_type]
         if type_geo not in types_geo:
             raise KeyError
     except KeyError:
         raise RuntimeError(
             f"The given type of geometry '{type_geo}' is not compatible "
-            f"with the indicated type of cell (i.e. '{cell_type}') and the "
-            f"applied symmetry type '{symmetry_type}'. "
+            f"with the indicated type of layout (i.e. '{layout_type}') and "
+            f"the applied symmetry type '{symmetry_type}'. "
             f"Expected values are {types_geo}.")
 
 
