@@ -102,7 +102,7 @@ def export_layout_to_tdt(
     - the value for the albedo applied to the BCs of the layout. If ``None``,
       a default value that corresponds to the geometry type of the layout is
       adopted;
-    - the value for the `type_geo` attribute which drives type of tracking
+    - the value for the `type_geo` attribute which drives the type of tracking
       (either TISO or TSPC) to adopt accordingly with what requested by the
       `SALT:` module of DRAGON5;
     - the type of symmetry applied to the layout.

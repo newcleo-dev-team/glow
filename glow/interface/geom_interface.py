@@ -341,6 +341,30 @@ def get_in_place(shape1: Any, shape2: Any) -> Any:
     return geompy.GetInPlace(shape1, shape2)
 
 
+def get_in_place_by_hystory(shape1: Any, shape2: Any) -> Any:
+    """
+    Function that extracts the sub-shape(s) of first shape, which are
+    coincident with, or could be a part of, the second shape.
+    The implementation of the wrapped GEOM function is based on a saved
+    history of an operation (e.g., a partition), which produced the first
+    shape. The second shape must be among this operation's arguments.
+
+    Parameters
+    ----------
+    shape1  : Any
+        The shape to find sub-shapes of.
+    shape2  : Any
+        The shape specifying what to find in the first one.
+
+    Returns
+    -------
+    Any
+        A compound object including all the found sub-shapes in the first
+        given shape.
+    """
+    return geompy.GetInPlaceByHistory(shape1, shape2)
+
+
 def get_inertia_matrix(shape: Any) -> List[float]:
     """
     Function that returns the inertia matrix of the given shape.
@@ -803,9 +827,44 @@ def make_partition(
         A shape made by the intersection of all the provided ones with the
         type specified as input.
     """
-    return geompy.MakePartition(ListShapes=shapes,
-                                ListTools=tools,
-                                Limit=shape_type.value)
+    return geompy.MakePartition(
+        ListShapes=shapes,
+        ListTools=tools,
+        Limit=shape_type.value
+    )
+
+
+def make_partition_non_self_intersecting(
+        shapes: List[Any], tools: List[Any], shape_type: ShapeType) -> Any:
+    """
+    Function that performs a partition operation on the given list of shapes
+    by means of the tool shapes intersecting the first ones.
+    This function can be used to speed up the partition operation whenever the
+    shapes of the first argument list do not self-intersect. Only the
+    partition of the shapes with the tools is computed, which gives as result
+    a shape containing only the sub-shapes of the given type.
+
+    Parameters
+    ----------
+    shapes : List[Any]
+        The list of shapes to be intersected. They must not self-intersect.
+    tools : List[Any]
+        The list of shapes intersecting the shapes to partition.
+    shape_type : ShapeType
+        The type of the shape resulting from the partition operation.
+
+    Returns
+    -------
+    Any
+        A shape made by those of the given type resulting from the
+        intersection of the provided ones with the tools only.
+    """
+    return geompy.MakePartitionNonSelfIntersectedShape(
+        ListShapes=shapes,
+        ListTools=tools,
+        Limit=shape_type.value,
+        checkSelfInte=False
+    )
 
 
 def make_rotation(shape: Any, axis: Any, angle: float) -> Any:

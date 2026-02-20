@@ -10,9 +10,10 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple, Self
 
+from build.lib.glow.support.types import LatticeGeometryType
 from glow.geometry_layouts.cells import Region
 from glow.geometry_layouts.fillable_layouts import Fillable
-from glow.interface.geom_entities import Edge, wrap_shape
+from glow.interface.geom_entities import Compound, wrap_shape
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, LayoutType, \
     EdgeType, GeometryType, LayoutGeometryType, PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes, build_compound_borders, \
@@ -20,11 +21,12 @@ from glow.support.utility import are_same_shapes, build_compound_borders, \
     translate_wrt_reference
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sorted_sub_shapes, extract_sub_shapes, get_bounding_box, \
-    get_in_place, get_kind_of_shape, get_min_distance, get_point_coordinates, \
-    get_shape_name, get_shape_type, is_point_inside_shape, make_compound, \
-    make_face, make_partition, make_translation, make_vector_from_points, \
-    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
-    set_shape_name, update_salome_study
+    get_in_place, get_in_place_by_hystory, get_kind_of_shape, \
+    get_min_distance, get_point_coordinates, get_shape_name, get_shape_type, \
+    is_point_inside_shape, make_compound, make_face, make_partition, \
+    make_partition_non_self_intersecting, make_vertex, \
+    make_vertex_inside_face, make_vertex_on_curve, set_shape_name, \
+    update_salome_study
 from glow.main import TdtSetup
 
 
@@ -97,15 +99,6 @@ class FaceData():
                     "No value for the '{p_type.name}' property type has been "
                     f"defined for the region '{self.region.name}' of {self}."
                 )
-        # try:
-        #     # Extract the face number from the corresponding GEOM name
-        #     # attribute
-        #     self.no = get_id_from_shape(self.region)
-        #     # get_id_from_name(name)
-        # except RuntimeError as e:
-        #     raise RuntimeError(
-        #         f"Error with 'FaceData' related to region '{self.region}'."
-        #     ) from e
         # Define the attribute for sorting instances of this class
         self.sort_index = self.no
         # Extract the edges and associate an ID to each
@@ -669,8 +662,8 @@ class LayoutDataExtractor():
         The list of ``BoundaryData`` objects storing the geometric and BCs
         information about the layout's borders.
     subfaces : List[FaceData]
-        The list of ``FaceData`` objects storing the geometric information
-        about each region of the layout.
+        The list of ``FaceData`` objects storing the geometric and properties
+        information about each region of the layout.
     edges : List[EdgeData]
         The list of ``EdgeData`` objects storing the geometric information
         about each edge of the layout and the faces they belong to.
@@ -679,9 +672,6 @@ class LayoutDataExtractor():
         edge objects.
     layout_edges : List[Any]
         The list of the edge objects contained in the layout.
-    type_geo : LatticeGeometryType
-        Identifying the characteristic value associated to the type of
-        symmetry and tracking.
     layout_centre : Tuple[float, float, float]
         The XYZ coordinates of the whole layout centre.
     dimensions : Tuple[float, float]
@@ -711,15 +701,14 @@ class LayoutDataExtractor():
             )
         # Initialize the instance attributes
         self.geometry_layout: Fillable = layout.clone()
-        self.borders: List[Edge] = []
-        self.layout_edges: List[Edge] = []
+        self.borders: List[Any] = []
+        self.layout_edges: List[Any] = []
         self.boundaries: List[BoundaryData] = []
         self.subfaces: List[FaceData] = []
         self.edges: List[EdgeData] = []
         self.regions: List[Region] = []
         self.layout_centre: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self.dimensions: Tuple[float, float] = (0.0, 0.0)
-        self.type_geo: LayoutGeometryType = tdt_setup.type_geo
         # Extract the information to be stored about borders and edges of the
         # layout according to the applied symmetry and geometry
         self._preprocess(tdt_setup, compound_to_analyse)
@@ -728,16 +717,22 @@ class LayoutDataExtractor():
             self.layout_edges
         )
 
-    def build_boundaries(self) -> None:
+    def build_boundaries(self, type_geo: LatticeGeometryType) -> None:
         """
         Method that constructs a list of ``Boundary`` objects representing
         the layout boundary edges, i.e. those connected to a single face.
         All the GEOM edges being part of each boundary are associated to the
         same ``Boundary`` object.
+
+        Parameters
+        ----------
+        type_geo : LatticeGeometryType
+            Identifying the characteristic value associated to the type of
+            symmetry and tracking.
         """
         # No boundaries to extract if an 'ISOTROPIC' type of geometry, meaning
         # 'VOID' or 'ALBE 1.0' BCs in DRAGON5.
-        if self.type_geo == LayoutGeometryType.ISOTROPIC:
+        if type_geo == LayoutGeometryType.ISOTROPIC:
             return
         # Initialize the list of 'Boundary' objects
         boundary_edges = []
@@ -759,7 +754,7 @@ class LayoutDataExtractor():
             # Build an object of the 'Boundary' class
             boundary = BoundaryData(
                 border=border,
-                type_geo=self.type_geo,
+                type_geo=type_geo,
                 layout_o=make_vertex(self.layout_centre),
                 dimensions=self.dimensions
             )
@@ -975,12 +970,20 @@ class LayoutDataExtractor():
         """
         Method that builds a ``Region`` object for each face of the given
         compound. Properties are assigned by identifying the corresponding
-        ``Region`` object from the stored ``Fillable`` object.
+        ``Region`` object from the given list.
 
         Parameters
         ----------
         compound : Any
             The compound object for whose faces ``Region`` objects are built.
+        layout_regions : List[Region]
+            The list of ``Region`` objects to use as reference.
+
+        Raises
+        ------
+        RuntimeError
+            If any of the face objects of the compound does not have a
+            corresponding ``Region`` object among the given ones.
         """
         # Clear out any previously built regions
         self.regions.clear()
@@ -1012,6 +1015,154 @@ class LayoutDataExtractor():
                     "Please ensure the compound is a portion of the "
                     "indicated layout."
                 )
+
+    def _build_refined_regions(self, refined_cmpd: Any) -> None:
+        """
+        Method that builds the ``Region`` objects to store from the partition
+        of the technological geometry of the layout with the compound object
+        collecting the edges that contribute to defining the refined geometry
+        layout.
+        Given the ``Region`` objects of the technological geometry, the face
+        objects in which each region is subdivided are retrieved and
+        corresponding ``Region`` objects sharing the same properties are
+        built and stored in the instance attribute.
+
+        Parameters
+        ----------
+        refined_cmpd : Any
+            The compound object collecting the edges for the refined geometry
+            layout.
+
+        Notes
+        -----
+        The face objects in which each region is partitioned are retrieved by
+        relying on the "in place" concept. This provides:
+        - a FACE, if the region was not partitioned;
+        - a COMPOUND/SHELL of faces if it has been split.
+        """
+        # Perform the partition between the regions and the edges of the
+        # refined geometry layout
+        part = make_partition_non_self_intersecting(
+            [r.geom_obj for r in self.regions],
+            [refined_cmpd],
+            ShapeType.FACE
+        )
+        # For each region, recover its image in the partition, i.e. the faces
+        # in which it has been partitioned
+        refined_regions = []
+        idx = 0
+        for r in self.regions:
+            in_place = get_in_place_by_hystory(part, r.geom_obj)
+            # Extract faces from that in-place shape
+            sub_faces = extract_sub_shapes(in_place, ShapeType.FACE)
+            # If no subfaces are present, keep the in_place as it is a face
+            if not sub_faces:
+                sub_faces = [in_place]
+            # Build a new Region object with the same properties for each face
+            for f in sub_faces:
+                idx += 1
+                refined_regions.append(
+                    Region(f, f"Region {idx}", r.properties)
+                )
+        # Update the stored regions with the refined ones
+        self.regions = refined_regions
+
+    def _get_layout_compound(
+            self, tdt_setup: TdtSetup, compound_to_analyse: Any | None
+        ) -> Any:
+        """
+        Method that returns the compound object based on the provided setup
+        and compound to analyse, if any is indicated.
+        This method either uses an existing compound and builds the
+        corresponding ``Region`` objects, or extracts regions from the
+        technological geometry of the layout considering the symmetry type
+        indicated in the ``TdtSetup`` instance.
+        In this case, the compound built from the extracted regions is
+        returned.
+
+        Parameters
+        ----------
+        tdt_setup : TdtSetup
+            The ``TdtSetup`` instance containing symmetry type information.
+        compound_to_analyse : Any | None
+            A compound object representing a portion of the entire layout.
+            If provided, the corresponding ``Region`` objects are built. If
+            ``None``, regions will be extracted from the geometry layout.
+
+        Returns
+        -------
+        Any
+            A compound object representing either the input compound (if
+            provided) or a newly created compound built from the regions
+            extracted from the layout.
+
+        Raises
+        ------
+        RuntimeError
+            In case a face contained in the given compound does not correspond
+            to any of the ``Region`` objects of the layout.
+        RuntimeError
+            In case the indicated symmetry type does not correspond to any
+            symmetry shape in the layout.
+        """
+        if compound_to_analyse is not None:
+            # Build the 'Region' objects corresponding to the given compound
+            # by considering the entire layout
+            self._build_compound_regions(
+                compound_to_analyse, self.geometry_layout.get_regions()
+            )
+            layout_cmpd = compound_to_analyse
+        else:
+            # Get the regions of the technological geometry of the layout
+            # according to indicated symmetry type
+            self.regions = self.geometry_layout.get_regions_with_symmetry(
+                tdt_setup.symmetry_type
+            )
+            # Get the GEOM compound identifying either the full layout of a
+            # part of it
+            layout_cmpd = make_compound(self.regions)
+            logging.info("Built a compound from the extracted regions.")
+        return layout_cmpd
+
+    def _get_refinement_edges(self, tdt_setup: TdtSetup) -> Compound:
+        """
+        Method that returns the ``Compound`` object of the edges of the
+        refined geometry layout that matches the geometry type indicated
+        in the given ``TdtSetup`` instance.
+        An empty compound is returned if the ``GeometryType.TECHNOLOGICAL``
+        value is present. The compound object is taken from the corresponding
+        mapping in the stored ``Fillable`` instance.
+
+        Parameters
+        ----------
+        tdt_setup : TdtSetup
+            Dataclass providing the settings for extracting the geometric and
+            properties information from the given layout.
+
+        Returns
+        -------
+        Compound
+            The ``Compound`` object containing the edges of the refined
+            geometry layout. An empty ``Compound`` object, if the
+            ``GeometryType.TECHNOLOGICAL`` is indicated.
+
+        Raises
+        ------
+        RuntimeError
+            If no ``Compound`` object is associated to the geometry type
+            indicated in the given ``TdtSetup`` instance.
+        """
+        if tdt_setup.geom_type == GeometryType.TECHNOLOGICAL:
+            return wrap_shape(make_compound([]))
+        if tdt_setup.geom_type not in self.geometry_layout.geometry_maps:
+            raise RuntimeError(
+                f"Missing '{tdt_setup.geom_type.name}' type of geometry "
+                f"for the layout named '{self.geometry_layout.name}'. "
+                "Call the method 'show()' first with the desired type of "
+                "geometry to enable the construction of the corresponding "
+                "edges."
+            )
+        return self.geometry_layout.geometry_maps[tdt_setup.geom_type]
 
     def _get_unique_edges(
             self, subface_edge: Any, edge_id: str
@@ -1080,28 +1231,171 @@ class LayoutDataExtractor():
                 # Raise an exception if the compound does not have edges
                 raise RuntimeError(error_message) from exc
 
+    def _handle_refinement(
+            self, layout_cmpd: Any, tdt_setup: TdtSetup
+        ) -> Any:
+        """
+        Method that refines the given compound object with the edges stored
+        in the mapping that corresponds to the type of geometry indicated by
+        the given ``TdtSetup`` instance. The refinement is based on a
+        partition operation between the layout's compound object and the
+        ``Compound`` instance collecting the edges of the considered geometry
+        type. In case of a ``GeometryType.TECHNOLOGICAL`` value, the partition
+        is performed on the compound itself, an operation that removes any
+        duplicate edges.
+        In case of a refined geometry type, the stored ``Region`` objects are
+        rebuilt from the refined compound by keeping the same properties of
+        the current regions.
+
+        Parameters
+        ---------
+        layout_cmpd : Any
+            The layout compound to be refined, if needed.
+        tdt_setup : TdtSetup
+            Dataclass providing the settings for extracting the geometric and
+            properties information from the given layout.
+
+        Returns
+        -------
+        Any
+            The refined input compound or the same one, if no refinement is
+            needed.
+
+        Raises
+        ------
+        RuntimeError
+            If no ``Compound`` object is associated to the geometry type
+            indicated in the given ``TdtSetup`` instance.
+        """
+        # Get the compound of edges related to the indicated geometry type,
+        # if any
+        edges = self._get_refinement_edges(tdt_setup)
+        logging.info(
+            f"Got the edges of the {tdt_setup.geom_type} mapping of the "
+            f"layout {self.geometry_layout.name}."
+        )
+        # Update the compound by partitioning the content of the compound,
+        # possibly with the refinement edges, if any
+        layout_cmpd = make_partition([layout_cmpd], [edges], ShapeType.FACE)
+        logging.info(
+            f"Updated the compound of the layout {self.geometry_layout.name}"
+            f"with the edges of the {tdt_setup.geom_type} mapping."
+        )
+        # Update the regions, if a refined geometry type is adopted
+        if tdt_setup.geom_type != GeometryType.TECHNOLOGICAL:
+            self._build_refined_regions(edges)
+            logging.info(
+                f"Re-extracted no. {len(self.regions)} regions from the "
+                f"compound of the layout {self.geometry_layout.name} that "
+                f"matches the {tdt_setup.geom_type} mapping."
+            )
+        return layout_cmpd
+
+    def _handle_translation(
+            self, layout_cmpd: Any, tdt_setup: TdtSetup
+        ) -> Any:
+        """
+        Method that handles the translation of the layout compound and its
+        regions so that the lower-left corner is in the XYZ space origin.
+        This translation is performed only for the combination of specific
+        symmetries and layout types or if the layout centre does not coincide
+        with the XYZ origin.
+        If a geometry type other than ``GeometryType.TECHNOLOGICAL`` is
+        indicated, the corresponding compound object is translated as well.
+        Lastly, the edges constituting the borders of the translated layout
+        compound are built.
+
+        Parameters
+        ---------
+        layout_cmpd : Any
+            The layout compound to be translated, if needed.
+        tdt_setup : TdtSetup
+            Dataclass providing the settings for extracting the geometric and
+            properties information from the given layout.
+
+        Returns
+        -------
+        Any
+            The translated input compound or the same one, if no translation
+            is needed.
+        """
+        # Build and evaluate the two conditions
+        symm_condition = (
+            tdt_setup.symmetry_type
+            in self.CASES_FOR_TRANSLATION[tdt_setup.layout_type]
+        )
+        centre_condition = (
+            not are_same_shapes(
+                self.geometry_layout.o,
+                make_vertex((0.0, 0.0, 0.0)),
+                ShapeType.VERTEX
+            )
+        )
+        # Return if both conditions are not met
+        if not symm_condition and not centre_condition:
+            return layout_cmpd
+        # Evaluate the new centre of the layout, if it has not been
+        # translated yet, and apply the translation to the regions
+        # and the layout compound
+        self.layout_centre = (
+            self._evaluate_layout_centre() if symm_condition
+            else (0.0, 0.0, 0.0)
+        )
+        logging.info(f"Evaluated new centre '{self.layout_centre}'.")
+        layout_cmpd = self._apply_layout_elements_translation(
+            layout_cmpd, self.geometry_layout.o, self.layout_centre
+        )
+        # Translate the compound of edges corresponding to the indicated
+        # geometry type
+        if tdt_setup.geom_type != GeometryType.TECHNOLOGICAL:
+            self.geometry_layout.geometry_maps[tdt_setup.geom_type] = \
+                translate_wrt_reference(
+                    self._get_refinement_edges(tdt_setup),
+                    self.geometry_layout.o,
+                    self.layout_centre
+                )
+        logging.info(
+            "Translated layout elements so to have the lower-left corner "
+            "of the layout in the XYZ origin."
+        )
+        # Re-evaluate the layout borders
+        self.borders = build_compound_borders(layout_cmpd)
+        logging.info(
+            f"Re-extracted no. {len(self.borders)} borders from the "
+            f"compound of the layout {self.geometry_layout.name}"
+        )
+        # Return the translated compound
+        return layout_cmpd
+
     def _preprocess(
             self,
             tdt_setup: TdtSetup,
             compound_to_analyse: Any | None
         ) -> None:
         """
-        Method that initialises the information to be stored from either the
-        ``Fillable`` or the compound objects provided when the class
-        ``LayoutDataExtractor`` is instantiated.
+        Method that initialises the geometric information to be stored by
+        considering either the ``Fillable`` or the compound objects provided
+        when the class ``LayoutDataExtractor`` is instantiated.
         In case no compound is provided, this information is determined
-        according to the symmetry and the geometry types of the layout.
+        according to the symmetry and the geometry types of the layout found
+        in the provided ``TdtSetup`` instance.
 
         This method updates the hierarchical structure of the layout, if it
-        is needed, and builds the ``Region`` objects of the layout if the
-        geometry type differs from the ``GeometryType.TECHNOLOGICAL`` one.
-        These regions are the result of partitioning the regions of the
-        technological geometry with the edges of the indicated geometry type.
-
+        is needed, and builds the ``Region`` objects of the layout that
+        corresponds to the faces the layout compound can be subdivided into.
+        The layout compound is either provided as input or determined from the
+        ``Fillable`` object according to the indicated symmetry type.
         If the layout falls in one of the cases identified by the attribute
-        ``CASES_FOR_TRANSLATION``, the stored ``Fillable`` object, and the
-        corresponding compound object (if provided), is translated so that the
-        lower-left corner coincides with the origin of the XYZ space.
+        ``CASES_FOR_TRANSLATION``, the determined compound object, and the
+        associated regions, is translated so that the lower-left corner
+        coincides with the origin of the XYZ space.
+
+        In addition, if the geometry type differs from the
+        ``GeometryType.TECHNOLOGICAL`` one, the layout compound is partitioned
+        with the corresponding refinement edges; the same is done for the
+        ``Region`` objects.
+        Lastly, the edges of the considered layout are extracted and stored
+        as an instance attribute.
 
         Parameters
         ----------
@@ -1111,33 +1405,33 @@ class LayoutDataExtractor():
         compound_to_analyse: Any | None = None
             The compound object to process, if present. If ``None`` is given,
             the stored ``Fillable`` object is considered instead.
+
+        Raises
+        ------
+        RuntimeError
+            If no ``Compound`` object is associated to the geometry type
+            indicated in the given ``TdtSetup`` instance.
+        RuntimeError
+            During the extraction of the ``Region`` objects of the layout's
+            technological geometry, if there is no match between a face of the
+            given compound and the regions of the ``Fillable`` object or the
+            indicated symmetry type is not available.
+        RuntimeError
+            If no closed boundaries can be extracted from the compound object
+            to analyse.
         """
-        # Check if the stored layout needs its tree to be updated and get the
-        # updated regions
-        if self.geometry_layout.state.is_update_needed:
-            self.geometry_layout.update_hierarchical_structure()
-        # Get the regions of the technological geometry of the layout
-        # according to indicated symmetry type
-        tech_regions = self.geometry_layout.get_regions_with_symmetry(
-            tdt_setup.symmetry_type
+        # Update the hierarchical tree of the stored layout, if needed
+        self.geometry_layout.update_hierarchical_structure()
+        # Get the compound to export based on either the regions or the given
+        # one
+        layout_cmpd = self._get_layout_compound(
+            tdt_setup, compound_to_analyse
         )
         logging.info(
-            f"Extracted no. {len(tech_regions)} regions of the technological "
+            f"Extracted no. {len(self.regions)} regions of the technological "
             f"geometry from the layout {self.geometry_layout.name}."
         )
-        # Handle the case where the analysis is done on a given compound
-        if compound_to_analyse is not None:
-            # Build the 'Region' objects corresponding to the given compound
-            self._build_compound_regions(compound_to_analyse, tech_regions)
-            layout_cmpd = compound_to_analyse
-        else:
-            self.regions = tech_regions
-            # Get the GEOM compound identifying either the full layout of a
-            # part of it
-            layout_cmpd = make_compound(self.regions)
-            logging.info("Built a compound from the extracted regions.")
-
-        # Extract the layout compound borders
+        # Extract the borders of the layout compound
         self.borders = build_compound_borders(layout_cmpd)
         logging.info(
             f"Extracted no. {len(self.borders)} borders from the compound "
@@ -1154,84 +1448,11 @@ class LayoutDataExtractor():
         # the XYZ space origin; this is valid for specific symmetries and
         # layout types or if the layout centre does not coincide with the XYZ
         # origin
-        symm_condition = (
-            tdt_setup.symmetry_type
-            in self.CASES_FOR_TRANSLATION[tdt_setup.layout_type]
-        )
-        centre_condition = (
-            not are_same_shapes(
-                self.geometry_layout.o,
-                make_vertex((0.0, 0.0, 0.0)),
-                ShapeType.VERTEX
-            )
-        )
-        if symm_condition or centre_condition:
-            # Evaluate the new centre of the layout, if it has not been
-            # translated yet, and apply the translation to the regions
-            # and the layout compound
-            self.layout_centre = (
-                self._evaluate_layout_centre() if symm_condition
-                    else (0.0, 0.0, 0.0))
-            logging.info(f"Evaluated new centre '{self.layout_centre}'.")
-            layout_cmpd = self._apply_layout_elements_translation(
-                layout_cmpd, self.geometry_layout.o, self.layout_centre
-            )
-            if tdt_setup.geom_type != GeometryType.TECHNOLOGICAL:
-                ref_map = self.geometry_layout.geometry_maps[
-                    tdt_setup.geom_type
-                ]
-                self.geometry_layout.geometry_maps[tdt_setup.geom_type] = \
-                    make_translation(
-                        ref_map,
-                        make_vector_from_points(
-                            self.geometry_layout.o,
-                            make_vertex(self.layout_centre)
-                        )
-                    )
-            logging.info(
-                "Translated layout elements so to have the lower-left corner "
-                "of the layout in the XYZ origin."
-            )
-            # Re-evaluate the layout borders
-            self.borders = build_compound_borders(layout_cmpd)
-            logging.info(
-                f"Re-extracted no. {len(self.borders)} borders from the "
-                f"compound of the layout {self.geometry_layout.name}"
-            )
+        layout_cmpd = self._handle_translation(layout_cmpd, tdt_setup)
 
         # Rebuild the regions and the layout compound in case the indicated
         # geometry type is not the technological one
-        if tdt_setup.geom_type != GeometryType.TECHNOLOGICAL:
-            # Get the compound of edges related to the indicated geometry
-            # type, if any
-            if not tdt_setup.geom_type in self.geometry_layout.geometry_maps:
-                raise RuntimeError(
-                    f"Missing '{tdt_setup.geom_type.name}' type of geometry "
-                    f"for the layout named '{self.geometry_layout.name}'. "
-                    "Call the method 'show()' first with the desired type "
-                    "of geometry to enable the construction of the "
-                    "corresponding edges."
-                )
-            edges = self.geometry_layout.geometry_maps[tdt_setup.geom_type]
-            logging.info(
-                f"Got the edges of the {tdt_setup.geom_type} mapping of the "
-                f"layout {self.geometry_layout.name}."
-            )
-            # Update the compound and the regions
-            layout_cmpd = make_partition(
-                [layout_cmpd], [edges], ShapeType.FACE
-            )
-            logging.info(
-                "Updated the compound of the layout "
-                f"{self.geometry_layout.name} with the edges of the "
-                f"{tdt_setup.geom_type} mapping."
-            )
-            self._build_compound_regions(layout_cmpd, deepcopy(tech_regions))
-            logging.info(
-                f"Re-extracted no. {len(self.regions)} regions from the "
-                f"compound of the layout {self.geometry_layout.name} that "
-                f"matches the {tdt_setup.geom_type} mapping."
-            )
+        layout_cmpd = self._handle_refinement(layout_cmpd, tdt_setup)
 
         # Extract the layout edges from the layout compound to analyse
         self.layout_edges = extract_sub_shapes(layout_cmpd, ShapeType.EDGE)
@@ -1325,7 +1546,7 @@ def analyse_layout(
     data_extractor.build_faces(tdt_setup.property_type)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()
     data_extractor.build_edges(edge_name_vs_faces)
-    data_extractor.build_boundaries()
+    data_extractor.build_boundaries(tdt_setup.type_geo)
     data_extractor.print_log_analysis(edge_name_vs_faces)
 
     # Return the instance

@@ -2,7 +2,8 @@
 Module containing classes providing the means for creating lattices from base
 cells types in SALOME.
 """
-from copy import deepcopy
+import math
+
 from typing import List, Tuple
 
 from glow.geometry_layouts.cells import Cell
@@ -11,9 +12,8 @@ from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
     Rectangle, Surface
 from glow.geometry_layouts.layouts import Region
 from glow.interface.geom_entities import Edge, wrap_shape
-from glow.interface.geom_interface import ShapeType, get_closed_free_boundary, \
-    get_point_coordinates, make_compound, make_face, make_partition, \
-    make_vertex
+from glow.interface.geom_interface import ShapeType, get_bounding_box, \
+    get_point_coordinates, make_compound, make_face, make_vertex
 from glow.support.utility import are_same_shapes, build_compound_borders, \
     build_subdvision_vertices_on_edge, build_z_axis_from_vertex
 
@@ -384,12 +384,10 @@ class CartesianLattice(Lattice):
                 wrap_shape(build_z_axis_from_vertex(self.o))
             )
         )
-        # Update the characteristic dimensions of the lattice, its shape and
-        # its state
-        self.dimensions = (
-            self.dimensions[0] + (ring_index + 1) * cell_width,
-            self.dimensions[1] + (ring_index + 1) * cell_heigth
-        )
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
         self.state.is_update_needed = True
 
     def add_rings_of_cells(
@@ -458,14 +456,11 @@ class CartesianLattice(Lattice):
         for i_ring in range(ring_index, ring_index+no_rings):
             # Add a ring of cells at the current index
             self.add_ring_of_cells(cell, i_ring, layer_index)
-        # Update the characteristic dimensions of the lattice, its shape and
-        # its state
-        self.dimensions = (
-            self.dimensions[0]
-                + no_rings*(ring_index + 1) * cell.dimensions[0],
-            self.dimensions[1]
-                + no_rings*(ring_index + 1) * cell.dimensions[1]
-        )
+
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
         self.state.is_update_needed = True
 
     def _build_ring_construction_figure(
@@ -528,6 +523,23 @@ class CartesianLattice(Lattice):
                 continue
         else:
             return 2*ring_indx - 1
+
+    def _update_shape(self) -> None:
+        """
+        Method that updates the ``Rectangle`` object representing the shape
+        that encloses the lattice.
+        """
+        # Get the min/max dimensions of the current compound made from the
+        # lattice regions
+        xmin, xmax, ymin, ymax = get_bounding_box(
+            make_compound(self.get_regions())
+        )
+        # Re-instantiate the shape with the new dimensions, rotating the
+        # shape, if needed
+        self.shape = Rectangle(
+            get_point_coordinates(self.o), (ymax - ymin), (xmax - xmin)
+        )
+        self.shape.rotate(self.rot_angle)
 
 
 class HexLattice(Lattice):
@@ -681,11 +693,10 @@ class HexLattice(Lattice):
                 wrap_shape(build_z_axis_from_vertex(self.o))
             )
         )
-        # Update the characteristic dimensions of the lattice and its state
-        self.dimensions = (
-            self.dimensions[0] + (ring_index + 1) * cell_side,
-            self.dimensions[1] + (ring_index + 1) * cell_apothem
-        )
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
         self.state.is_update_needed = True
 
     def add_rings_of_cells(
@@ -753,7 +764,11 @@ class HexLattice(Lattice):
         for i_ring in range(n0, n0+no_rings):
             # Add a ring of cells at the current index
             self.add_ring_of_cells(cell, i_ring, layer_index)
-        # Set the need to update the lattice geometry
+
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
         self.state.is_update_needed = True
 
     def _build_ring_construction_figure(
@@ -787,6 +802,24 @@ class HexLattice(Lattice):
         # Rotate the construction figure, if needed
         construction_fig.rotate(self.rot_angle)
         return construction_fig
+
+    def _update_shape(self) -> None:
+        """
+        Method that updates the ``Hexagon`` object representing the shape
+        that encloses the lattice.
+        """
+        # Get the min/max dimensions of the current compound made from the
+        # lattice regions
+        xmin, xmax, ymin, ymax = get_bounding_box(
+            make_compound(self.get_regions())
+        )
+        # Calculate the dimensions of the hexagon
+        apothem = min((xmax - xmin), (ymax - ymin)) / 2
+        side = apothem / math.sin(math.pi/3)
+        # Re-instantiate the shape with the new dimensions, rotating the
+        # shape, if needed
+        self.shape = Hexagon(get_point_coordinates(self.o), side)
+        self.shape.rotate(self.rot_angle)
 
 
 # -------------------------------------------------------------------------- #

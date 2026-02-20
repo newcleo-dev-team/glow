@@ -214,7 +214,7 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
             )
     # Build edges between vertices
     edges = []
-    if len(vertices) > 3:
+    if len(vertices) >= 3:
         edges = build_contiguous_edges(vertices)
     # Substitute those edges whose vertices coincides with those belonging to
     # the found arcs of circle
