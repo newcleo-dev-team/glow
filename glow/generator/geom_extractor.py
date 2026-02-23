@@ -9,21 +9,22 @@ import math
 from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
+from glow.generator.export_data import BoundaryData, EdgeData, FaceData, \
+    build_edge_id, classify_layout_edges
 from glow.geometry_layouts.cells import Region
 from glow.geometry_layouts.fillable_layouts import Fillable
 from glow.interface.geom_entities import Compound, wrap_shape
-from glow.support.types import GeometryType, LayoutGeometryType, LayoutType, \
-    PropertyType, SymmetryType
-from glow.support.utility import are_same_shapes, build_compound_borders, \
-    translate_wrt_reference
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sub_shapes, get_bounding_box, get_in_place, \
     get_in_place_by_hystory, get_point_coordinates, get_shape_name, \
     get_shape_type, is_point_inside_shape, make_compound, make_face, \
     make_partition, make_partition_non_self_intersecting, make_vertex, \
     make_vertex_inside_face, update_salome_study
-from glow.generator.export_data import *
 from glow.main import TdtSetup
+from glow.support.types import GeometryType, LayoutGeometryType, LayoutType, \
+    PropertyType, SymmetryType
+from glow.support.utility import are_same_shapes, build_compound_borders, \
+    translate_wrt_reference
 
 
 class LayoutDataExtractor():
@@ -628,9 +629,8 @@ class LayoutDataExtractor():
             if edges_in_place:
                 return [
                     self.id_vs_edge[build_edge_id(e)] for e in edges_in_place]
-            else:
-                # Raise an exception if the compound does not have edges
-                raise RuntimeError(error_message) from exc
+            # Raise an exception if the compound does not have edges
+            raise RuntimeError(error_message) from exc
 
     def _handle_refinement(
             self, layout_cmpd: Any, tdt_setup: TdtSetup

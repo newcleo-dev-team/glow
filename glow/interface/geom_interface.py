@@ -804,6 +804,33 @@ def make_line(point1: Any, point2: Any) -> Any:
     return geompy.MakeLineTwoPnt(point1, point2)
 
 
+def make_multi_translation_1d(
+        shape: Any, direction: Any, step: float, no_transl: float
+    ) -> Any:
+    """
+    Function that performs a specified number of 1D translations of the given
+    shape along the given direction by the indicated distance.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape to be translated.
+    direction : Any
+        The vector along which the shape is translated.
+    step : float
+        The translation step, i.e. the distance between two shape copies.
+    no_transl : float
+        The number of times the original shape is translated.
+
+    Returns
+    -------
+    Any
+        A GEOM compound object collecting the original and all the translated
+        shapes.
+    """
+    return geompy.MakeMultiTranslation1D(shape, direction, step, no_transl)
+
+
 def make_partition(
         shapes: List[Any], tools: List[Any], shape_type: ShapeType) -> Any:
     """
