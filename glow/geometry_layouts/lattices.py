@@ -174,15 +174,8 @@ class Lattice(Fillable):
         # Call the 'add()' method of the 'Fillable' superclass
         super().add(layout, position, layer_index)
         # Update the lattice characteristic shape and dimensions
-        self.shape = GenericSurface(
-            make_face(
-                build_compound_borders(make_compound(self.get_regions()))
-            )
-        )
-        self.dimensions = tuple(
-            c_1 + c_2
-            for c_1, c_2 in zip(self.dimensions, self.shape.dimensions)
-        )
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
 
     def _compute_layer_index(self, layer_index: int | None) -> int:
         """
@@ -235,6 +228,19 @@ class Lattice(Fillable):
         if self.shape is not None:
             self.shape.translate(new_cntr)
 
+    def _update_shape(self) -> None:
+        """
+        Method that updates the ``Surface`` object representing the shape
+        that encloses the lattice.
+        """
+        # Re-instantiate the shape from the face builds from the borders of
+        # the compound of the layout's regions, rotating the shape, if needed
+        self.shape = GenericSurface(
+            make_face(
+                build_compound_borders(make_compound(self.get_regions()))
+            )
+        )
+        self.shape.rotate(self.rot_angle)
 
 class CartesianLattice(Lattice):
     """

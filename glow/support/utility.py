@@ -180,11 +180,10 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
     # Handle the case where more than a closed wire is extracted from
     # the compound
     if len(closed_boundaries) > 1:
-        # Build a face for each of the extracted closed wires after
-        # fusing adjacent edges
+        # Build a face for each of the closed wires
         shapes =  []
-        for wire in closed_boundaries:
-            face = make_face(fuse_edges_in_wire(wire))
+        for wire in get_closed_free_boundary(cmpd):
+            face = make_face(wire)
             if get_shape_type(face) == ShapeType.COMPOUND:
                 shapes.extend(extract_sub_shapes(face, ShapeType.FACE))
             else:

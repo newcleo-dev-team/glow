@@ -442,10 +442,12 @@ class Fillable(Compound, Layout):
         boundaries = get_closed_free_boundary(self.geom_obj)
         if len(boundaries) > 1:
             boundaries = get_closed_free_boundary(
-                make_partition(self.geom_obj, [], ShapeType.FACE)
+                make_partition([self.geom_obj], [], ShapeType.FACE)
             )
         region = Region(make_face(boundaries))
         self.update(region)
+        # Update the list of regions
+        self.regions = [region]
         # Update the layers with only one containing the region based on the
         # restored layout
         self.layers = [[region]]
@@ -1100,14 +1102,19 @@ class Fillable(Compound, Layout):
             The inferior layer whose layout objects are cut by the superior
             layer.
         """
-        # Build the shape of the layer compound
+        # Build the boundaries of the layer compound
         layer_cmpd = make_compound(layer)
         boundaries = get_closed_free_boundary(layer_cmpd)
         if len(boundaries) > 1:
             boundaries = get_closed_free_boundary(
                 make_partition(layer, [], ShapeType.FACE)
             )
-        layer_shape = make_face(boundaries)
+        # Try to build a planar face from the extracted boundaries; if the
+        # operation raises an exception, fall back to the given compound
+        try:
+            layer_shape = make_face(boundaries)
+        except:
+            layer_shape = layer_cmpd
         # Apply the cut on the layout objects of the sub-layer
         self._apply_cut_to_layouts_in_layer(sub_layer, layer_shape)
 
