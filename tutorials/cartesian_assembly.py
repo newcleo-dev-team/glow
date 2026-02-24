@@ -124,7 +124,7 @@ mesh = make_compound([mesh_x, mesh_y])
 assembly.geometry_maps[GeometryType.SECTORIZED] = \
     assembly.get_geometry_map(GeometryType.SECTORIZED) // wrap_shape(mesh)
 
-# Show the resulting refined layout with the 'MATERIAL' color map
+# Show the resulting refined layout with the 'MATERIAL' colour map
 assembly.show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
 
 # Export the surface representation of the layout according to the TDT format

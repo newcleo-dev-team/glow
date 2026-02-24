@@ -16,7 +16,7 @@ from glow.geometry_layouts.geometries import Circle
 from glow.interface.geom_interface import *
 
 
-# Intialise three lists one storing the circular regions radii, the other the
+# Intialise three lists, one storing the circular regions radii, the other the
 # names of the materials, sorted from the inner to the outer region
 radii = [0.2, 0.3, 0.4]
 materials = ["MAT_1", "MAT_2", "MAT_3"]
