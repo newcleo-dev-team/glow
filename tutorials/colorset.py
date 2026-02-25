@@ -36,14 +36,42 @@ import math
 import time
 
 from glow import *
+from glow.geometry_layouts.layouts import associate_colors_to_regions, build_compound_regions
 from glow.support.types import *
 
 # Get start time
 t0 = time.time()
 
 # -------------------------------------------------------------------------- #
-# FUNCTIONS DECLARATION                                                      #
+#                                 FUNCTIONS                                  #
 # -------------------------------------------------------------------------- #
+def add_circular_regions(
+        cell: Cell, radii: List[float], materials: List[float]
+    ) -> None:
+    """
+    Function that adds circular ``Region`` objects to the given ``Cell``
+    instance. Regions are characterised in terms of the radius and the
+    material property.
+
+    Parameters
+    ----------
+    cell : Cell
+        The ``Cell`` instance the circular regions are added to.
+    radii : List[float]
+        The list of radii of the circular regions in ascending order.
+    materials : List[str]
+        The list of material names of the circular regions ordered from the
+        inner to the outer region.
+    """
+    for radius, mat in zip(radii[::-1], materials[::-1]):
+        cell.add(
+        Region(
+            Circle(radius=radius),
+            properties={PropertyType.MATERIAL: mat}
+        )
+    )
+
+
 def create_vertices_list(circle_radius: float, n_vertices: int) -> List[Any]:
     """
     Function that creates a list of vertex objects laying on the same
@@ -75,10 +103,10 @@ def create_vertices_list(circle_radius: float, n_vertices: int) -> List[Any]:
 
 
 def make_circular_cells_list(
-        vertices: List[Any], radii: List[float]) -> List[GenericCell]:
+        vertices: List[Any], radii: List[float]) -> List[Cell]:
     """
-    Function that creates a list of circular cells, as ``GenericCell``
-    instances. The cells centres are given by the input list of vertices.
+    Function that creates a list of circular cells, as ``Cell`` instances.
+    The cells centres are given by the input list of vertices.
 
     Parameters
     ----------
@@ -89,7 +117,7 @@ def make_circular_cells_list(
 
     Returns
     -------
-    List[GenericCell]
+    List[Cell]
         The list of circular cells.
     """
     cells = []
@@ -111,20 +139,20 @@ def make_circular_cells_list(
             radius=radii[2],
             name=f"Outer CR Circle vertex {get_point_coordinates(vertex)}"
         )
-        cr_pin_compound = make_partition(
-            [cr_circle_out.face, cr_circle_mid.face, cr_circle_inn.face],
-            [],
-            ShapeType.FACE
+        # Build the generic cell by adding all the circular regions
+        cr_pin_cell = Cell(
+            cr_circle_out, {PropertyType.MATERIAL: "CR_CLADDING2"}
         )
-        # Set the cell's name and instantiate the corresponding 'GenericCell'
-        set_shape_name(cr_pin_compound, f"CR_pin_compound {i}")
-        cr_pin_cell = GenericCell(cr_pin_compound)
-        cr_pin_cell.set_properties(
-            {PropertyType.MATERIAL: ["ABSORBER", "GAP", "CR_CLADDING2"]}
+        cr_pin_cell.add(
+            Region(
+                cr_circle_mid, {PropertyType.MATERIAL: "GAP"}
+            )
         )
-        # Dummy assignement of the cell's type so that it can be added to a
-        # hexagonal lattice
-        cr_pin_cell.cell_type = CellType.HEX
+        cr_pin_cell.add(
+            Region(
+                cr_circle_inn, {PropertyType.MATERIAL: "ABSORBER"}
+            )
+        )
         # Add the cell to the returned list
         cells.append(cr_pin_cell)
     return cells
@@ -134,43 +162,51 @@ def make_circular_cells_list(
 # FUEL ASSEMBLY CONSTRUCTION                                                 #
 # -------------------------------------------------------------------------- #
 # Build the hexagonal cells of the fuel assembly
-fuel_cell = HexCell(name="Cartesian cell")
+fuel_cell = HexCell(
+    name="Fuel cell", base_props={PropertyType.MATERIAL: "COOLANT"}
+)
 fuel_cell.rotate(90)
-radii = [0.2, 0.6, 0.62, 0.68]
-for radius in radii:
-    fuel_cell.add_circle(radius)
-# Assign the materials to each zone in the cell
-fuel_cell.set_properties(
-      {PropertyType.MATERIAL: ["GAP", "FUEL", "GAP", "CLADDING", "COOLANT"]}
+# Add the circular regions with their materials
+add_circular_regions(
+    fuel_cell, [0.2, 0.6, 0.62, 0.68], ["GAP", "FUEL", "GAP", "CLADDING"]
 )
-central_cell = HexCell(name="Central cell")
+
+central_cell = HexCell(
+    name="Central cell", base_props={PropertyType.MATERIAL: "COOLANT"}
+)
 central_cell.rotate(90)
-for radius in [0.6, 0.65]:
-    central_cell.add_circle(radius)
-# Assign the materials to each zone in the cell
-central_cell.set_properties(
-      {PropertyType.MATERIAL: ["GAP", "CLADDING", "COOLANT"]}
-)
+add_circular_regions(central_cell, [0.6, 0.65], ["GAP", "CLADDING"])
+
 # Update the viewer showing the two cells with the MATERIAL color map
 fuel_cell.show(PropertyType.MATERIAL)
 central_cell.show(PropertyType.MATERIAL)
 
 # Build the fuel assembly lattice of the colorset
-fuel_assembly = Lattice([central_cell], "Fuel Assembly")
-fuel_assembly.add_rings_of_cells(fuel_cell, 5)
-# Build the fuel assembly box
-fuel_assembly.build_lattice_box([-0.1, 0.3, 0.3])
-fuel_assembly.set_lattice_box_properties(
-    {PropertyType.MATERIAL: ["COOLANT", "CLADDING", "COOLANT"]}
+fuel_lattice = HexLattice([central_cell], name="Fuel Assembly Lattice")
+fuel_lattice.add_rings_of_cells(fuel_cell, 5)
+# Build the cell framing the fuel lattice into a fuel assembly and add regions
+# for layers and the lattice
+layers_t = [-0.1, 0.3, 0.3]
+fuel_assembly = HexCell(
+    side=fuel_lattice.dimensions[0] + sum(layers_t),
+    base_props={PropertyType.MATERIAL: "COOLANT"}
 )
-# Display the fuel assembly with the MATERIAL color map
+cladding_layer = Region(
+    Hexagon(edge_length=fuel_lattice.dimensions[0] + layers_t[1])
+    - Hexagon(edge_length=fuel_lattice.dimensions[0] + layers_t[0]),
+    properties={PropertyType.MATERIAL: "CLADDING"}
+)
+fuel_assembly.add(fuel_lattice)
+fuel_assembly.add(cladding_layer)
+
+# Display the fuel assembly with the MATERIAL colour map
 fuel_assembly.show(PropertyType.MATERIAL)
 
 # -------------------------------------------------------------------------- #
 # CONTROL ROD ASSEMBLY CONSTRUCTION                                          #
 # -------------------------------------------------------------------------- #
 # Data
-pitch = fuel_assembly.lattice_box.figure.ly * 2
+pitch = fuel_assembly.dimensions[1] * 2
 edge_bypass = (pitch) / math.sqrt(3)
 edge_ext_wrap_o = (pitch - 0.4) / math.sqrt(3)
 edge_ext_wrap_i = (pitch - 0.6) / math.sqrt(3)
@@ -181,62 +217,64 @@ cr_wrapper_radii = [7, 7.25]
 int_shaft_ir = 1.4
 int_shaft_or = 1.7
 
-# Build the central cell of the control rod assembly
-cr_cell = HexCell(edge_length=edge_ext_wrap_i, name= "Control Rod cell")
-# Add the circles representing the different zones
-for r in cr_wrapper_radii:
-    cr_cell.add_circle(r)
-cr_cell.set_properties(
-    {PropertyType.MATERIAL: ["COOLANT", "CR_CLADDING", "CR_MIX"]}
+# Build the control rod assembly as a hexagonal cell
+cr_assembly = HexCell(
+    side=edge_bypass,
+    name= "Control Rod Assembly",
+    base_props={PropertyType.MATERIAL: "COOLANT"}
+)
+# Add the box layers
+cr_assembly.add(
+    Region(
+        Hexagon(edge_length=edge_ext_wrap_o),
+        properties={PropertyType.MATERIAL: "CR_CLADDING"}
+    )
+)
+cr_assembly.add(
+    Region(
+        Hexagon(edge_length=edge_ext_wrap_i),
+        properties={PropertyType.MATERIAL: "CR_MIX"}
+    )
 )
 
-# Build the control rod box cell
-box_cell = HexCell(edge_length=edge_bypass, name='Box cell')
-wrapper_i = Hexagon(
-    edge_length=edge_ext_wrap_i, name="External Wrapper Inner")
-wrapper_o = Hexagon(
-    edge_length=edge_ext_wrap_o, name="External Wrapper Outer")
-box_face = make_partition(
-    [box_cell.face], [wrapper_i.face, wrapper_o.face], ShapeType.FACE)
-box_cell.update_geometry_from_face(GeometryType.TECHNOLOGICAL, box_face)
-box_cell.set_properties(
-    {PropertyType.MATERIAL: ["CR_MIX", "CR_CLADDING", "COOLANT"]})
-box_cell.show(PropertyType.MATERIAL)
-
-# Build the vertices at which the control rod cells are placed
+# Add the circles representing the different zones
+add_circular_regions(
+    cr_assembly, cr_wrapper_radii, ["COOLANT", "CR_CLADDING"]
+)
+# Build the vertices at which the control rod regions are placed
 cr_vertices_i = create_vertices_list(r_cr_circles_i, 6)
 cr_vertices_o = create_vertices_list(r_cr_circles_o, 12)
-# Build the circular control rod cells placed along two circumferences
-cr_cells_i = make_circular_cells_list(cr_vertices_i, cr_pin_radii)
-cr_cells_o = make_circular_cells_list(cr_vertices_o, cr_pin_radii)
-
-# Build the central shaft cell as made by three concentric circles
-circle_shaft_i = Circle(
-    radius=int_shaft_ir, name="Inner Shaft Circle"
+# Build the circular control rod regions placed along two circumferences by
+# specifying the same layer index (the last one) to reduce tree complexity
+for v in cr_vertices_i + cr_vertices_o:
+    cr_assembly.add(
+        Region(
+            Circle(radius=cr_pin_radii[2]),
+            properties={PropertyType.MATERIAL: "CR_CLADDING2"}
+        ),
+        get_point_coordinates(v),
+        len(cr_assembly.layers)
+    )
+    cr_assembly.add(
+        Region(
+            Circle(radius=cr_pin_radii[1]),
+            properties={PropertyType.MATERIAL: "GAP"}
+        ),
+        get_point_coordinates(v),
+        len(cr_assembly.layers)
+    )
+    cr_assembly.add(
+        Region(
+            Circle(radius=cr_pin_radii[0]),
+            properties={PropertyType.MATERIAL: "ABSORBER"}
+        ),
+        get_point_coordinates(v),
+        len(cr_assembly.layers)
+    )
+# Build the central shaft as made by two overlapping circular regions
+add_circular_regions(
+    cr_assembly, [int_shaft_ir, int_shaft_or], ["COOLANT", "CR_CLADDING"]
 )
-circle_shaft_o = Circle(
-    radius=int_shaft_or, name="Outer Shaft Circle"
-)
-shaft_compound = make_partition(
-    [circle_shaft_o.face, circle_shaft_i.face], [], ShapeType.FACE)
-set_shape_name(shaft_compound, "Shaft Cell")
-shaft_cell = GenericCell(shaft_compound)
-shaft_cell.set_properties(
-    {PropertyType.MATERIAL: ["COOLANT", "CR_CLADDING"]}
-)
-# Dummy assignement of the cell's type so that it can be added to a hexagonal
-# lattice
-shaft_cell.cell_type = CellType.HEX
-
-# Build the control rod assembly
-cr_assembly = Lattice([cr_cell], "Control Rod Assembly")
-# Add the two rings of rod pin cells to the control rod assembly
-for cell in cr_cells_i + cr_cells_o:
-    cr_assembly.add_cell(cell, ())
-# Add the shaft cell to the control rod assembly
-cr_assembly.add_cell(shaft_cell, ())
-# Assign the built box cell to the control rod assembly
-cr_assembly.lattice_box = box_cell
 
 # Display the control rod assembly
 cr_assembly.show(PropertyType.MATERIAL)
@@ -245,13 +283,14 @@ cr_assembly.show(PropertyType.MATERIAL)
 # COLORSET CONSTRUCTION                                                      #
 # -------------------------------------------------------------------------- #
 # Translate the fuel assembly to the right of the control rod assembly
-fuel_assembly.translate((3/2*cr_assembly.lx, cr_assembly.ly, 0))
+fuel_assembly.translate(
+    (3/2*cr_assembly.dimensions[0], cr_assembly.dimensions[1], 0)
+)
 
-# Build the colorset as a list of the two assemblies
-colorset = [cr_assembly, fuel_assembly]
-# Build the colorset compound and display it in the SALOME 3D viewer
-colorset_cmpd = make_compound([lattice.lattice_cmpd for lattice in colorset])
-add_to_study(colorset_cmpd, "Colorset")
+# Build the colorset as a 'Lattice' with the two assembly cells
+colorset = Lattice([cr_assembly, fuel_assembly], (0.0, 0.0, 0.0), "Colorset")
+# Display the colorset
+colorset.show(PropertyType.MATERIAL)
 
 # -------------------------------------------------------------------------- #
 # COLORSET S30 SYMMETRY CONSTRUCTION                                         #
@@ -260,12 +299,16 @@ add_to_study(colorset_cmpd, "Colorset")
 edges = build_contiguous_edges(
     [
         make_vertex((0.0, 0.0, 0.0)),
-        make_vertex((3/2*fuel_assembly.lx, fuel_assembly.ly, 0.0)),
-        make_vertex((2*fuel_assembly.lx, 0.0, 0.0))
+        make_vertex((
+            3/2*fuel_assembly.dimensions[0],
+            fuel_assembly.dimensions[1],
+            0.0
+        )),
+        make_vertex((2*fuel_assembly.dimensions[0], 0.0, 0.0))
     ]
 )
 cutting_face = make_face(edges)
-colorset_portion = make_common(colorset_cmpd, cutting_face)
+colorset_portion = make_common(colorset, cutting_face)
 add_to_study(colorset_portion, "Colorset - S30 Symmetry")
 
 t1 = time.time()
@@ -274,73 +317,34 @@ print(f"--- Geometry generated in {t1 - t0} s. ---")
 # -------------------------------------------------------------------------- #
 # COLORSET REGIONS VISUALIZATION                                             #
 # -------------------------------------------------------------------------- #
-# Display all the regions of the two assemblies by using the same colormap
-colorset_regions: List[Region] = []
-material_names: List[str] = []
-for lattice in colorset:
-    for region in lattice.regions:
-        if get_min_distance(colorset_portion, region.face) > 1e-6:
-             continue
-        new_region = make_common(region.face, colorset_portion)
-        # Continue with the next region if the common shape does not hold
-        # any face, meaning that the region and the portion do not overlap
-        if not extract_sub_shapes(make_compound([new_region]),
-                                  ShapeType.FACE):
-           continue
-        # Store the material name, if not present
-        mat_name = region.properties.get(PropertyType.MATERIAL)
-        if mat_name is None:
-            raise RuntimeError(f"No material for region {region}.")
-        if mat_name not in material_names:
-            material_names.append(mat_name)
-        # If the result is a compound or a shell, extract the contained faces
-        if get_shape_type(new_region) in [ShapeType.COMPOUND,
-                                          ShapeType.SHELL]:
-            for new_region in extract_sub_shapes(new_region, ShapeType.FACE):
-                colorset_regions.append(
-                    Region(
-                        new_region,
-                        name=region.name,
-                        properties=deepcopy(region.properties)
-                    )
-                )
-            continue
-        colorset_regions.append(
-            Region(
-                new_region,
-                name=region.name,
-                properties=deepcopy(region.properties)
-            )
-        )
-
-# Generate a specific amount of colors as the number of different
-# values for the same given property type
-colors = generate_unique_random_colors(len(material_names))
-# Join the material names with the colors
-materials_vs_color = dict(zip(material_names, colors))
-
+# For each face in the colorset compound, recover the corresponding 'Region'
+# in the colorset 'Lattice' and build the corresponding region to display
+colorset_regions = build_compound_regions(colorset_portion, colorset.regions)
+# Associate a unique color to each region according to the material name
+associate_colors_to_regions(PropertyType.MATERIAL, colorset_regions)
 # Display the regions of the colorset portion with the material color map
 for region in colorset_regions:
-    # Get the color according to the material name of the region
-    region.color = materials_vs_color[
-        region.properties[PropertyType.MATERIAL]
-    ]
-    set_color_face(region.face, region.color)
-    add_to_study_in_father(colorset_portion, region.face, region.name)
+    set_color_face(region, region.color)
+    add_to_study_in_father(colorset_portion, region, region.name)
 
 update_salome_study()
 
 t2 = time.time()
 print(f"--- Geometry displayed in {t2 - t1} s. ---")
 
+# -------------------------------------------------------------------------- #
+# COLORSET S30 PORTION TDT EXPORT                                            #
+# -------------------------------------------------------------------------- #
 # Generate the TDT file from the colorset portion using a specific typgeo and
 # symmetry type
-analyse_and_generate_tdt(
+export_layout_to_tdt(
     colorset,
     "colorset_s30",
-    tdt_config=TdtSetup(
-        type_geo=LatticeGeometryType.SYMMETRIES_TWO,
-        symmetry_type=SymmetryType.TWELFTH),
-    compound_to_export=colorset_portion)
+    tdt_setup=TdtSetup(
+        type_geo=LayoutGeometryType.SYMMETRIES_TWO,
+        symmetry_type=SymmetryType.TWELFTH
+    ),
+    compound_to_export=colorset_portion
+)
 
 print(f"--- Script executed in {time.time() - t0} s. ---")

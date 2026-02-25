@@ -13,6 +13,7 @@ from glow.generator.export_data import BoundaryData, EdgeData, FaceData, \
     build_edge_id, classify_layout_edges
 from glow.geometry_layouts.cells import Region
 from glow.geometry_layouts.fillable_layouts import Fillable
+from glow.geometry_layouts.layouts import build_compound_regions
 from glow.interface.geom_entities import Compound, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sub_shapes, get_bounding_box, get_in_place, \
@@ -395,28 +396,16 @@ class LayoutDataExtractor():
         )
         # Build the 'Region' objects corresponding to the faces of the given
         # compound
-        for i, f in enumerate(extract_sub_shapes(compound, ShapeType.FACE)):
-            # Build a reference vertex to match a region
-            ref_vertex = make_vertex_inside_face(f)
-            # Get the 'Region' object that corresponds to the GEOM face by
-            # looping through the regions of the geometry layout
-            for region in layout_regions:
-                if is_point_inside_shape(ref_vertex, region):
-                    # Build and store a new 'Region' having the shape of the
-                    # face and the properties of the found region
-                    self.regions.append(
-                        Region(f, f"Region {i}", deepcopy(region.properties))
-                    )
-                    break
-            else:
-                raise RuntimeError(
-                    f"No region could be found along the hierarchical "
-                    "structure of the layout named "
-                    f"'{self.geometry_layout.name}' that matches the face "
-                    f"object {i} extracted from the given compound object. "
-                    "Please ensure the compound is a portion of the "
-                    "indicated layout."
-                )
+        try:
+            self.regions = build_compound_regions(compound, layout_regions)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"No region could be found along the hierarchical structure "
+                f"of the layout named '{self.geometry_layout.name}' that "
+                "matches a face object extracted from the given compound "
+                "object. Please ensure the compound is a portion of the "
+                "indicated layout."
+            ) from e
 
     def _build_refined_regions(self, refined_cmpd: Any) -> None:
         """
@@ -679,7 +668,7 @@ class LayoutDataExtractor():
         # possibly with the refinement edges, if any
         layout_cmpd = make_partition([layout_cmpd], [edges], ShapeType.FACE)
         logging.info(
-            f"Updated the compound of the layout {self.geometry_layout.name}"
+            f"Updated the compound of the layout {self.geometry_layout.name} "
             f"with the edges of the {tdt_setup.geom_type} mapping."
         )
         # Update the regions, if a refined geometry type is adopted

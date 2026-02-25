@@ -113,13 +113,14 @@ class Lattice(Fillable):
             self.shape = GenericSurface(
                 make_face(build_compound_borders(make_compound(self.regions)))
             )
-            # Update the GEOM compound this instance refers to
-            self.update(self.shape)
+            # Update the characteristic dimensions of the layout
             self.dimensions = self.shape.dimensions
         # Set the vertex of the layout centre, if any is provided, otherwise
         # the XYZ origin is used
         if centre is not None:
             self.o = make_vertex(centre if centre else (0.0, 0.0, 0.0))
+        # Update the state of the lattice
+        self.state.is_update_needed = True
 
     def add(self,
             layout: Region | Fillable,
@@ -400,7 +401,7 @@ class CartesianLattice(Lattice):
             self,
             cell: Cell,
             no_rings: int,
-            ring_index: int,
+            ring_index: int = 1,
             layer_index: int | None = None
         ) -> None:
         """
@@ -418,8 +419,8 @@ class CartesianLattice(Lattice):
             the rings of cells.
         no_rings : int
             The number of rings to add starting from the indicated ring index.
-        ring_index : int
-            The index indicating the starting ring index.
+        ring_index : int = 1
+            The index indicating the starting ring index. Default value is 1.
         layer_index : int | None = None
             The index of the layer to which the cells are added. If ``None``,
             a new layer is created.
@@ -709,7 +710,7 @@ class HexLattice(Lattice):
             self,
             cell: Cell,
             no_rings: int,
-            ring_index: int,
+            ring_index: int = 1,
             layer_index: int | None = None
         ) -> None:
         """
@@ -727,8 +728,8 @@ class HexLattice(Lattice):
             the rings of cells.
         no_rings : int
             The number of rings to add starting from the indicated ring index.
-        ring_index : int
-            The index indicating the starting ring index.
+        ring_index : int = 1
+            The index indicating the starting ring index. Default value is 1.
         layer_index : int | None = None
             The index of the layer to which the cells are added. If ``None``,
             a new layer is created.

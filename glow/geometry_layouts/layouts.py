@@ -11,9 +11,9 @@ from typing import Any, Dict, List, Self, Sequence, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
-from glow.interface.geom_interface import add_to_study, clear_view, \
-    display_shape, get_basic_properties, get_bounding_box, get_object_from_id, \
-    get_point_coordinates, make_cdg, make_common, make_rotation, make_scale, \
+from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
+    display_shape, extract_sub_shapes, get_basic_properties, get_bounding_box, get_object_from_id, \
+    get_point_coordinates, is_point_inside_shape, make_cdg, make_common, make_rotation, make_scale, \
     make_translation, make_vector_from_points, make_vertex, \
     make_vertex_inside_face, remove_from_study, update_salome_study
 from glow.support.types import GeometryType, LayoutGeometryType, \
@@ -493,10 +493,14 @@ class LayoutState():
     """
 
 
+# -------------------------------------------------------------------------- #
+#                                FUNCTIONS                                   #
+# -------------------------------------------------------------------------- #
+
 def associate_colors_to_regions(
         property_type: PropertyType | None, regions: List[Region]) -> None:
     """
-    Method that assigns the same color to all the regions having the same
+    Function that assigns the same color to all the regions having the same
     value for the given property type.
 
     Parameters
@@ -539,10 +543,58 @@ def associate_colors_to_regions(
         region.set_region_color(property_vs_color[value])
 
 
+def build_compound_regions(
+        compound: Any, layout_regions: List[Region]
+    ) -> List[Region]:
+    """
+    Function that builds a ``Region`` object for each face of the given
+    compound. Properties are assigned by identifying the corresponding
+    ``Region`` object from the given list.
+
+    Parameters
+    ----------
+    compound : Any
+        The compound object for whose faces ``Region`` objects are built.
+    layout_regions : List[Region]
+        The list of ``Region`` objects to use as reference.
+
+    Returns
+    -------
+    List[Region]
+        A list of ``Region`` objects for each of the faces contained in the
+        input compound. The faces correspond to the given regions.
+
+    Raises
+    ------
+    RuntimeError
+        If any of the face objects of the compound does not have a
+        corresponding ``Region`` object among the given ones.
+    """
+    regions = []
+    # Build the 'Region' objects corresponding to the faces of the given
+    # compound
+    for i, f in enumerate(extract_sub_shapes(compound, ShapeType.FACE)):
+        # Build a reference vertex to match a region
+        ref_vertex = make_vertex_inside_face(f)
+        # Get the 'Region' object that corresponds to the GEOM face by
+        # looping through the regions of the geometry layout
+        for region in layout_regions:
+            if is_point_inside_shape(ref_vertex, region):
+                # Build and store a new 'Region' having the shape of the
+                # face and the properties of the found region
+                regions.append(
+                    Region(f, f"Region {i}", deepcopy(region.properties))
+                )
+                break
+        else:
+            raise RuntimeError(f"Missing region for subface {i}.")
+    return regions
+
+
 def get_unique_values_for_property(
         property_type: PropertyType, regions: List[Region]) -> List[str]:
     """
-    Method that gets the unique values of the given property type for the
+    Function that gets the unique values of the given property type for the
     given regions. If any ``Region`` object does not have any property
     or the given property type is missing, a reference point for the
     region is stored for logging purposes.
@@ -596,10 +648,6 @@ def get_unique_values_for_property(
         raise RuntimeError(message)
     return list(values)
 
-
-# -------------------------------------------------------------------------- #
-#                                FUNCTIONS                                   #
-# -------------------------------------------------------------------------- #
 
 def is_layout_contained(
         container: Compound | Face,
