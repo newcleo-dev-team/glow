@@ -121,6 +121,7 @@ class Surface(ABC):
         # Convert the rotation angle in radians
         self.rotation = math.radians(angle)
         # Rotate the geometric elements of the surface
+        self.o = make_rotation(self.o, axis, self.rotation)
         self.face = make_rotation(self.face, axis, self.rotation)
         for i, _ in enumerate(self.vertices):
             self.vertices[i] = make_rotation(

@@ -90,10 +90,6 @@ class Lattice():
         Flag indicating if the lattice geometry needs to be updated by
         rebuilding the ``Region`` objects.
     """
-    # Admitted values for the rotation angle (in degrees) of the cells in
-    # the lattice
-    VALID_CELLS_ANGLES: List[float] = [0.0, 90.0, 180.0, 270.0, 360.0]
-
     def __init__(self,
                  cells: List[Cell] = [],
                  name: str = "Lattice",
@@ -309,10 +305,11 @@ class Lattice():
         Raises
         ------
         RuntimeError
-            If given cells do not share the same rotation angle.
+            If given cells do not share the same rotation angle or it is not
+            among the admitted ones according to the cell's type.
         """
         # Get the rotation angle of the first cell in the list
-        cell_rot = math.degrees(cells[0].rotation)
+        cell_rot = round(math.degrees(cells[0].rotation), 6)
         # If any of the cells has a different angle, an exception is raised
         if not all(
             [math.isclose(math.degrees(cell.rotation), cell_rot)
@@ -326,7 +323,8 @@ class Lattice():
 
     def __check_cell_rotation_validity(self, cell_rot: float) -> None:
         """
-        Method that checks if the provided cell rotation angle is valid.
+        Method that checks if the provided cell rotation angle is valid
+        according to the cell's type.
 
         Parameters
         ----------
@@ -338,9 +336,16 @@ class Lattice():
         RuntimeError
             If the provided cell rotation angle is not among the valid ones.
         """
-        if not cell_rot in self.VALID_CELLS_ANGLES:
-            raise RuntimeError("Cells can only have any of the "
-                               f"{self.VALID_CELLS_ANGLES}° rotation angles")
+        # Admitted values for the rotation angle (in degrees) of the cells in
+        # the lattice depends on the type of the cells of the main pattern
+        if self.cells_type == CellType.RECT:
+            valid_cells_angle = [i for i in range(0, 450, 90)]
+        else:
+            valid_cells_angle = [i for i in range(0, 390, 30)]
+        if abs(cell_rot) not in valid_cells_angle:
+            raise RuntimeError(
+                f"Cells can only have any of the {valid_cells_angle}° "
+                f"rotation angles. Current value is {cell_rot}.")
 
     def __evaluate_lattice_center(
             self,
@@ -1200,8 +1205,10 @@ class Lattice():
 
         # Update the compound object storing the applied symmetry
         if self.symmetry_type != SymmetryType.FULL:
-            self.lattice_symm = make_common(self.lattice_cmpd,
-                                            self.lattice_symm)
+            # Extract the shape of the symmetry by extracting its
+            # borders and building a face object
+            shape = make_face(build_compound_borders(self.lattice_symm))
+            self.lattice_symm = make_common(self.lattice_cmpd, shape)
 
     def __assemble_box(self, geo_type: GeometryType) -> None:
         """
@@ -2084,33 +2091,102 @@ class Lattice():
     def rotate(self, angle: float = 0.0) -> None:
         """
         Method that rotates all the lattice's geometric elements by the given
-        angle in degrees. They are its compound objects representing its full
-        and partial (if any symmetry is applied) geometry layout, the
-        contained cells, including the box, if present, and all the regions.
+        angle in degrees around the Z-axis originating from the lattice's
+        centre.
+        The rotated elements are the lattice's compound objects representing
+        its full and partial (if any symmetry is applied) geometry layouts,
+        the contained cells, including the box, if present, and all the
+        ``Region`` objects.
 
         Parameters
         ----------
         angle : float
             The rotation angle in degrees.
+
+        Raises
+        ------
+        RuntimeError
+            If the lattice's cells have an invalid rotation angle after their
+            rotation.
         """
         # Return immediately if the rotation angle is 0.0
         if math.isclose(angle, 0.0):
             print("No rotation is performed as the given angle is 0.0°")
             return
-        # Convert the rotation angle in radians
-        rotation = math.radians(angle)
-
         # Build the Z-axis of rotation
         x, y, _ = get_point_coordinates(self.lattice_center)
         z_axis = make_vector_from_points(
             self.lattice_center, make_vertex((x, y, 1)))
+        # Apply the rotation of all the lattice's geometric elements around
+        # the given axis
+        self.__apply_rotation(angle, z_axis)
+
+    def rotate_from_axis(self, angle: float, axis: Any) -> None:
+        """
+        Method that rotates all the lattice's geometric elements by the given
+        angle in degrees around the given axis object.
+        The rotated elements are the lattice's compound objects representing
+        its full and partial (if any symmetry is applied) geometry layouts,
+        the contained cells, including the box, if present, and all the
+        ``Region`` objects.
+
+        Parameters
+        ----------
+        angle : float
+            The angle of rotation in degrees.
+        axis : Any
+            The vector object representing the rotation axis.
+
+        Raises
+        ------
+        RuntimeError
+            If the lattice's cells have an invalid rotation angle after their
+            rotation.
+        """
+        # Return immediately if the rotation angle is 0.0
+        if math.isclose(angle, 0.0):
+            print("No rotation is performed as the given angle is 0.0°")
+            return
+        # Apply the rotation of all the lattice's geometric elements around
+        # the given axis
+        self.__apply_rotation(angle, axis)
+
+    def __apply_rotation(self, angle: float, axis: Any) -> None:
+        """
+        Method that rotates all the lattice's geometric elements by the given
+        angle in degrees around the given axis object.
+        The rotated elements are the lattice's compound objects representing
+        its full and partial (if any symmetry is applied) geometry layouts,
+        the contained cells, including the box, if present, and all the
+        ``Region`` objects.
+
+        Parameters
+        ----------
+        angle : float
+            The angle of rotation in degrees.
+        axis : Any
+            The vector object representing the rotation axis.
+
+        Raises
+        ------
+        RuntimeError
+            If lattice's cells do not share the same rotation angle after
+            applying the rotation or the value is not among the admitted
+            ones according to the cell's type.
+        """
+        # Convert the rotation angle in radians
+        rotation = math.radians(angle)
+        # Rotate the lattice center
+        self.lattice_center = make_rotation(
+            self.lattice_center, axis, rotation
+        )
         # Rotate the lattice compound
-        self.lattice_cmpd = make_rotation(self.lattice_cmpd, z_axis, rotation)
+        self.lattice_cmpd = make_rotation(self.lattice_cmpd, axis, rotation)
         # Loop through all the layers to rotate the cells
         rotated_layers: List[List[Cell]] = []
         for layer in self.layers:
             rotated_layers.append(
-                self.__rotate_cells(layer, angle, z_axis))
+                self.__rotate_cells(layer, angle, axis))
         # Update the data structure holding the rotated cells for each layer
         self.layers = [
             [cell for cell in layer] for layer in rotated_layers]
@@ -2118,15 +2194,12 @@ class Lattice():
         self.lattice_cells = [cell for layer in self.layers for cell in layer]
         # Rotate the lattice box, if any
         if self.__lattice_box:
-            self.__lattice_box.rotate_from_axis(angle, z_axis)
+            self.__lattice_box.rotate_from_axis(angle, axis)
         # Rotate the lattice compound on which a symmetry operation has been
         # applied, if any
         if self.symmetry_type != SymmetryType.FULL:
             self.lattice_symm = make_rotation(
-                self.lattice_symm, z_axis, rotation)
-        # Update the rotation angle of the main pattern of cells
-        self.__cells_rot = self.__evaluate_cells_rotation(self.lattice_cells)
-
+                self.lattice_symm, axis, rotation)
         # Set the need to update the lattice geometry
         self.is_update_needed = True
         # Show the new lattice compound in the current SALOME study
@@ -2471,6 +2544,40 @@ class Lattice():
         # Update the total number of cells' rings
         for cell in cells:
             self.__evaluate_no_rings(get_point_coordinates(cell.figure.o))
+
+        # Set the need to update the lattice geometry
+        self.is_update_needed = True
+
+    def assign_macro_to_cells(
+            self, index_0: int = 1, base_name: str = "MAC") -> None:
+        """
+        Method that assignes the names of the property ``PropertyType.MACRO``
+        to the cells the lattice is made of.
+        Given the starting index and the base name of the macros, a loop
+        through all the cells and the lattice's box is performed. All the
+        regions of a cell will share the same name of the macro made by the
+        base name plus the increasing index.
+
+        Parameters
+        ----------
+        index_0: int
+            The index to start from when setting the macros to the cells'
+            regions.
+        base_name : str
+            The base name of the macros which defaults to 'MAC'.
+        """
+        box_layer = []
+        if self.lattice_box:
+            box_layer = [self.lattice_box]
+        # Loop through the lattice's cells first and then the box cell, if any
+        for layer in self.layers + [box_layer]:
+            for cell in layer:
+                cell.update_properties(
+                    {PropertyType.MACRO: [
+                        f"{base_name}{index_0:03d}"]*len(cell.tech_geom_props)
+                    }
+                )
+                index_0 += 1
 
         # Set the need to update the lattice geometry
         self.is_update_needed = True

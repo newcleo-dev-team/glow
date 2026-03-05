@@ -28,8 +28,8 @@ class TdtSetup:
     """
     geom_type: GeometryType = GeometryType.TECHNOLOGICAL
     """Identifying the type of geometry of the lattice's cells."""
-    property_type: PropertyType = PropertyType.MATERIAL
-    """Identifying the type of property associated to lattice's regions."""
+    property_types: PropertyType | List[PropertyType] = PropertyType.MATERIAL
+    """Identifying the type(s) of property associated to lattice's regions."""
     albedo: float | None = None
     """Identifying the value for the albedo applied to the lattice's BCs."""
     type_geo: LatticeGeometryType = LatticeGeometryType.ISOTROPIC
@@ -57,6 +57,9 @@ class TdtSetup:
                 raise RuntimeError(
                     f"The value {self.albedo} for the albedo is out of "
                     "bounds [0.0, 1.0]")
+        # Transform the given property type to a list
+        if not isinstance(self.property_types, List):
+            self.property_types = [self.property_types]
 
 
 def analyse_and_generate_tdt(
