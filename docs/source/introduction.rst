@@ -13,18 +13,11 @@ providing 2D unstructured geometries to the `DRAGON5 <http://merlin.polymtl.ca/v
 lattice transport computer code for tracking calculations.
 
 The *DRAGON5* computer code provides several models, in terms of FORTRAN modules,
-to simulate the neutronic behaviour of the fuel elements
-in a nuclear reactor :cite:`dragon5-ug`.
-Among the available modules, some focus on solution techniques for the
-neutron transport equation, which describes the statistical behaviour of a
-large population of particles :cite:`hebert2009`.
-In particular, the *SALT* module can process a geometry mesh to compute the
-tracking information requested to solve the neutron transport equation.
-The geometry processed by *DRAGON5* is of the surface type where cell mesh
-boundaries are described by equations.
-
-Among the many methods for the solution of the neutron transport equation, the
-following two are used with *DRAGON5*:
+to simulate the neutronic behaviour of the fuel elements in a nuclear reactor
+:cite:`dragon5-ug`.
+Among the available modules, the ``SALT:`` tracking module discretises the
+spatial domain by generating integration lines used to solve the transport
+equation by means of the following methods :cite:`hebert2020`:
 
   - the *Method of Characteristics* (*MOC*), an approach used to solve the
     neutron transport equation by tracing the paths (*characteristics*) of
@@ -41,20 +34,21 @@ tracking calculations in *DRAGON5*.
 Geometries for fuel assemblies used in nuclear reactors are typically made of
 several fuel pins arranged according to regular patterns to form Cartesian or
 hexagonal lattices.
-Even though *DRAGON5* can track any convex surface-type geometry without empty
-concavities, it can only natively handle the generation of *structured geometries*.
-These rely on regular basic surface elements, such as polygons and circles,
-repeated to create uniform patterns, which in *DRAGON5* are built using a small
-set of predefined operations.
-This is done with the *GEO* module where the *G2S* module converts the geometry
-layout to a *.dat* description file used by the *SALT* tracking module.
-More complex cases deal with *unstructured geometries* which are made by general
-elements having different shapes and dimensions. The combination of surface
-elements can be obtained as the result of applying boolean operations, such
-as cuts and unions.
-Unstructured geometries require external tools based on *Constructive Solid
+Even though the ``SALT:`` module can track any convex *surface-oriented*
+geometry without empty concavities, *DRAGON5* can only natively handle the
+generation of simple geometries (i.e. *structured geometries*) built using a
+small set of predefined operations available within the ``GEO:`` module.
+The ``G2S:`` module converts the native geometry layout to a *.dat* description
+file used by the ``SALT:`` module to perform the tracking :cite:`dragon5-ug`.
+This file is produced in a format similar to the input file used by the *TDT*
+(*Two- and Three-Dimensional Transport*) solver of *APOLLO2*, one of the first
+neutron transport lattice code to provide MOC capabilities :cite:`lyoussi1994calcul`
+:cite:`sanchez2010apollo2`.
+More complex layouts, represented by *unstructured geometries*, made by combining
+surface elements via Boolean operations (e.g., cut, union, intersection), cannot
+be produced by DRAGON5 natively; external tools based on *Constructive Solid
 Geometry* (*CSG*), a method for creating 2D/3D geometries from combinations of
-simpler primitive shapes.
+simpler primitive shapes, are needed.
 
 So far, several applications have been developed to address the generation of
 unstructured surface geometries, among the main ones we can cite *SALOMON* and
@@ -63,67 +57,52 @@ unstructured surface geometries, among the main ones we can cite *SALOMON* and
 the *GEOM* module of the `SALOME <https://www.salome-platform.org/>`_ platform,
 an open-source environment offering 2D/3D CAD modelling capabilities
 :cite:`salome2007`.
-*SALOMON* relies on an input file with a specific structure containing the
-description of the lattice's geometry layout in terms of cells and materials
-associated to each region of the lattice. It allows users to construct a geometric
-description file in the format of the *TDT* solver of *APOLLO2*.
-Currently, SALOMON's development seems no longer active, resulting in the tool
-becoming obsolete.
-*ALAMOS* is GUI-based application developed by CEA for *APOLLO3* that exploits
-the Python libraries offered by the *SALOME* platform :cite:`tomatis2022`. In
-particular, it makes use of the *MEDCoupling* module of *SALOME* to build the
+*SALOMON* relies on an XML-formatted input file with a specific structure
+containing the description of the lattice's geometry layout in terms of cells
+and materials associated to each closed region of the lattice. It allows users
+to export the geometric description *.dat* file for the *TDT* solver of
+*APOLLO2*. Currently, SALOMON's development seems no longer active, resulting
+in an obsolete tool.
+ALAMOS is an application based on a dedicated *Graphical User Interface* (GUI)
+developed by CEA for *APOLLO3* that exploits the Python libraries offered by the
+*SALOME* platform :cite:`tomatis2022`.
+In particular, it makes use of the *MEDCoupling* module of *SALOME* to build the
 geometries and apply meshes to them. The regions of the geometry can also be
 characterised in terms of material property maps.
 While *ALAMOS* can handle any kind of complex geometry layout, *SALOMON*
-can only deal with lattices made of cartesian-type cells, thus greatly limiting
+can only deal with lattices made of Cartesian-type cells, thus greatly limiting
 its application.
 In addition, *SALOMON* does not provide any support to the construction of
-surface geometries by exploiting the most common boolean operations, which,
+surface geometries by exploiting the most common Boolean operations, which,
 instead, are supported by *ALAMOS*.
-Unfortunately, *ALAMOS*, despite being a more complete tool with respect to
-*SALOMON*, does not have an open-source distribution.
+Unfortunately, *ALAMOS*, despite being a more complete tool than *SALOMON*,
+does not have an open-source distribution.
 
-|TOOL| was developed to offer an open-source alternative for generating
-unstructured surface geometries, exploiting the *Constructive Solid Geometry*
-functionalities provided by the APIs of the *GEOM* module of the *SALOME*
-platform.
-In |TOOL|, complex surface geometry layouts are constituted by 2D areas bounded
-by closed sets of edges, which are referred to as *regions*.
-A *cell* is a base geometry layout built from a characteristic surface, such as
-a rectangle or a hexagon, subdivided in different areas, each representing a
-*region*.
-The repetition of adjacent *cells* in the 2D space constitutes a *lattice*.
-|TOOL| can handle *lattices* made of cartesian or hexagonal *cells*, including
-the option to frame the lattice in a box.
-Different types of properties, such as the *material*, can be assigned to each
-*region*.
-|TOOL| supports Euclidean geometric **transformations**, such as translation and
-rotation, and **boolean** operations, such as union, intersection, cut and
-partitioning, among geometric shapes.
+|TOOL| was developed by |newcleo| to offer an open-source alternative for the
+production of surface geometries through *CSG* functionalities provided by the
+*Application Programming Interfaces* (*APIs*) of the *GEOM* module of the
+*SALOME* platform.
+In |TOOL|, complex surface geometry layouts are easily generated by positioning
+and overlapping simple shapes, each associated with different types of property
+maps, to replicate the structure of cells and lattices, and even of the entire
+core. In addition, Boolean operations are automatically applied when a specific
+portion of the layout is extracted.
 
-Since calculations on smaller geometries are expected to be computationally
-cheaper, symmetries should be considered whenever possible.
-|TOOL| can perform cuts to extract parts from an existing layout, thereby
-isolating the minimum portion of the geometry required to describe the entire
-pattern. As an example for a Cartesian lattice with a 180 degree reflection
-symmetry, the cut part would be half of the lattice.
-Special symmetries according to the main lattice types are implemented:
+A GUI is essential to provide the best user-experience possible. In this sense,
+|TOOL| relies on the *SALOME* graphical user interface (via the *GUI* module)
+to display the built geometries in the available 3D viewer. In addition to the
+basic functionalities offered by |TOOL|, users can also make use of the
+geometry-building functionalities of the *GEOM* module directly from the GUI.
+Eventually, the |TOOL| and *GEOM* functionalities can be used from within a
+Python script that runs in the *SALOME* framework.
 
-  - *Cartesian* - half, quarter and eighth symmetries.
-  - *Hexagonal* - third, sixth and twelfth symmetries.
+Since *DRAGON5* relies on the *.dat* description file of the surface-oriented
+geometry, |TOOL| collects the geometric and property information from the built
+layout to generate the needed file.
 
-|TOOL| does not only exploit the geometric functionalities offered by the *GEOM*
-module of *SALOME*; it also displays the built geometries in *SALOME* 3D viewer
-through its graphical user interface (*GUI* module).
-Additionally, if the basic functionalities offered by |TOOL| are not enough to
-construct specific layouts for cells and lattices, users can rely on the
-geometry-building functionalities offered by the *GEOM* module directly. The
-resulting custom layouts can still be used in |TOOL|.
-
-In *DRAGON5*, tracking relies on a description file (*.dat*) of the geometry
-layout. |TOOL| allows the collection of geometric and property information from
-the built lattice layout, producing this *.dat* file in the format of the *TDT*
-solver of *APOLLO2*.
+This guide gives an overview of |TOOL| and of its main functionalities.
+The :ref:`tutorials` section illustrates some use cases that highlight the usage
+of |TOOL| and guide users in the correct geometry modelling approaches.
 
 |TOOL| is developed by the **Codes & Methods** Department of |newcleo| and it
 is released under the |LICENSE| **License**.
