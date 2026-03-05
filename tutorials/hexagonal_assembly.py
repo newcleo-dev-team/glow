@@ -34,7 +34,7 @@ def add_circular_regions(
     """
     Function that adds circular ``Region`` objects to the given ``Cell``
     instance. Regions are characterised in terms of the radius and the
-    material property.
+    material property names, given by the corresponding lists.
 
     Parameters
     ----------

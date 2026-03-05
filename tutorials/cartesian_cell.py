@@ -16,7 +16,7 @@ from glow.geometry_layouts.geometries import Circle
 from glow.interface.geom_interface import *
 
 
-# Intialise three lists, one storing the circular regions radii, the other the
+# Intialise two lists, one storing the circular regions radii, the other the
 # names of the materials, sorted from the inner to the outer region
 radii = [0.2, 0.3, 0.4]
 materials = ["MAT_1", "MAT_2", "MAT_3"]
@@ -51,7 +51,6 @@ circles += center_circles
 
 # Build a compound from the edges of the circles
 circles_cmpd = make_compound([c.borders[0] for c in circles])
-add_to_study(circles_cmpd, "")
 # Update the cell's sectorised geometry with the compound of edges
 cell.geometry_maps[GeometryType.SECTORIZED] = wrap_shape(
     make_compound(

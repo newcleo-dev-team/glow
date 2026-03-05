@@ -49,9 +49,9 @@ def add_circular_regions(
         cell: Cell, radii: List[float], materials: List[float]
     ) -> None:
     """
-    Function that adds circular ``Region`` objects to the given ``Cell``
-    instance. Regions are characterised in terms of the radius and the
-    material property.
+    Function that adds cell-centred circular ``Region`` objects to the given
+    ``Cell`` instance. Regions are characterised in terms of the radius and
+    the material property.
 
     Parameters
     ----------
@@ -65,11 +65,11 @@ def add_circular_regions(
     """
     for radius, mat in zip(radii[::-1], materials[::-1]):
         cell.add(
-        Region(
-            Circle(radius=radius),
-            properties={PropertyType.MATERIAL: mat}
+            Region(
+                Circle(radius=radius),
+                properties={PropertyType.MATERIAL: mat}
+            )
         )
-    )
 
 
 def create_vertices_list(circle_radius: float, n_vertices: int) -> List[Any]:
@@ -100,62 +100,6 @@ def create_vertices_list(circle_radius: float, n_vertices: int) -> List[Any]:
         vertex = make_vertex_on_curve(circle.borders[0], n/n_vertices)
         vertices.append(vertex)
     return vertices
-
-
-def make_circular_cells_list(
-        vertices: List[Any], radii: List[float]) -> List[Cell]:
-    """
-    Function that creates a list of circular cells, as ``Cell`` instances.
-    The cells centres are given by the input list of vertices.
-
-    Parameters
-    ----------
-    vertices : List[Any]
-        The list of vertex objects where each circular cell is placed.
-    radii : List[float]
-        The list of radii for the circles contained in the circular cell.
-
-    Returns
-    -------
-    List[Cell]
-        The list of circular cells.
-    """
-    cells = []
-    # Loop through the given vertices and build the layout of each cell as
-    # made by three concentric circles.
-    for i, vertex in enumerate(vertices):
-        cr_circle_inn = Circle(
-            get_point_coordinates(vertex),
-            radius=radii[0],
-            name=f"Inner CR Circle vertex {get_point_coordinates(vertex)}"
-        )
-        cr_circle_mid = Circle(
-            get_point_coordinates(vertex),
-            radius=radii[1],
-            name=f"Middle CR Circle vertex {get_point_coordinates(vertex)}"
-        )
-        cr_circle_out = Circle(
-            get_point_coordinates(vertex),
-            radius=radii[2],
-            name=f"Outer CR Circle vertex {get_point_coordinates(vertex)}"
-        )
-        # Build the generic cell by adding all the circular regions
-        cr_pin_cell = Cell(
-            cr_circle_out, {PropertyType.MATERIAL: "CR_CLADDING2"}
-        )
-        cr_pin_cell.add(
-            Region(
-                cr_circle_mid, {PropertyType.MATERIAL: "GAP"}
-            )
-        )
-        cr_pin_cell.add(
-            Region(
-                cr_circle_inn, {PropertyType.MATERIAL: "ABSORBER"}
-            )
-        )
-        # Add the cell to the returned list
-        cells.append(cr_pin_cell)
-    return cells
 
 
 # -------------------------------------------------------------------------- #
@@ -237,7 +181,7 @@ cr_assembly.add(
     )
 )
 
-# Add the circles representing the different zones
+# Add the circles representing the different zones of the wrapper
 add_circular_regions(
     cr_assembly, cr_wrapper_radii, ["COOLANT", "CR_CLADDING"]
 )
@@ -320,9 +264,9 @@ print(f"--- Geometry generated in {t1 - t0} s. ---")
 # For each face in the colorset compound, recover the corresponding 'Region'
 # in the colorset 'Lattice' and build the corresponding region to display
 colorset_regions = build_compound_regions(colorset_portion, colorset.regions)
-# Associate a unique color to each region according to the material name
+# Associate a unique colour to each region according to the material name
 associate_colors_to_regions(PropertyType.MATERIAL, colorset_regions)
-# Display the regions of the colorset portion with the material color map
+# Display the regions of the colorset portion with the material colour map
 for region in colorset_regions:
     set_color_face(region, region.color)
     add_to_study_in_father(colorset_portion, region, region.name)

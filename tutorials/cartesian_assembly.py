@@ -48,9 +48,6 @@ cell.sectorize([1, 1, 4, 8], [0, 0, 0, 22.5], windmill=True)
 # ---------------------
 # ASSEMBLY CONSTRUCTION
 # ---------------------
-# Get the X dimension of the pitch
-pitch_x = cell.dimensions[0]
-
 # Build the lattice with several rings of the same Cartesian cell
 lattice = CartesianLattice([cell], name='Cartesian Lattice')
 lattice.add_rings_of_cells(cell, 4, 1)
@@ -85,12 +82,14 @@ assembly.add(box_contour)
 # one, while cutting the refined geometry due to the box layer overlapping
 # the outer cells
 assembly.update_hierarchical_structure(True)
-# Apply the eighth symmetry type to the cartesian lattice
+# Apply the eighth symmetry type to the assembly
 assembly.apply_symmetry(SymmetryType.EIGHTH)
 
 # -----------------
 # MESH CONSTRUCTION
 # -----------------
+# Get the X dimension of the pitch
+pitch_x = cell.dimensions[0]
 # Build XYZ axis vectors
 o_x = make_vector((1, 0, 0))
 o_y = make_vector((0, 1, 0))
