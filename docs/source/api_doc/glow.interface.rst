@@ -9,6 +9,14 @@ glow.interface package
 Submodules
 ----------
 
+glow.interface.geom\_entities module
+------------------------------------
+
+.. automodule:: glow.interface.geom_entities
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 glow.interface.geom\_interface module
 -------------------------------------
 

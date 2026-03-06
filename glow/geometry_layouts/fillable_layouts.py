@@ -371,6 +371,7 @@ class Fillable(Compound, Layout):
         GEOM face, if any, otherwise the one currently selected in the SALOME
         study.
         The printed information is related to:
+
         - the tree representation of the hierarchical structure up to the
           target ``Region`` object;
         - the values for each of the ``PropertyType`` items associated to the

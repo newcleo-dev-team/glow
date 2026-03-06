@@ -9,6 +9,14 @@ glow.generator package
 Submodules
 ----------
 
+glow.generator.export\_data module
+----------------------------------
+
+.. automodule:: glow.generator.export_data
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 glow.generator.generator module
 -------------------------------
 

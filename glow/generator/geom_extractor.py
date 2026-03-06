@@ -6,7 +6,6 @@ for preparing all the data for the output TDT file generation.
 import logging
 import math
 
-from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 from glow.generator.export_data import BoundaryData, EdgeData, FaceData, \
@@ -18,9 +17,8 @@ from glow.interface.geom_entities import Compound, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     extract_sub_shapes, get_bounding_box, get_in_place, \
     get_in_place_by_hystory, get_point_coordinates, get_shape_name, \
-    get_shape_type, is_point_inside_shape, make_compound, make_face, \
-    make_partition, make_partition_non_self_intersecting, make_vertex, \
-    make_vertex_inside_face, update_salome_study
+    get_shape_type, make_compound, make_face, make_partition, \
+    make_partition_non_self_intersecting, make_vertex, update_salome_study
 from glow.main import TdtSetup
 from glow.support.types import GeometryType, LayoutGeometryType, LayoutType, \
     PropertyType, SymmetryType
@@ -910,18 +908,18 @@ def analyse_layout(
     Parameters
     ----------
     layout : Fillable
-        The ``Fillable``object storing the information about the geometry and
-        the properties of the entire layout.
+        The ``Fillable`` object storing the information about the geometry
+        and the properties of the entire layout.
     tdt_setup : TdtSetup
         Dataclass providing the settings for extracting the geometric and
         properties information from the given layout.
     compound_to_analyse: Any | None = None
         The compound object to analyse, if present. If ``None`` is given, the
-        given ``Fillable``object is considered instead.
+        given ``Fillable`` object is considered instead.
 
     Returns
     -------
-    LatticeDataExtractor
+    LayoutDataExtractor
         Object collecting all the information about the geometry and the
         properties extracted from the layout.
     """
