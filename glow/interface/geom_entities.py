@@ -21,8 +21,8 @@ class GeomWrapper(ABC):
     - type validation of the provided GEOM object;
     - attribute delegation, so that this class behaves like the provided GEOM
       object when using any GEOM function;
-    - geometric operator overloads. Math operators are overloaded to provide
-      boolean operations between two ``GeomWrapper`` objects.
+    - geometric operator overloads. Arithmetic operators are overloaded to
+      provide Boolean operations between two ``GeomWrapper`` objects.
 
     Parameters
     ----------

@@ -12,10 +12,11 @@ from typing import Any, Dict, List, Self, Sequence, Tuple
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
-    display_shape, extract_sub_shapes, get_basic_properties, get_bounding_box, get_object_from_id, \
-    get_point_coordinates, is_point_inside_shape, make_cdg, make_common, make_rotation, make_scale, \
-    make_translation, make_vector_from_points, make_vertex, \
-    make_vertex_inside_face, remove_from_study, update_salome_study
+    display_shape, extract_sub_shapes, get_basic_properties, get_bounding_box, \
+    get_object_from_id, get_point_coordinates, is_point_inside_shape, \
+    make_cdg, make_common, make_rotation, make_scale, make_translation, \
+    make_vector_from_points, make_vertex, make_vertex_inside_face, \
+    remove_from_study, update_salome_study
 from glow.support.types import GeometryType, LayoutGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import build_z_axis_from_vertex, \
@@ -81,9 +82,9 @@ class Layout(ABC):
     @abstractmethod
     def scale(self, factor: float, origin: Vertex | None = None) -> None:
         """
-        Abstract method for scaling the region by the given factor wrt the
+        Abstract method for scaling the layout by the given factor wrt the
         ``Vertex`` object, if any. If no reference vertex is provided, the
-        scaling is performed wrt the centre of the region.
+        scaling is performed wrt the centre of the layout.
 
         Parameters
         ----------
@@ -91,7 +92,7 @@ class Layout(ABC):
             The scaling factor.
         origin : Vertex | None = None
             Identifying the point wrt the scaling is performed. If ``None``,
-            the reference point is the region's centre.
+            the reference point is the layout's centre.
         """
 
     @abstractmethod
@@ -132,8 +133,8 @@ class Layout(ABC):
 
 class Region(Face, Layout):
     """
-    Class that groups information regarding a generic region of the cell's
-    or the lattice's geometry layout.
+    Class that groups information regarding a generic region of the geometry
+    layout.
     A ``Region`` instance represents any 2D surface bounded by one or two
     edges that is filled by properties, e.g. the material.
     Properties are expressed as a dictionary of items of the ``PropertyType``

@@ -11,23 +11,23 @@ Section :ref:`lattice-export` provides information about the process that
 the description of the geometry layout.
 In both sections, the available functionalities for building and exporting a
 geometry layout are described with code snippets showing their usage. Images
-are also provided to graphically present the results displayed in the 3D viewer
-of *SALOME*.
-Lastly, section :ref:`usage` gives indications about how to include the functionalities
-of |TOOL| in a Python script and how to run the script in the *SALOME*
-environment.
+are also provided to graphically present the results when displayed in the 3D
+viewer of *SALOME*.
+Lastly, section :ref:`usage` gives indications about how to include the
+functionalities of |TOOL| in a Python script and how to run the script in the
+*SALOME* environment.
 
 .. _geom-def:
 
 Geometry Definition
 -------------------
 
-From a topological point of view, the *GEOM* module of *SALOME* enables the
-creation of the following entities:
+From a topological point of view, |TOOL| enables the construction of geometry
+layouts by exploiting several entities of the *GEOM* module of *SALOME*.
+The full list of *GEOM* entities is the following:
 
   - *vertex*, which is a point in the XYZ space;
-  - *edge*, made by two vertices, can be classified as *segment*, *arc of circle*
-    or *circle*;
+  - *edge*, which can be classified as *segment*, *arc of circle* or *circle*;
   - *wire*, a closed set of edges;
   - *face*, a 2D area made from one or two *wires*;
   - *shell*, made from a group of *faces*;
@@ -35,74 +35,181 @@ creation of the following entities:
   - *compound*, a container grouping together several *GEOM* entities.
 
 |TOOL| relies on most of the above-mentioned topological entities to assemble
-the geometry layouts and visualize them in the 3D viewer of *SALOME*.
-In addition, the specific *GEOM* functions enabling the operations for building
-topological entities and applying operations among them are provided in module
-:py:mod:`geom_interface<glow.interface.geom_interface>`.
+the geometry layouts and visualise them in the 3D viewer of *SALOME*.
+The module :py:mod:`geom_entities<glow.interface.geom_entities>` provides
+dedicated wrapper classes acting as an interface towards the topological entities
+of the *GEOM* module that are used in |TOOL|.
+All the layouts that can be built in |TOOL| inherit from one of these wrapper
+classes, which all derive from the :py:class:`GeomWrapper<glow.interface.geom_entities.GeomWrapper>`
+abstract class.
+This class has been implemented so that attribute access is delegated to the
+underlying wrapped *GEOM* object (identified as ``GEOM_Object``).
+This design choice allow for its subclasses to behave like the ``GEOM_Object``
+they refer to. As a result, these classes can be used with any *GEOM* function
+directly without the need for the user to provide the corresponding
+``GEOM_Object``.
+In addition, the :py:class:`GeomWrapper<glow.interface.geom_entities.GeomWrapper>`
+class overloads the following arithmetic operators to easily perform Boolean
+operations between instances of this class:
 
-In |TOOL|, a *cell*, identified by any of the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`,
-is the base unit of the geometry layout.
-*Cells* are built from a characteristic *surface*, i.e. a subclass of
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>`, which represents
-a *GEOM face*. Cells can either have a rectangular or an hexagonal shape.
-Several *surfaces* can be juxtaposed or overlapped to determine the final layout
-of a *cell* by assembling the corresponding *GEOM faces* together.
-The construction of a *cell* geometry layout relies on boolean operations, in
-particular the *partition* (function :py:func:`make_partition()<glow.interface.geom_interface.make_partition>`)
-one. This operation cuts one *GEOM face* with another, and viceversa, grouping
-both cut faces with the intersected area. The result is a *GEOM compound*, which
-represents the geometry layout of a *cell*, as made of *GEOM faces* identifying
-the different areas.
+  - ``+`` (``__add__``) performs a fuse (union) of two shapes.
+  - ``-`` (``__sub__``) performs a cut (difference) of one shape with another
+    one.
+  - ``*`` (``__mul__``) produces the common (intersection) part of two shapes.
+  - ``/`` (``__truediv__``) perform a partition operation where the first
+    ``GEOM_Object`` is subdivided in sub shapes by given shape objects.
+  - ``//`` (``__floordiv__``) perform a partition operation where the
+    resulting shape is the combination of all the shapes after being
+    partitioned.
 
-In |TOOL|, the geometry layout of a *cell* is described in terms of:
+These operators call the corresponding wrapper functions of the *GEOM* ones
+provided in the :py:mod:`geom_interface<glow.interface.geom_interface>` module
+that perform the Boolean operations. In addition to these functions, the module
+also contains functions for building the *GEOM* topological entities and applying
+operations to them (e.g., Euclidean transformations).
 
-  - the **technological geometry**, which is the one delimiting the different
-    cell's *regions* in terms of the materials;
-  - the **sectorized geometry**, which further subdivides the cell's *regions*
-    of the technological geometry into sectors.
+In |TOOL|, the base class from which all the classes identifying any layout
+derive from is the :py:class:`Layout<glow.geometry_layouts.layouts.Layout>`
+class. It provides the characteristic data and behaviour (in terms of methods)
+every layout object should have. In particular, instance methods for applying
+Euclidean transformations, displaying and updating the corresponding
+``GEOM_Object`` are declared but left empty. Subclasses of
+:py:class:`Layout<glow.geometry_layouts.layouts.Layout>`, which represent
+geometric objects describing the layout of cells and lattices, provide
+dedicated implementations for these methods. The available common methods are:
 
-*Lattices*, identified by :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`
-instances, are made by the repetition of adjacent *cells* in the 2D space.
-As for *cells*, also *lattices* can be displayed in terms of one of these two
-types of geometry by accessing the corresponding geometry layout of its *cells*.
+  - :py:meth:`rotate()<glow.geometry_layouts.layouts.Layout.rotate>`. It rotates
+    the layout by a given angle (in degrees) around the given axis, if any
+    is provided, otherwise around the central perpendicular axis.
+  - :py:meth:`scale()<glow.geometry_layouts.layouts.Layout.scale>`. It scales
+    the layout by a given factor from a given vertex or the layout's centre,
+    if not provided.
+  - :py:meth:`show()<glow.geometry_layouts.layouts.Layout.show>`. It displays
+    the ``GEOM_Object`` the instance refers to in the 3D viewer of *SALOME*
+    according to specific settings.
+  - :py:meth:`translate()<glow.geometry_layouts.layouts.Layout.translate>`. It
+    translates the layout in the XYZ space so that its centre coincides with
+    the point identified by the given coordinates.
+  - :py:meth:`update()<glow.geometry_layouts.layouts.Layout.update>`. It allows
+    to update the ``GEOM_Object`` the instance refers to with a new one. The
+    object to update with is given in terms of objects of the
+    :py:class:`Face<glow.interface.geom_entities.Face>` and
+    :py:class:`Compound<glow.interface.geom_entities.Compound>` classes.
 
-All the areas (i.e. the *GEOM faces*) of a *cell*, or a *lattice*, can be
-associated with properties, such as the *material*. In |TOOL|, these areas are
-referred to as *regions*.
-To enable the visualization of the single *GEOM faces* (i.e. the *regions*)
-constituing a *cell*, or a *lattice*, with a specific colorset for a type of
-property, |TOOL| relies on instances of the dataclass
-:py:class:`Region<glow.geometry_layouts.cells.Region>`. Each instance associates
-any of the *GEOM face* of the geometry layout (either technologial or sectorized)
-with a color corresponding to the value of the property type to be visualized
-in the *SALOME* 3D viewer.
+The following classes are direct children of :py:class:`Layout<glow.geometry_layouts.layouts.Layout>`:
 
-The three main classes that are involved in the definition of the geometry layout
-of a *cell* or a *lattice* are :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`,
-:py:class:`Cell<glow.geometry_layouts.cells.Cell>` and
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`.
-A :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` represents a
-single *GEOM face*, while :py:class:`Cell<glow.geometry_layouts.cells.Cell>` and
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` are identified by
-a *GEOM compound*.
-*Surfaces* are intended to facilitate the definition of the *GEOM compound*
-that defines the technological geometry of the *cell*. Conversely, the sectorized
-geometry and the associated *GEOM compound* are defined by acting on the
-technological geometry using methods from the
-:py:class:`Cell<glow.geometry_layouts.cells.Cell>` and
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` classes.
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>`,
-:py:class:`Cell<glow.geometry_layouts.cells.Cell>` and
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` classes rely on the
-same functionalities that apply **transformation** and **visualization**
-operations.
-Here, transformation refers to rotating and translating the geometric object in
-the XYZ space, and visualization refers to displaying the object in the 3D viewer
-of *SALOME*. Each of the aforementioned classes provides its own implementation
-of these operations.
+  - :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`. It represents
+    the base class for all the geometric shapes used in |TOOL| to describe the
+    surfaces a geometry layout is made of. In geometric terms, it describes
+    a 2D surface, and, for this reason, it also derives from the
+    :py:class:`Face<glow.interface.geom_entities.Face>` wrapper class.
+    Dedicated classes to easily build specific geometric shapes (i.e. circles,
+    rectangles and hexagons) are children of this class.
+  - :py:class:`Region<glow.geometry_layouts.layouts.Region>`. It represents
+    any 2D surface that is filled by a set of properties, like the material.
+    This class inherits also from the :py:class:`Face<glow.interface.geom_entities.Face>`
+    wrapper class.
+  - :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`. It
+    represents any geometry layout that can be filled with several regions,
+    each associated to a set of properties. This class inherits from the
+    :py:class:`Compound<glow.interface.geom_entities.Compound>` wrapper class
+    since it groups several *GEOM* faces together.
 
-In the following, the three main classes describing *surfaces*, *cells* and
-*lattices* are discussed and their public methods are detailed.
+The building concept adopted in |TOOL| to describe any geometry layout of cells
+and lattices is based on the *layers* idea. *Layers* are meant to represent the
+layout as a hierarchical tree where the *leaves* are constituted by
+:py:class:`Region<glow.geometry_layouts.layouts.Region>` instances, while the
+*nodes* are given by instances of the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+subclasses.
+Each subclass of :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+(i.e. *cells* and *lattices*) implements the *layers* concept. This means that,
+as an example, a *cell* can represent a *node* in the hierarchical tree of a
+*lattice*, but the same can be said for a *lattice*, when included in the tree
+of a *cell* that describes an assembly.
+The :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+subclasses provide methods for inserting *regions* or other *fillable* objects
+into the layout's ordered layer structure. The insertion order determines each
+object's position in the hierarchical tree, where the layer index defines its
+rendering priority within the layout. Consequently, objects added earlier are
+placed in lower layers, while objects added later occupy progressively higher
+layers. The most recently inserted elements therefore appear at the top of the
+layout's Z-ordering. In this sense, the *layer* abstraction provides a mean
+for imposing an ordering of geometric objects along a conceptual Z-axis (even
+if the resulting layout is always 2D), ensuring proper handling of overlapping
+shapes based solely on insertion order.
+
+When geometry layouts are displayed or exported, their hierarchical tree is
+traversed from the highest filled layer down to the lowest (i.e. from top to
+bottom). During this traversal, any *region* or *fillable* located in a lower
+layer that is overlapped by an element in a higher layer is either clipped
+(if partially overlapped) or removed entirely (if fully covered).
+
+The placement of *region* or *fillable* objects within a geometry layout relies
+on Euclidean geometric transformations, such as translation and rotation.
+Assembling the entire layout resulting from collapsing the layers is based on
+Boolean operations (i.e. intersection, cut and partitioning).
+
+In |TOOL|, the geometry layout of :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+objects (i.e. cells and lattices) is described in terms of:
+
+  - the **technological geometry**, in which *regions* delineate areas each
+    associated with a specific material;
+  - the **sectorised geometry**, which further subdivides the regions of the
+    technological geometry into sectors and circular areas. This refined
+    geometry is typically used to capture flux gradients arising from geometric
+    heterogeneities. The *GEOM* compound of edge objects resulting from the
+    refinement is stored in a dictionary associating the compound to the type
+    of geometry.
+
+:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` objects
+can be displayed in the 3D viewer of *SALOME* in terms of one of the
+aforementioned types of geometry. This is performed automatically by traversing
+the hierarchical tree to collect all the corresponding geometry layouts.
+
+|TOOL| allow users to display the *regions* of a geometry layout according to
+a colour map associated to a specific property type. Given the hierarchical
+structure of a *fillable*, its layers are traversal to collect all the
+:py:class:`Region<glow.geometry_layouts.layouts.Region>` objects coming for
+the current *fillable* and from those representing the *nodes* of the layout's
+tree.
+Each :py:class:`Region<glow.geometry_layouts.layouts.Region>` instance associates
+its *GEOM* face (part of the technological geometry layout) with a colour that
+corresponds to the value of the property type to be visualised in the 3D viewer
+of *SALOME*.
+
+The specific classes associated to *cells* and *lattices*, which can be used to
+model assemblies, and even the entire core, are the following ones:
+
+  - :py:class:`Cell<glow.geometry_layouts.cells.Cell>`. It represents a generic
+    cell that is not based on a pre-defined characteristic shape, which is
+    provided at its initialisation.
+  - :py:class:`CartesianCell<glow.geometry_layouts.cells.CartesianCell>`. It
+    represents a Cartesian cell, i.e. one having a rectangular surface as its
+    characteristic shape.
+  - :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>`. It represents
+    a hexagonal cell, i.e. one having a hexagonal surface as its characteristic
+    shape.
+  - :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`. It represents
+    a generic lattice that do not follow a specific pattern.
+  - :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`.
+    It represents a Cartesian lattice made of cells arranged according to a
+    rectangular grid.
+  - :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>`. It
+    represents a hexagonal lattice where cells are arranged on a hexagonal
+    grid.
+
+All the aforementioned classes inherit from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+class, which means that they all share the same common methods devoted to the
+management of the hierarchical tree, the addition of layout objects, the
+application of Euclidean transformations and symmetry operations, and to
+displaying the geometry layout in the 3D viewer of *SALOME*.
+In addition, they are based on a characteristic shape (i.e. an object of the
+:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` subclasses) which,
+depending on the layout type, is a rectangular or a hexagonal surface, or a
+generic surface derived from the borders of the layout.
+
+In the following, the different layout objects are discussed and their public
+methods are detailed.
 
 Surfaces Definition
 ^^^^^^^^^^^^^^^^^^^
