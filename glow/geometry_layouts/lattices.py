@@ -8,12 +8,11 @@ from typing import List, Tuple
 
 from glow.geometry_layouts.cells import Cell
 from glow.geometry_layouts.fillable_layouts import Fillable
-from glow.geometry_layouts.geometries import GenericSurface, Hexagon, \
-    Rectangle, Surface
+from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface
 from glow.geometry_layouts.layouts import Region
 from glow.interface.geom_entities import Edge, wrap_shape
 from glow.interface.geom_interface import ShapeType, get_bounding_box, \
-    get_point_coordinates, make_compound, make_face, make_vertex
+    get_point_coordinates, make_cdg, make_compound, make_face, make_vertex
 from glow.support.utility import are_same_shapes, build_compound_borders, \
     build_subdvision_vertices_on_edge, build_z_axis_from_vertex
 
@@ -108,11 +107,10 @@ class Lattice(Fillable):
             self.regions = self.get_regions()
             # Set the shape and the GEOM compound of the layout from the
             # compound of the regions
-            # TODO the shape should update whenever the dimensions changes
-            # i.e. a new ring is added
-            self.shape = GenericSurface(
-                make_face(build_compound_borders(make_compound(self.regions)))
+            face = make_face(
+                build_compound_borders(make_compound(self.regions))
             )
+            self.shape = Surface(face, get_point_coordinates(make_cdg(face)))
             # Update the characteristic dimensions of the layout
             self.dimensions = self.shape.dimensions
         # Set the vertex of the layout centre, if any is provided, otherwise
@@ -236,11 +234,10 @@ class Lattice(Fillable):
         """
         # Re-instantiate the shape from the face builds from the borders of
         # the compound of the layout's regions, rotating the shape, if needed
-        self.shape = GenericSurface(
-            make_face(
+        face = make_face(
                 build_compound_borders(make_compound(self.get_regions()))
             )
-        )
+        self.shape = Surface(face, get_point_coordinates(make_cdg(face)))
         self.shape.rotate(self.rot_angle)
 
 class CartesianLattice(Lattice):

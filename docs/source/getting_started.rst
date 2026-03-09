@@ -218,41 +218,42 @@ Surfaces Definition
 *GEOM faces*, in *SALOME*.
 In the *Object-Oriented Programming* (*OOP*) view, the types of *surface* that
 are available in |TOOL| inherit from the same superclass
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>`, which is an
-abstract class characterised by both abstract and concrete methods.
-The classes to build specific surfaces are the following:
+:py:class:`Surface<glow.geometry_layouts.geometries.Surface>`, which represents
+a generic 2D shape in *SALOME*.
+Subclasses of :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
+are present in |TOOL| to build specific-type surfaces. They are the following:
 
-  - class :py:class:`Circle<glow.geometry_layouts.geometries.Circle>` that
-    addresses circular surfaces.
-  - class :py:class:`Hexagon<glow.geometry_layouts.geometries.Hexagon>` that
-    addresses hexagonal surfaces.
+  - class :py:class:`Circle<glow.geometry_layouts.geometries.Circle>` for
+    circular surfaces.
+  - class :py:class:`Hexagon<glow.geometry_layouts.geometries.Hexagon>` for
+    hexagonal surfaces.
   - class :py:class:`Rectangle<glow.geometry_layouts.geometries.Rectangle>`
-    that addresses rectangular surfaces.
-  - class :py:class:`GenericSurface<glow.geometry_layouts.geometries.GenericSurface>`
-    that addresses any 2D surface created in *SALOME*.
+    for rectangular surfaces.
 
 Depending on the specific type of surface, the instantiation requires to specify
 the centre of the surface and its characteristic dimensions (i.e. radius for a
-circle, width and height for a rectangle, the edge length for a hexagon).
+circle, width and height for a rectangle, the edge length for a hexagon) or the
+2D shape and the centre directly (:py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
+case).
 Classes are implemented with default values for the characteristic dimensions.
 When an object of the :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
-subclasses is instantiated, the *GEOM* objects for the vertices, the edges and
+subclasses is instantiated, the *GEOM* objects that concur in the creation of
 the corresponding face are automatically built. In this way, the surface can
-be shown in the *SALOME* 3D viewer right after the initialization by means of the
-method :py:meth:`show_face()<glow.geometry_layouts.geometries.Surface.show_face>`.
+be shown in the *SALOME* 3D viewer right after the initialization by means of
+the method :py:meth:`show()<glow.geometry_layouts.geometries.Surface.show>`.
 
-The following code snippet shows how to instantiate and display a geometric
-surface for a hexagonal case.
+The following code snippet shows how to instantiate and display the geometric
+surface for the hexagonal case.
 
 .. code-block:: python
 
   from glow.geometry_layouts.geometries import Hexagon
 
   surface = Hexagon(center=(1.0, 1.0, 0.0), edge_length=2.0)
-  surface.show_face()
+  surface.show()
 
-:numref:`hex-shape` shows the graphical result obtained by running the code
-above in a Python script or directly from the Python console of *SALOME*.
+:numref:`hex-shape` shows the graphical result obtained by running the above
+code in a Python script or directly from the Python console of *SALOME*.
 
 .. _hex-shape:
 .. figure:: images/hexagon.png
@@ -262,18 +263,16 @@ above in a Python script or directly from the Python console of *SALOME*.
 
    Hexagon displayed in the *SALOME* 3D viewer.
 
-Transformation operations can be applied by calling the methods for rotating
-or translating the surface, which are declared in the base class
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>`, and are accessible
-for any of its subclasses.
-The method :py:meth:`rotate()<glow.geometry_layouts.geometries.Surface.rotate>`
-performs a rotation of the *GEOM* elements of :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
-around the centre of the corresponding *GEOM face* by a given rotation angle, in
-degrees. The direction of the rotation follows the standard *right-hand* rule.
-The method :py:meth:`translate()<glow.geometry_layouts.geometries.Surface.translate>`
-moves the *GEOM* elements of :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
-so that the center of the corresponding *GEOM face* coincides with the given
-XYZ coordinates.
+As mentioned in :ref:`geom-def`, Euclidean transformations are common to all
+classes of |TOOL| that inherit from :py:class`Layout<glow.geometry_layouts.layout.Layout>`.
+The :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` class provide
+a specific implementation for these methods that is shared by all its subclasses.
+In particular, the :py:meth:`rotate()<glow.geometry_layouts.geometries.Surface.rotate>`,
+:py:meth:`translate()<glow.geometry_layouts.geometries.Surface.translate>` and
+:py:meth:`scale()<glow.geometry_layouts.geometries.Surface.scale>` methods
+apply a rotation, translation and scaling, respectively, to the *GEOM* elements
+of the :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` instance.
+
 For the hexagonal surface declared above, the code instructions are the
 following:
 
@@ -281,24 +280,25 @@ following:
 
   surface.rotate(90)
   surface.translate((0.0, 0.0, 0.0))
-  surface.show_face()
+  surface.scale(0.5)
+  surface.show()
 
-By applying these methods, the resulting *GEOM face* is shown in :numref:`hex-transf`.
+By applying these methods, the resulting *GEOM face* is shown in :numref:`hex-transf`,
+and compared with the original shape.
 
 .. _hex-transf:
-.. figure:: images/hexagon_rot_transl.png
-   :alt: Hexagon rotated and translated in SALOME
+.. figure:: images/hexagon_rot_transl_scaled.png
+   :alt: Hexagon rotated, translated and scaled in SALOME
    :width: 400px
    :align: center
 
-   Hexagon after applying rotation and traslation operations, as shown in the
-   *SALOME* 3D viewer.
+   Hexagon before and after applying rotation, traslation and scaling operations.
 
 The *GEOM face* that is specific of the subclass of
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` can be directly
 modified within *SALOME* and the modified *GEOM face* applied to the
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` object by calling
-the method :py:meth:`update_from_face()<glow.geometry_layouts.geometries.Surface.update_from_face>`.
+:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` subclass object
+by calling the method :py:meth:`update()<glow.geometry_layouts.geometries.Surface.update>`.
 The implementation of this method is specific for each of the subclasses of
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`. In general, the
 method receives as parameter a *GEOM face* and updates the instance attributes
