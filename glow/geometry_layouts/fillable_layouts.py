@@ -105,7 +105,7 @@ class Fillable(Compound, Layout):
         ) -> None:
         """
         Method that adds a generic layout, i.e. either a ``Region`` or a
-        `Fillable` object, to the technological geometry layout of this
+        ``Fillable`` object, to the technological geometry layout of this
         instance at the indicated layer.
 
         The given layout object is first translated, if needed, so that the
@@ -145,8 +145,8 @@ class Fillable(Compound, Layout):
         To collapse the layers and update all the contained layouts of this
         instance without displaying the geometry in the 3D viewer of SALOME,
         call the method ``update_hierarchical_structure``.
-        To update the and display the geometry layout with all the regions of
-        the technological geometry, call the method ``show``.
+        To update and display the geometry layout with all the regions of the
+        technological geometry, call the method ``show``.
         """
         # Set the given layout position to the current compound centre, if no
         # position is provided.
@@ -649,6 +649,8 @@ class Fillable(Compound, Layout):
           regions of the technological geometry;
         - ``GeometryType``, used to indicate the type of geometry of this
           layout.
+        - boolean flag, used to avoid triggering the automatic visualisation
+          of the regions and the sectorised edges, if ``False``.
         """
         # Initialize the display settings with default values
         prop_type = None
@@ -826,8 +828,12 @@ class Fillable(Compound, Layout):
         collapse its own layers.
 
         Finally, the GEOM compound object representative of this instance is
-        updated by performing a partition operation among all the ``Region``
-        objects retrieved from the layouts in each layer.
+        updated by collecting in a GEOM compound all the ``Region`` objects
+        retrieved from the layouts in each layer.
+
+        To simplify the hierarchical tree, a ``True`` value can be provided.
+        If so, the hierarchical tree is collapsed and the layers reduced to a
+        sigle layer collecting all the ``Region`` objects in the tree.
 
         Parameters
         ----------

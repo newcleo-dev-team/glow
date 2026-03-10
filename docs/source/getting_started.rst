@@ -6,7 +6,7 @@ This chapter presents all the information the user needs to make the best
 use of |TOOL|.
 Section :ref:`geom-def` provides details about the available functionalities
 for setting up a geometry layout and displaying it in the 3D viewer of *SALOME*.
-Section :ref:`lattice-export` provides information about the process that
+Section :ref:`layout-export` provides information about the process that
 |TOOL| automatically performs to generate the output *.dat* file containing
 the description of the geometry layout.
 In both sections, the available functionalities for building and exporting a
@@ -215,7 +215,7 @@ Surfaces Definition
 ^^^^^^^^^^^^^^^^^^^
 
 |TOOL| comes with classes to quickly build specific *surfaces*, identified by
-*GEOM faces*, in *SALOME*.
+*GEOM* faces, in *SALOME*.
 In the *Object-Oriented Programming* (*OOP*) view, the types of *surface* that
 are available in |TOOL| inherit from the same superclass
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`, which represents
@@ -264,8 +264,8 @@ code in a Python script or directly from the Python console of *SALOME*.
    Hexagon displayed in the *SALOME* 3D viewer.
 
 As mentioned in :ref:`geom-def`, Euclidean transformations are common to all
-classes of |TOOL| that inherit from :py:class`Layout<glow.geometry_layouts.layout.Layout>`.
-The :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` class provide
+classes of |TOOL| that inherit from :py:class:`Layout<glow.geometry_layouts.layout.Layout>`.
+The :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` class provides
 a specific implementation for these methods that is shared by all its subclasses.
 In particular, the :py:meth:`rotate()<glow.geometry_layouts.geometries.Surface.rotate>`,
 :py:meth:`translate()<glow.geometry_layouts.geometries.Surface.translate>` and
@@ -283,7 +283,7 @@ following:
   surface.scale(0.5)
   surface.show()
 
-By applying these methods, the resulting *GEOM face* is shown in :numref:`hex-transf`,
+By applying these methods, the resulting *GEOM* face is shown in :numref:`hex-transf`,
 and compared with the original shape.
 
 .. _hex-transf:
@@ -294,72 +294,770 @@ and compared with the original shape.
 
    Hexagon before and after applying rotation, traslation and scaling operations.
 
-The *GEOM face* that is specific of the subclass of
+The *GEOM* face that is specific of the subclass of
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` can be directly
-modified within *SALOME* and the modified *GEOM face* applied to the
+modified within *SALOME* and the modified *GEOM* face applied to the
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` subclass object
 by calling the method :py:meth:`update()<glow.geometry_layouts.geometries.Surface.update>`.
 The implementation of this method is specific for each of the subclasses of
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`. In general, the
-method receives as parameter a *GEOM face* and updates the instance attributes
+method receives as parameter a *GEOM* face and updates the instance attributes
 of :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` accordingly.
-A check ensures that only *GEOM faces* are provided, and that the given *GEOM
-face* corresponds to the characteristic surface the
+A check ensures that only *GEOM* faces are provided, and that the given *GEOM*
+face corresponds to the characteristic surface the
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` class refers to.
+
+Region Definition
+^^^^^^^^^^^^^^^^^
+
+In |TOOL|, the geometry layouts are described as a hierarchical tree in which
+the *regions* are the *leaves*.
+The class that implements the *region* concept is :py:class:`Region<glow.geometry_layouts.layouts.Region>`.
+This class represents any 2D shape bounded by one or two edges that is filled
+by a set of properties, e.g. the material. Properties are expressed as a
+dictionary of items of the :py:class:`PropertyType<glow.support.types.PropertyType>`
+enumeration vs the corresponding names.
+As any other geometric object in |TOOL|, the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+class inherits from a subclass of the :py:class:`GeomWrapper<glow.interface.geom_entities.GeomWrapper>`,
+specifically the :py:class:`Face<glow.interface.geom_entities.Face>` one.
+This guarantees that :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+instances behave like the corresponding *GEOM* face objects when used with
+*GEOM* functions.
+As mentioned in :ref:`geom-def`, the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+is a subclass of :py:class:`Layout<glow.geometry_layouts.layouts.Layout>`,
+meaning it provides the implementation for all the methods handling Euclidean
+transformations, displaying and updating the region.
+In addition, to enable the visualisation of the regions of a layout according
+to a property type colour map, :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects come with a dedicated ``color`` attribute and methods for setting
+(:py:meth:`set_region_color()<glow.geometry_layouts.Region.set_region_color>`)
+and resetting (:py:meth:`reset_region_color()<glow.geometry_layouts.Region.reset_region_color>`)
+the colour according to which it is displayed in the 3D viewer of *SALOME*.
+When the region's colour is reset, it is assigned the default RGB colour used
+by *SALOME*, which corresponds to a light grey.
+The :py:class:`Region<glow.geometry_layouts.layouts.Region>` class comes also
+with the :py:meth:`clone()<glow.geometry_layouts.Region.clone>` method for
+producing a copy of the instance that is completely independent from the source
+instance, but has the same properties and colour.
+
+The Boolean algebra provided by overloading the arithmetic operators of Python
+in the :py:class:`GeomWrapper<glow.interface.geom_entities.GeomWrapper>` class
+is complemented in the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+class by providing specific implementations for the following operators:
+
+  - ``+`` (``__add__``) fuses the *GEOM* faces of one or more *regions* while
+    keeping the same properties. Both *regions* must have the same values for
+    the properties.
+  - ``*`` (``__mul__``) produces the common (intersection) part of the *GEOM*
+    faces of two *regions* while keeping the same properties of the region that
+    intersects the first one.
+
+The instantiation of a :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+object is based on a *GEOM* face, but it also accepts an instance of the
+:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` class as it
+accesses to the wrapped *GEOM* face.
+The following snippet shows the creation of two *regions* with dedicated
+properties, the assignment of a colour and their visualisation in the 3D
+viewer. The association of colours to *regions* according to the values of a
+given :py:class:`PropertyType<glow.support.types.PropertyType>` is performed
+by means of the :py:func:`associate_colors_to_regions()<glow.geometry_layouts.layouts.associate_colors_to_regions>`.
+:numref:`regions-bool` shows the result of applying the Boolean operations,
+identified by the arithmetic operators, to the two *regions*.
+
+.. code-block:: python
+
+    from glow import *
+
+    # Instantiation of the two regions
+    r1 = Region(
+      Hexagon(), "R1", {PropertyType.MATERIAL: "MAT1"}
+    )
+    r2 = Region(
+      Hexagon(center=(1,1,0), edge_length=2.0),
+      "R2",
+      {PropertyType.MATERIAL: "MAT2"}
+    )
+
+    # Get the common part
+    r3 = r2 * r1
+    r3.name = "R3"
+    # Clone the first region and set its material to be
+    # the one of the second region
+    r4 = r1.clone()
+    r4.name = "R4"
+    r4.properties[PropertyType.MATERIAL] = "MAT2"
+    # Fuse the second and fourth regions
+    r5 = r2 + r4
+    r5.name = "R5"
+    # Associate colours to the regions according to the material
+    regions = [r1, r2, r3, r4, r5]
+    associate_colors_to_regions(PropertyType.MATERIAL, regions)
+    for region in regions:
+      set_color_face(region.geom_obj, region.color)
+
+    # Display all the regions
+    r1.show()
+    r2.show()
+    r3.show()
+    r4.show()
+    r5.show()
+
+.. _regions-bool:
+.. figure:: images/regions_algebra.png
+   :alt: Boolean algebra between regions.
+   :width: 600px
+   :align: center
+
+   Region resulting from fusing (on the left) and intersecting (on the right)
+   two *regions*.
+
+Fillable Definition
+^^^^^^^^^^^^^^^^^^^
+
+According to the hierarchical tree logic adopted in |TOOL|, classes that inherit
+from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+class are the *nodes* in the tree, as they represent a container for other
+*nodes* or *leaves*. The superimposition of multiple *layers* filled with
+either :py:class:`Region<glow.geometry_layouts.layouts.Region>` or other
+:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` objects
+recreates the hierarchical structure.
+
+:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` inherits
+from the :py:class:`Compound<glow.interface.geom_entities.Compound>` wrapper
+class, as it represents a collection of *GEOM* faces. In addition, it can be
+used as argument of the *GEOM* functions directly, as it behaves like the
+corresponding *GEOM* compound object when used with *GEOM* functions.
+As mentioned in :ref:`geom-def`, :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+is a subclass of :py:class:`Layout<glow.geometry_layouts.layouts.Layout>`,
+meaning it provides the implementation for all the methods handling Euclidean
+transformations, displaying and updating the layout it refers to.
+
+The class :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+declares attributes and methods common to all its subclasses.
+Public methods cover the following functionalities:
+
+  - adding a new *region* or *fillable* to the geometry layout;
+  - applying a specific symmetry type to the geometry layout;
+  - cloning the instance;
+  - getting the compound of edges that corresponds to a given item of the
+    :py:class:`GeometryType<glow.support.types.GeometryType>` enumeration;
+  - getting the :py:class:`Region<glow.geometry_layouts.layouts.Region>` objects
+    the geometry layout (either full or the one corresponding to a specific
+    symmetry) is made of;
+  - printing information about a *region*, either given or selected from the
+    *SALOME* GUI;
+  - restoring the geometry layout;
+  - rotating, scaling and translating the instance;
+  - setting the properties of a *region*, either given or selected from the
+    *SALOME* GUI;
+  - displaying the geometry layout in the 3D viewer;
+  - updating the ``GEOM_Object`` the instance refers to;
+  - updating the hierarchical structure of the instance.
+
+Adding a new layout
+"""""""""""""""""""
+
+The method :py:meth:`add()<glow.geometry_layouts.fillable_layouts.Fillable.add>`
+allows for the inclusion of a new :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+or :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` object
+to the hierarchical tree that describes the technological geometry layout of
+the current *fillable*.
+Users can provide also the XYZ coordinates at which the object should be placed
+at, as well as the index of the *layer* in which the object is added.
+A translation is performed, if needed, to place the *layout* object so that its
+CDG coincides with the given coordinates. If no position is provided, the
+*layout* object is placed in the CDG of the current *fillable*.
+
+The given *layout* object is stored at the last position of the *layer*
+identified the given index, if any is provided. This means that the object is
+added as last element of the sublist of the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+attribute the given index corresponds to.
+If no index is provided, the *layout* object is added to a new sublist of
+:py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`.
+
+This method simply updates the list of layers of the technological geometry
+layout of the current *fillable* with the given *layout* object without
+collapsing the *layers* and updating the entire *GEOM* compound object.
+To update the hierarchical tree of the *fillable* by cutting overlapping layers,
+the method :py:meth:`update_hierarchical_structure()<glow.geometry_layouts.fillable_layouts.Fillable.update_hierarchical_structure>`
+should be called. To update and display the *fillable* in the 3D viewer of
+*SALOME*, the method :py:meth:`show()<glow.geometry_layouts.fillable_layouts.Fillable.show>`
+should be run instead.
+
+The following snippet shows the usage of the method :py:meth:`add()<glow.geometry_layouts.fillable_layouts.Fillable.add>`
+when applied to a :py:class:`CartesianCell<glow.geometry_layouts.cells.CartesianCell>`
+to include:
+
+  - a circular :py:class:`Region<glow.geometry_layouts.layouts.Region>` object,
+    being a *region* of material;
+  - a :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+    object, to model an assembly of cells. For the construction of a Cartesian
+    lattice, see :ref:`lattice-def`.
+
+Results are shown in :numref:`fillable-add` for both a single cell and an
+assembly.
+
+.. code-block:: python
+
+    from glow import *
+
+    # Instantiation of a circular region, a cell and a lattice of cells
+    r1 = Region(
+      Circle(radius=0.3), "R1", {PropertyType.MATERIAL: "MAT1"}
+    )
+    cell = CartesianCell(base_props={PropertyType.MATERIAL: "MAT2"})
+    cell.add(r1)
+    lattice = CartesianLattice()
+    lattice.add_rings_of_cells(cell, 3)
+
+    # Instantiate the cell representing the assembly
+    assembly = CartesianCell(
+      width_height=tuple(i+1 for i in lattice.dimensions),
+      base_props={PropertyType.MATERIAL: "MAT2"}
+    )
+    # Add the lattice to the assembly cell
+    assembly.add(lattice)
+
+.. _fillable-add:
+.. figure:: images/fillable_add.png
+   :alt: Applying add() method to fillable objects.
+   :width: 600px
+   :align: center
+
+   Technological geometry layout after adding a single :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+   (on the left) and a *fillable* :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+   (on the right).
+
+Applying a symmetry
+"""""""""""""""""""
+
+Solving the Boltzmann transport equation on a full geometry layout can be
+computationally expensive, in particular if very complex.
+To speed up the calculations, users can rely on cuts to extract parts out of
+the existing layout, thereby isolating the minimum portion of the geometry
+required to describe the entire pattern.
+|TOOL| supports the application of specific types of symmetries to any *fillable*
+object that inherits from :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`.
+
+The method :py:meth:`apply_symmetry()<glow.geometry_layouts.fillable_layouts.Fillable.apply_symmetry>`
+allows users to apply a symmetry type by indicating an item of the enumeration
+:py:class:`SymmetryType<glow.support.types.SymmetryType>`.
+According to the type, the 2D shape that identifies the symmetry is derived and
+stored in the :py:attr:`symmetry_map<glow.geometry_layouts.fillable_layouts.Fillable.symmetry_map>`
+instance attribute; this is a dictionary associating to each :py:class:`SymmetryType<glow.support.types.SymmetryType>`
+element the corresponding :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
+instance.
+The indicated symmetry type is saved in the :py:attr:`state<glow.geometry_layouts.fillable_layouts.Fillable.state>`
+attribute and applied when the current *fillable* is displayed in the 3D viewer
+or exported to file in the *TDT*-compatible format.
+In both cases, a *common* operation is performed between the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects identifying the entire geometry layout and the shape of the symmetry.
+Only the *regions* and parts of them that are in common are kept and either
+displayed or exported.
+
+The method :py:meth:`apply_symmetry()<glow.geometry_layouts.fillable_layouts.Fillable.apply_symmetry>`
+only supports a set of :py:class:`SymmetryType<glow.support.types.SymmetryType>`
+elements that are common to all *fillable* objects. These types are the
+following ones:
+
+  - :py:attr:`FULL<glow.support.types.SymmetryType.FULL>`: the characteristic
+    shape of the entire layout is stored.
+  - :py:attr:`HALF<glow.support.types.SymmetryType.HALF>`: a rectangular shape
+    representing half of the entire layout is stored.
+  - :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>`: a rectangular
+    shape representing one quarter of the entire layout.
+
+Subclasses of :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+provide the implementation to handle type-specific symmetries.
+
+The following code snippet shows the application of a :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>`
+symmetry type for a Cartesian assembly. The result is shown in :numref:`quarter-symm`.
+
+.. code-block:: python
+
+  assembly.apply_symmetry(SymmetryType.QUARTER)
+
+.. _quarter-symm:
+.. figure:: images/lattice_qsym.png
+   :alt: Cartesian lattice after applying a quarter symmetry
+   :width: 400px
+   :align: center
+
+   Cartesian lattice after applying the :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>`
+   type of symmetry.
+
+Users should note that even if called from the *SALOME* Python console, the
+method :py:meth:`apply_symmetry()<glow.geometry_layouts.fillable_layouts.Fillable.apply_symmetry>`
+does not automatically update and display the portion of the geometry layout
+that corresponds to the applied symmetry. To display the new layout, the method
+:py:meth:`show()<glow.geometry_layouts.fillable_layouts.Fillable.show>` must
+always be called.
+In addition, the last applied symmetry is not used when the current
+:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` object
+is exported. It is up to the user to indicate the symmetry type to the function
+exporting the layout (see :ref:`layout-export`).
+
+Cloning the *fillable* instance
+"""""""""""""""""""""""""""""""
+
+The :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` class
+comes with the :py:meth:`clone()<glow.geometry_layouts.fillable_layouts.Fillable.clone>`
+method for producing a copy of the current instance that is completely
+independent from the source instance. In Python terms, this means making a
+*deep* copy. This allows the mutable attributes (e.g., lists and dictionaries)
+of a cloned *fillable* to be unlinked from the source *fillable*. This means
+that modifications to a mutable attribute in one *fillable* are not also
+performed in the corresponding attribute of the other *fillable*.
+
+Getting the geometry type edges
+"""""""""""""""""""""""""""""""
+
+As mentioned in :ref:`geom-def`, :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+objects are described in terms of the *technological geometry*, collecting the
+*regions* each associated to a material, and the *sectorised geometry*, which
+represents the refinement of the former geometry layout.
+
+The :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` class
+stores the refined geometry layout as a :py:class:`Compound<glow.interface.geom_entities.Compound>`
+object collecting the edges that subdivide the *regions* resulting by applying
+a sectorisation (see :ref:`sectorisation`).
+
+Since a :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+object possesses a hierarchical structure, when displaying the root *fillable*
+in terms of the *sectorised geometry* (see :ref:`show`), the :py:class:`Compound<glow.interface.geom_entities.Compound>`
+objects identifying the *sectorised geometry* of all the *fillables* in the
+hierarchy tree of the current istance are retrieved.
+The method :py:meth:`get_geometry_map()<glow.geometry_layouts.fillable_layouts.Fillable.get_geometry_map>`
+iterates over all the tree to collect all the *sectorised geometries* in a single
+:py:class:`Compound<glow.interface.geom_entities.Compound>` object of edges.
+This method is useful for updating the :py:attr:`geometry_maps<glow.geometry_layouts.fillable_layouts.Fillable.geometry_maps>`,
+a dictionary associating for each element of the :py:class:`GeometryType<glow.support.types.GeometryType>`
+the corresponding :py:class:`Compound<glow.interface.geom_entities.Compound>`
+object of edges. Currently, it can stores only the edges of the *sectorised
+geometry*.
+
+The following snippet shows how to update the compound of edges corresponding
+to the :py:attr:`SECTORIZED<glow.support.types.GeometryType.SECTORIZED>` type
+of geometry when a sectorisation has already been applied to a
+:py:class:`Cell<glow.geometry_layouts.cells.Cell>` instance.
+
+.. code-block:: python
+
+  # Collect the refined geometry of the cells and join it with the mesh
+  # by performing a partition
+  assembly.geometry_maps[GeometryType.SECTORIZED] = \
+      assembly.get_geometry_map(GeometryType.SECTORIZED) // wrap_shape(mesh)
+
+  # Show the resulting refined layout with the 'MATERIAL' colour map
+  assembly.show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
+
+For a deeper insight, please refer to the :ref:`symmetry-example` use case in
+the :ref:`tutorials` section (see :numref:`assembly-refined` for the resulting
+refined geometry).
+
+Getting the regions
+"""""""""""""""""""
+
+In |TOOL|, objects of the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+class represent the *leaves* of the hierarchical tree of a *fillable* object.
+When an instance of the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+subclasses is either displayed or exported, |TOOL| automatically retrieves the
+*regions* of the technological geometry.
+The methods :py:meth:`get_regions()<glow.geometry_layouts.fillable_layouts.Fillable.get_regions>`
+and :py:meth:`get_regions_with_symmetry()<glow.geometry_layouts.fillable_layouts.Fillable.get_regions_with_symmetry>`
+serve to this purpose.
+The former method iterates over all the *layers* of the current *fillable* to
+collect and return all the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects that describe the technological geometry layout.
+The *regions* are collected directly from the current *fillable* and by
+recursively calling the :py:meth:`get_regions()<glow.geometry_layouts.fillable_layouts.Fillable.get_regions>`
+method for all the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+objects in the hierarchy.
+
+The method :py:meth:`get_regions_with_symmetry()<glow.geometry_layouts.fillable_layouts.Fillable.get_regions_with_symmetry>`
+similarly retrieves the *regions* of the technological geometry, with the
+difference that only those in common with the shape of the indicated symmetry
+type are returned.
+
+Printing regions information
+""""""""""""""""""""""""""""
+
+When the geometry layout of a *fillable* is displayed in the 3D viewer of
+*SALOME*, |TOOL| retrieves and adds to the *SALOME* study the *GEOM* face of
+all the :py:class:`Region<glow.geometry_layouts.layouts.Region>` objects
+that identify the technological geometry.
+
+Users can obtain information about the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+object that corresponds to either the given *GEOM* face or the one currently
+selected in the 3D viewer.
+The method :py:meth:`print_region_info()<glow.geometry_layouts.fillable_layouts.Fillable.print_region_info>`,
+when called directly in the Python console of *SALOME*, prints the following
+data (see :numref:`reg-info`):
+
+  - the tree representation of the hierarchical structure up to the target
+    :py:class:`Region<glow.geometry_layouts.layouts.Region>` object;
+  - the code to retrieve the target :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+    object directly from the hierarchical tree of the current *fillable*;
+  - the values for each of the :py:class:`PropertyType<glow.support.types.PropertyType>`
+    items associated to the target :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+    object.
+
+.. _reg-info:
+.. figure:: images/region_info.png
+   :alt: Information about a selected region of the cell
+   :width: 800px
+   :align: center
+
+   Information about the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+   object that corresponds to the *GEOM* face of the *fillable* currently
+   selected in the 3D viewer of *SALOME*.
+
+Restoring the geometry layout
+"""""""""""""""""""""""""""""
+
+There could be cases in which users need to reset the technological geometry
+of a *fillable* by removing all the *regions* and clearing all the properties
+(see :ref:`tutorial-overlap`).
+The :py:meth:`restore()<glow.geometry_layouts.fillable_layouts.Fillable.restore>`
+method addresses this need by clearing the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+attribute from any :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+and :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` object
+previously stored.
+In addition, any symmetry and geometry types mappings (i.e. the
+:py:attr:`symmetry_map<glow.geometry_layouts.fillable_layouts.Fillable.symmetry_map>`
+and the :py:attr:`geometry_maps<glow.geometry_layouts.fillable_layouts.Fillable.geometry_maps>`
+attributes) are completely cleared.
+
+A *GEOM* face object is built from the shape of the technological geometry of
+the *fillable* to restore; the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+and the :py:attr:`regions<glow.geometry_layouts.fillable_layouts.Fillable.regions>`
+attributes are filled only with the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+object built from this *GEOM* face. However,no properties are associated to
+this new *region*.
+
+Applying Euclidean transformations
+""""""""""""""""""""""""""""""""""
+
+As mentioned in :ref:`geom-def`, Euclidean transformations are common to all
+classes of |TOOL| that inherit from :py:class:`Layout<glow.geometry_layouts.layout.Layout>`.
+The :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` class
+provides a specific implementation for these methods that is shared by all its
+subclasses.
+
+In particular, the :py:meth:`rotate()<glow.geometry_layouts.fillable_layouts.Fillable.rotate>`,
+:py:meth:`translate()<glow.geometry_layouts.geometries.fillable_layouts.Fillable.translate>`
+and :py:meth:`scale()<glow.geometry_layouts.geometries.fillable_layouts.Fillable.scale>`
+methods apply a rotation, translation and scaling, respectively, to the following
+elements:
+
+  - the py:class:`Region<glow.geometry_layouts.layouts.Region>` and
+    py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` objects
+    stored in the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+    attribute;
+  - the ``GEOM_Object`` the current *fillable* refers to;
+  - the :py:class:`Compound<glow.interface.geom_entities.Compound>` objects
+    of the :py:attr:`geometry_maps<glow.geometry_layouts.fillable_layouts.Fillable.geometry_maps>`
+    attribute;
+  - the :py:class:`Face<glow.interface.geom_entities.Face>` objects of the
+    :py:attr:`symmetry_map<glow.geometry_layouts.fillable_layouts.Fillable.symmetry_map>`
+    attribute.
+
+Users should note that even if called from the *SALOME* Python console, the
+methods applying the Euclidean transformations does not automatically display
+the updated geometry layout. To do so, the method :py:meth:`show()<glow.geometry_layouts.fillable_layouts.Fillable.show>`
+must always be called.
+
+Setting properties
+""""""""""""""""""
+
+Values for the elements of the :py:class:`PropertyType<glow.support.types.PropertyType>`
+enumeration are associated to the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects that constitute a *fillable*.
+In |TOOL|, properties are assigned directly when instantianting a
+:py:class:`Region<glow.geometry_layouts.layouts.Region>` object, a
+:py:class:`Cell<glow.geometry_layouts.cells.Cell>` one or any of its subclasses.
+In case of a :py:class:`Cell<glow.geometry_layouts.cells.Cell>`, properties are
+assigned to the :py:class:`Region<glow.geometry_layouts.layouts.Region>` object
+built from the characteristic shape of the cell.
+
+To handle the need for setting or updating the value for a specific property
+type of a :py:class:`Region<glow.geometry_layouts.layouts.Region>` object
+belonging to the hierarchical tree of the current *fillable*, the method
+:py:meth:`set_region_properties()<glow.geometry_layouts.fillable_layouts.Fillable.set_region_properties>`
+is available for all subclasses of :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`.
+
+This method allows users to set values for the indicated property types for
+the :py:class:`Region<glow.geometry_layouts.layouts.Region>` object of the
+*fillable* whose *GEOM* face is provided as input. If none is given, the *GEOM*
+face currently selected in the 3D viewer is considered.
+The whole hierarchical tree of the *fillable* is traversed to find the
+:py:class:`Region<glow.geometry_layouts.layouts.Region>` object that matches
+the *GEOM* face. If found, the corresponding :py:attr:`properties<glow.geometry_layouts.layouts.Region.properties>`
+attribute is updated.
+
+The following code snippet shows how to set values for the
+:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` type of property
+to a circular *region* whose properties was not defined at its instantiation.
+For the construction of a Cartesian cell, see :ref:`cell-def`.
+
+.. code-block:: python
+
+  # Build the cell's geometry layout by adding two circular regions
+  cell = CartesianCell(
+      name="Cartesian cell", base_props={PropertyType.MATERIAL: "MAT_1"}
+  )
+  for radius, mat in zip([0.4, 0.3], ["MAT_2", "MAT_3"]):
+      cell.add(
+          Region(
+            Circle(radius=radius), properties={PropertyType.MATERIAL: mat}
+          )
+      )
+  # Add a new circular region without any property
+  circle = Circle(radius=0.2)
+  cell.add(Region(circle))
+  # Set the circular region properties
+  cell.set_region_properties(
+    {PropertyType.MATERIAL: "MAT_4"}, circle
+  )
+  # Display the cell
+  cell.show(PropertyType.MATERIAL)
+
+In particular, materials are assigned to the characteristic shape of the Cartesian
+cell and to the *regions* directly.
+A new circular *region* is then added, and the corresponding
+:py:class:`Circle<glow.geometry_layouts.geometries.Circle>` instance is used to
+identify the *region* of the cell whose material property needed to be assigned.
+From within the *SALOME* 3D viewer, the *region* can be provided by simply
+selecting the corresponding *GEOM* face and calling the method from the
+integrated Python console.
+In any case, the cell's geometry layout with the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
+colour map is shown in :numref:`cell-after-props`.
+
+.. _cell-after-props:
+.. figure:: images/cell_properties.png
+   :alt: Cartesian cell after setting up the properties
+   :width: 400px
+   :align: center
+
+   Cartesian cell after setting up values for the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
+   property type for each region. It is shown with a colour map highlighting
+   the different values assigned to the cell's *regions*.
+
+Displaying the geometry layout
+""""""""""""""""""""""""""""""
+
+The geometry layout of any of the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+subclasses can be displayed in the 3D viewer of *SALOME* by calling the method
+:py:meth:`show()<glow.geometry_layouts.fillable_layouts.Fillable.show>`.
+This method erases all the previously shown *GEOM* objects from the view, and
+removes the *GEOM* compound that corresponds to the technological geometry
+layout of the current *fillable*. Its hierarchical tree is then updated, if
+needed, to cut any overlapping layer still not handled.
+The ``GEOM_Object`` (i.e. a *GEOM* compound) that corresponds to the
+technological geometry layout of the current *fillable* is added to the
+*SALOME study* and displayed in the 3D viewer.
+
+In addition, the method retrieves the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects (which are representative of the technological geometry layout), and,
+if necessary, applies the *common* operation with the currently active type of
+symmetry.
+The *GEOM* face of each *region* is added to the *SALOME study* and included in
+the *Object Browser* as children of the ``GEOM_Object`` of the *fillable*.
+If not displayed automatically, these *GEOM* faces can be shown all at once by
+selecting the "*Show Only Children*" item in the contextual menu (see
+:numref:`show-children`).
+
+.. _show-children:
+.. figure:: images/cell_show_children.png
+   :alt: How to display the cell's regions in SALOME
+   :width: 400px
+   :align: center
+
+   How to display the *regions* associated to a cell in *SALOME*.
+
+The :py:meth:`show()<glow.geometry_layouts.fillable_layouts.Fillable.show>`
+method displays the *regions* according to a colour map based on the values
+assigned to each *region* for the provided element of the enumeration
+:py:class:`PropertyType<glow.support.types.PropertyType>`.
+The RGB colours of the map are randomly generated and uniquely associated
+to the values of the indicated element of :py:class:`PropertyType<glow.support.types.PropertyType>`
+that each *region* stores in the :py:attr:`properties<glow.geometry_layouts.layouts.Region.properties>`
+attribute.
+If no property type is provided, the *regions* are displayed with a default colour.
+
+By default, the :py:meth:`show()<glow.geometry_layouts.fillable_layouts.Fillable.show>`
+method displays the *regions* of the technological geometry. If a different item
+of the :py:class:`GeometryType<glow.support.types.GeometryType>` enumeration is
+given (i.e. the :py:attr:`SECTORIZED<glow.support.types.GeometryType.SECTORIZED>`
+one), the method also shows the :py:class:`Compound<glow.interface.geom_entities.Compound>`
+of edges of the refined geometry.
+This :py:class:`Compound<glow.interface.geom_entities.Compound>` object is
+retrieved from the refined geometry layouts of all the *fillable* objects in
+the hierarchical tree of the current one, extracting the common part with the
+shape of the symmetry currently applied, if needed.
+The resulting *GEOM* compound is added to the *SALOM study*, and, in the *Object
+Browser*, appears as a child of the ``GEOM_Object`` of the *fillable*.
+
+The following code snippet shows how to display the refined geometry layout of
+a :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>` instance by applying
+a colour map according to the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
+property type. :numref:`cell-mat` presents the resulting geometry layout as
+displayed in the 3D viewer of *SALOME*.
+
+.. code-block:: python
+
+  hex_cell.show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
+
+.. _cell-mat:
+.. figure:: images/cell_sect_col.png
+   :alt: Cell's sectorised geometry with MATERIAL colour map
+   :width: 400px
+   :align: center
+
+   Refined geometry layout of a hexagonal cell. Regions are displayed according
+   to the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` colour
+   map.
+
+By default, the :py:meth:`show()<glow.geometry_layouts.fillable_layouts.Fillable.show>`
+method automatically displays the *GEOM* faces of all the
+:py:class:`Region<glow.geometry_layouts.layouts.Region>` objects of the *fillable*.
+If specified differently by providing a boolean flag with value ``False``, this
+method only adds the *GEOM* faces for the *regions* and the *GEOM* compound of
+edges of the refined geometry layout to the *SALOME study* without triggering
+their visualisation in the 3D viewer.
+This setting can be used to avoid overheads when geometry layouts characterised
+by many *GEOM* face objects are shown in *SALOME*.
+
+Updating the ``GEOM_Object``
+""""""""""""""""""""""""""""
+
+The method :py:meth:`update()<glow.geometry_layouts.fillable_layouts.Fillable.update>`
+allows users to update the ``GEOM_Object`` of the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+instance with another ``GEOM_Object`` provided in terms of a
+:py:class:`Compound<glow.interface.geom_entities.Compound>` or a
+:py:class:`Face<glow.interface.geom_entities.Face>` object.
+This method also updates the centre of the layout (i.e. the
+:py:attr:`o<glow.geometry_layouts.fillable_layouts.Fillable.o>` attribute) and
+any :py:class:`Compound<glow.interface.geom_entities.Compound>` object of edges
+associated to a :py:class:`GeometryType<glow.support.types.GeometryType>` item.
+
+Users should note that this method does not update the *regions* and *fillables*
+stored in the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+attribute accordingly with the updated ``GEOM_Object``.
+
+Updating the hierarchical tree
+""""""""""""""""""""""""""""""
+
+As described in :ref:`geom-def`, the building concept of |TOOL| is based on the
+*layers* logic to model the hierarchical tree of a *fillable*.
+Whenever objects of the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+subclasses are displayed in the 3D viewer of *SALOME* or exported to file in
+the *TDT*-compatible format, the method :py:meth:`update_hierarchical_structure()<glow.geometry_layouts.fillable_layouts.Fillable.update_hierarchical_structure>`
+is automatically called.
+
+This method traverses the entire hierarchical tree in reverse order to handle
+any *region* and *fillable* of a layer that is overlapped by a layer in a higher
+position along the conceptual Z-axis brought by the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+attribute.
+During this traversal, any *region* or *fillable* that is overlapped by a higher
+layer is either clipped (if partially overlapped) or removed entirely from the
+hierarchical tree (if fully covered).
+
+This operation is skipped and the method exits without changes if there is no
+need to update the layers of the *fillable*. This happens if the
+:py:attr:`is_update_needed<glow.geometry_layouts.layouts.LayoutState.is_update_needed>`
+value of the :py:attr:`state<glow.geometry_layouts.fillable_layouts.Fillable.state>`
+attribute is ``False``.
+
+The operation of assembling all the layers requires that each *node* in the
+hierarchical tree is up-to-date. This means that each :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+object found in the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+attribute is further processed by recursively calling this method to update its
+hierarchical structure.
+
+Lastly, the ``GEOM_Object`` representative of the current *fillable* is updated
+by collecting in a *GEOM* compound all the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects retrieved from each layer.
+
+To simplify the hierarchical tree, a ``True`` value can be provided to the
+:py:meth:`update_hierarchical_structure()<glow.geometry_layouts.fillable_layouts.Fillable.update_hierarchical_structure>`
+method. If so, the hierarchical tree of the *fillable* is collapsed and its
+layers reduced to a sigle layer collecting all the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects of the *fillable*.
+Users should note that any previously stored :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+object is completely removed from the hierarchical tree and substituted with its
+:py:class:`Region<glow.geometry_layouts.layouts.Region>` objects.
+
+.. _cell-def:
 
 Cell Definition
 ^^^^^^^^^^^^^^^
 
-|TOOL| comes with classes to build cells having either a hexagonal or a
+|TOOL| comes with classes to build cells having a generic, a hexagonal or a
 rectangular characteristic *surface*.
-The module :py:mod:`glow.geometry_layouts.cells` provides the abstract base class
+The module :py:mod:`glow.geometry_layouts.cells` provides the base class
 :py:class:`Cell<glow.geometry_layouts.cells.Cell>`, which represents a cell
-described in terms of an instance from the subclasses of the
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` base class.
+characterised by a generic 2D shape, described from a
+:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` instance, or any
+of its subclasses.
+
+In |TOOL|, according to the hierarchical tree logic, cells are the *nodes* as
+they inherit from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+class.
+
+The :py:class:`Cell<glow.geometry_layouts.cells.Cell>` class inherits from the
+:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` class which
+
+
+
 The subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>` are the
 following ones:
 
-  - class :py:class:`RectCell<glow.geometry_layouts.cells.RectCell>` that
-    represents rectangular cells.
-  - class :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>` that
-    represents hexagonal cells.
-  - class :py:class:`GenericCell<glow.geometry_layouts.cells.GenericCell>`
-    that represents cells characterised by any *GEOM face* or *GEOM compound*
-    created in *SALOME*.
+  - class :py:class:`CartesianCell<glow.geometry_layouts.cells.CartesianCell>`
+    for representing rectangular cells.
+  - class :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>` for
+    representing hexagonal cells.
 
-When instantiating any of the aforementioned sublasses, the corresponding instance
-of the :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` subclasses
-is built. Depending on the cell type, the instantiation requires either the
-characteristic dimensions of the *surface* (e.g. width and height for a rectangle
-or edge length for a hexagon) or the *GEOM face*, or *GEOM compound*, directly
-(:py:class:`GenericCell<glow.geometry_layouts.cells.GenericCell>` case).
+When instantiating any of the aforementioned subclasses, the corresponding
+instance of the :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
+subclasses is built from the characteristic dimensions.
+For the generic :py:class:`Cell<glow.geometry_layouts.cells.Cell>` class, the
+initialisation is done from any 2D shape, instance of the
+:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` subclasses.
 
 The following code snippet shows how to instantiate the different type of cells
 available in |TOOL|.
 
 .. code-block:: python
 
-  from glow.geometry_layouts.cells import GenericCell, HexCell, RectCell
+  from glow.geometry_layouts.cells import CartesianCell, Cell, HexCell
+
+  rect_cell = CartesianCell(
+      center=(0.0, 0.0, 0.0),
+      width_height=(1.0, 2.0),
+      rounded_corners=[(1, 0.1), (3, 0.1)],
+      base_props={PropertyType.MATERIAL: "MAT"},
+      name='RectCell'
+  )
 
   hex_cell = HexCell(
       center=(0.0, 0.0, 0.0),
-      edge_length=1.0,
-      name='HexCell')
+      side=2.0,
+      base_props={PropertyType.MATERIAL: "MAT"},
+      name='HexCell'
+  )
 
-  rect_cell = RectCell(
-      center=(0.0, 0.0, 0.0),
-      height_x_width=(1.0, 2.0),
-      rounded_corners=[(1, 0.1), (3, 0.1)],
-      name='RectCell')
+  gnrc_cell = Cell(
+    shape=surface,
+    base_props={PropertyType.MATERIAL: "MAT"}
+  )
 
-  gnrc_cell = GenericCell(shape=surface)
-
-For a rectangular cell, the ``rounded_corners`` parameter indicates the index
+For a Cartesian cell, the ``rounded_corners`` parameter indicates the index
 of the corner of the rectangle and the associated curvature radius to generate
 a rectangle with rounded corners.
-For a :py:class:`GenericCell<glow.geometry_layouts.cells.GenericCell>`, the
-instantiation requires to specify a *GEOM face* or a *GEOM compound* representing
-its geometric *surface*.
+The
+
+
 
 The class :py:class:`Cell<glow.geometry_layouts.cells.Cell>` declares attributes
 and methods common to all its subclasses. Public methods cover the following
@@ -549,6 +1247,8 @@ cell are the following:
   new_cell = hex_cell.translate((1.0, 1.0, 0.0))
   new_cell.show()
 
+.. _sectorisation:
+
 Sectorization Operation
 """""""""""""""""""""""
 
@@ -667,25 +1367,25 @@ colorset is shown in :numref:`cell-after-props`.
 Inspection of Regions
 """""""""""""""""""""
 
-When *regions* of a cell are displayed in the *SALOME* 3D viewer, users can
-obtain information about an individual *region*, including its assigned
-properties. This is done by calling the method :py:meth:`get_regions_info()<glow.geometry_layouts.cells.Cell.get_regions_info>`
-directly in the Python console of *SALOME* from an object
-of any of the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`.
-If no *region* (as *GEOM* face), or more than one, is selected when calling the
-method, an exception is raised.
-The available information, which is printed in the Python console, includes the
-name of the cell's *region* and the value for each of the assigned type of
-properties (see :numref:`reg-info`).
+.. When *regions* of a cell are displayed in the *SALOME* 3D viewer, users can
+.. obtain information about an individual *region*, including its assigned
+.. properties. This is done by calling the method :py:meth:`get_regions_info()<glow.geometry_layouts.cells.Cell.get_regions_info>`
+.. directly in the Python console of *SALOME* from an object
+.. of any of the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`.
+.. If no *region* (as *GEOM* face), or more than one, is selected when calling the
+.. method, an exception is raised.
+.. The available information, which is printed in the Python console, includes the
+.. name of the cell's *region* and the value for each of the assigned type of
+.. properties (see :numref:`reg-info`).
 
-.. _reg-info:
-.. figure:: images/region_info.png
-   :alt: Information about a selected region of the cell
-   :width: 400px
-   :align: center
+.. .. _reg-info:
+.. .. figure:: images/region_info.png
+..    :alt: Information about a selected region of the cell
+..    :width: 400px
+..    :align: center
 
-   Information about a selected *region* of the cell; its name and values for
-   the assigned properties are printed.
+..    Information about a selected *region* of the cell; its name and values for
+..    the assigned properties are printed.
 
 Updating the Cell's Geometry Layout
 """""""""""""""""""""""""""""""""""
@@ -752,6 +1452,8 @@ layout to its base *surface* (e.g. a *GEOM face* identifying a rectangle) withou
 any inner circle.
 The sectorized layout, as well as the properties and sectorization options, are
 completely removed.
+
+.. _lattice-def:
 
 Lattice Definition
 ^^^^^^^^^^^^^^^^^^
@@ -1211,15 +1913,6 @@ a :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>` and a
 :py:attr:`TWELFTH<glow.support.types.SymmetryType.TWELFTH>` symmetry to a
 cartesian and a hexagonal lattice, respectively.
 
-.. _quarter-symm:
-.. figure:: images/lattice_qsym.png
-   :alt: Cartesian lattice after applying a quarter symmetry
-   :width: 400px
-   :align: center
-
-   Cartesian lattice after applying the :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>`
-   type of symmetry.
-
 .. _twelfth-symm:
 .. figure:: images/lattice_twsym.png
    :alt: Hexagonal lattice after applying a twelfth symmetry
@@ -1393,7 +2086,7 @@ layout of :numref:`restored-cells`.
    the overlapped cells. The geometry layout is displayed with the
    :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` colorset.
 
-.. _lattice-export:
+.. _layout-export:
 
 Lattice Analysis and Export
 ---------------------------
@@ -1449,7 +2142,7 @@ include:
   - the type of symmetry applied to the geometry layout.
 
 The analysis step involves the extraction of the geometric data, that is needed
-for the generation of the output TDT file, from the layout.
+for the generation of the output *TDT* file, from the layout.
 The first step consists in determining the *GEOM compound* to analyse, if one
 or more lattices are provided; this compound is selected on the basis of the
 :py:class:`GeometryType<glow.support.types.GeometryType>` and on the applied

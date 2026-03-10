@@ -194,6 +194,8 @@ The result of the following code is shown in :numref:`cell-update`.
    circles. It is shown by applying a colour map that highlights the type of
    property :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`.
 
+.. _symmetry-example:
+
 Cartesian Assembly With Symmetry
 --------------------------------
 
