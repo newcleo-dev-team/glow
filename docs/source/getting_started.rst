@@ -111,9 +111,9 @@ The following classes are direct children of :py:class:`Layout<glow.geometry_lay
     wrapper class.
   - :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`. It
     represents any geometry layout that can be filled with several regions,
-    each associated to a set of properties. This class inherits from the
-    :py:class:`Compound<glow.interface.geom_entities.Compound>` wrapper class
-    since it groups several *GEOM* faces together.
+    each associated to a set of properties. It is an *abstract* class that
+    inherits from the :py:class:`Compound<glow.interface.geom_entities.Compound>`
+    wrapper class since it groups several *GEOM* faces together.
 
 The building concept adopted in |TOOL| to describe any geometry layout of cells
 and lattices is based on the *layers* idea. *Layers* are meant to represent the
@@ -166,7 +166,7 @@ can be displayed in the 3D viewer of *SALOME* in terms of one of the
 aforementioned types of geometry. This is performed automatically by traversing
 the hierarchical tree to collect all the corresponding geometry layouts.
 
-|TOOL| allow users to display the *regions* of a geometry layout according to
+|TOOL| allows users to display the *regions* of a geometry layout according to
 a colour map associated to a specific property type. Given the hierarchical
 structure of a *fillable*, its layers are traversal to collect all the
 :py:class:`Region<glow.geometry_layouts.layouts.Region>` objects coming for
@@ -176,6 +176,18 @@ Each :py:class:`Region<glow.geometry_layouts.layouts.Region>` instance associate
 its *GEOM* face (part of the technological geometry layout) with a colour that
 corresponds to the value of the property type to be visualised in the 3D viewer
 of *SALOME*.
+
+Users can assign values (as a string) for the type of properties available from
+the :py:class:`PropertyType<glow.support.types.PropertyType>` enumeration to any
+:py:class:`Region<glow.geometry_layouts.layouts.Region>` object. These property
+types include:
+
+  - :py:class:`MATERIAL<glow.support.types.MATERIAL>`, to indicate the name of
+    the material.
+
+Information about the :py:class:`MATERIAL<glow.support.types.MATERIAL>`
+property, in terms of its assigned values for the *regions*, is included in
+the output file when the geometry is exported.
 
 The specific classes associated to *cells* and *lattices*, which can be used to
 model assemblies, and even the entire core, are the following ones:
@@ -528,6 +540,8 @@ assembly.
    (on the left) and a *fillable* :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
    (on the right).
 
+.. _fillable-symm:
+
 Applying a symmetry
 """""""""""""""""""
 
@@ -568,7 +582,8 @@ following ones:
     shape representing one quarter of the entire layout.
 
 Subclasses of :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
-provide the implementation to handle type-specific symmetries.
+provide the implementation to handle type-specific symmetries (see
+:ref:`cell-symm`).
 
 The following code snippet shows the application of a :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>`
 symmetry type for a Cartesian assembly. The result is shown in :numref:`quarter-symm`.
@@ -843,6 +858,8 @@ colour map is shown in :numref:`cell-after-props`.
    property type for each region. It is shown with a colour map highlighting
    the different values assigned to the cell's *regions*.
 
+.. _show:
+
 Displaying the geometry layout
 """"""""""""""""""""""""""""""
 
@@ -995,20 +1012,14 @@ Cell Definition
 
 |TOOL| comes with classes to build cells having a generic, a hexagonal or a
 rectangular characteristic *surface*.
+According to the hierarchical tree logic, cells are the *nodes* as they inherit
+from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+abstract class.
 The module :py:mod:`glow.geometry_layouts.cells` provides the base class
 :py:class:`Cell<glow.geometry_layouts.cells.Cell>`, which represents a cell
 characterised by a generic 2D shape, described from a
 :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` instance, or any
 of its subclasses.
-
-In |TOOL|, according to the hierarchical tree logic, cells are the *nodes* as
-they inherit from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
-class.
-
-The :py:class:`Cell<glow.geometry_layouts.cells.Cell>` class inherits from the
-:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` class which
-
-
 
 The subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>` are the
 following ones:
@@ -1022,9 +1033,7 @@ When instantiating any of the aforementioned subclasses, the corresponding
 instance of the :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`
 subclasses is built from the characteristic dimensions.
 For the generic :py:class:`Cell<glow.geometry_layouts.cells.Cell>` class, the
-initialisation is done from any 2D shape, instance of the
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` subclasses.
-
+initialisation is done from any 2D shape.
 The following code snippet shows how to instantiate the different type of cells
 available in |TOOL|.
 
@@ -1055,246 +1064,63 @@ available in |TOOL|.
 For a Cartesian cell, the ``rounded_corners`` parameter indicates the index
 of the corner of the rectangle and the associated curvature radius to generate
 a rectangle with rounded corners.
-The
+The ``base_props`` parameter allows to indicate the name of the properties that
+are associated to the characteristic shape of the cell. After the initialisation,
+the hierarchical tree of the cell contains a single :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+object made from the *GEOM* face of the characteristic shape and the specified
+properties.
 
-
-
-The class :py:class:`Cell<glow.geometry_layouts.cells.Cell>` declares attributes
-and methods common to all its subclasses. Public methods cover the following
-functionalities:
-
-  - displaying the cell's geometry layout in the *SALOME* 3D viewer;
-  - adding and removing circles within the cell's boundaries;
-  - applying transformation operations for rotating and translating the cell's
-    characteristic *GEOM* elements;
-  - applying a sectorization operation of the cell's geometry layout;
-  - setting up values for the available property types associated to one or all
-    the *regions* of the cell's technological geometry;
-  - inspecting the information (name and properties value) related to a specific
-    *region* of the cell that has been selected in the *SALOME* 3D viewer;
-  - updating the cell's geometry layout with a *GEOM face* or a *GEOM compound*;
-  - restoring the cell to its original state in terms of both geometry and the
-    properties associated with its *regions*.
-
-In the following, all these methods are detailed.
-
-.. _cell-show:
-
-Displaying the Cell's Geometry Layout
-"""""""""""""""""""""""""""""""""""""
-
-The cell's geometry layout can be displayed in the *SALOME* 3D viewer by calling
-the method :py:meth:`show()<glow.geometry_layouts.cells.Cell.show>`.
-The method has two parameters, each associated with a default value:
-
-  - ``property_type_to_show``, an item of the enumeration :py:class:`PropertyType<glow.support.types.PropertyType>`,
-    it identifies the property type (e.g. the *material*) according to which
-    the cell's *regions* (i.e. the *GEOM faces*) are displayed with a color.
-    Each *region* has a colour associated with the value of the indicated
-    property type. If no property type is provided, the *regions* are displayed
-    with a default colour.
-  - ``geometry_type_to_show``, an item of the enumeration :py:class:`GeometryType<glow.support.types.GeometryType>`,
-    it identifies the type of geometry to show, i.e. either the technological
-    or the sectorized one. The cell's *regions*, identified by a list of objects
-    of the dataclass :py:class:`Region<glow.geometry_layouts.cells.Region>`,
-    are build from the *GEOM compound* associated with the technological or
-    sectorized layout. By default, the method displays the *regions* of the
-    technological geometry.
-
-Users should note that the method :py:meth:`show()<glow.geometry_layouts.cells.Cell.show>`
-will raise an exception if they request to display the *regions* according to
-a property type for which a *region* has no corresponding value.
-
-The following code snippet shows how to display the *regions* of the cell's
-technological geometry (indicated by the :py:attr:`TECHNOLOGICAL<glow.support.types.GeometryType.TECHNOLOGICAL>`
-type of geometry) with a colorset in terms of the property type
-:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`.
-
-.. code-block:: python
-
-  hex_cell.show(
-      property_type_to_show=PropertyType.MATERIAL,
-      geometry_type_to_show=GeometryType.TECHNOLOGICAL
-  )
-
-*Regions* are added to the *Object Browser* in *SALOME* as children of the cell
-they belong to. If not displayed automatically (it can happen when running a
-new *SALOME* instance with a script), they can be shown by selecting the
-"*Show Only Children*" item in the contextual menu for the cell (see
-:numref:`show-children`).
-
-.. _show-children:
-.. figure:: images/cell_show_children.png
-   :alt: How to display the cell's regions in SALOME
-   :width: 400px
-   :align: center
-
-   How to display the *regions* associated to a cell in *SALOME*.
-
-The geometry layout resulting from the aforementioned code is shown in
-:numref:`cell-mat`.
-
-.. _cell-mat:
-.. figure:: images/cell_show_col.png
-   :alt: Cell's technological geometry with MATERIAL colorset
-   :width: 400px
-   :align: center
-
-   Hexagonal cell's technological geometry with the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
-   colorset.
-
-Circles Addition and Removal
-""""""""""""""""""""""""""""
-
-Typically, fuel pin cells, having either a cartesian or a hexagonal geometry,
-are characterised by several concentric circles to represent the different
-regions of a cell, each having its own properties.
-In general, circles can be placed either in the cell's centre or in any other
-point within its boundaries.
-
-In |TOOL|, the method :py:meth:`add_circle()<glow.geometry_layouts.cells.Cell.add_circle>`
-allows to position a circle, with a specified radius, inside the cell. The
-addition is performed only if the circle's radius does not exceeds the
-characteristic dimensions (e.g. the apothem for a hexagon) of the *surface* (
-:py:class:`Surface<glow.geometry_layouts.geometries.Surface>` subclasses) the
-cell is based on.
-Given the circle's radius, a *GEOM face* object is built in the given position,
-if any is specified, otherwise the circle is added in the cell's centre.
-In any case, a *partition* operation between the *GEOM compound* representing
-the current technological geometry of the cell and the *GEOM face* of the new
-circle is performed, resulting in a *GEOM compound* that comprises both.
-
-The following code snippet shows how to add circles in specific positions within
-a hexagonal cell.
-
-.. code-block:: python
-
-  hex_cell.add_circle(radius=0.5)
-  hex_cell.add_circle(radius=0.1, position=(0.2, 0.2, 0.0))
-  hex_cell.show()
-
-:numref:`cell-circles` shows the result of adding two circles, the first in the
-cell's centre, the second in a specific position. The resulting updated
-technological geometry is shown in the *SALOME* 3D viewer after calling the
-method :py:meth:`show()<glow.geometry_layouts.cells.Cell.show>`.
-
-.. _cell-circles:
-.. figure:: images/cell_add_circle.png
-   :alt: Hexagonal cell with two circular regions in SALOME
-   :width: 400px
-   :align: center
-
-   Hexagonal cell's geometry layout after adding two circles to its
-   technological geometry.
-
-Calling the method :py:meth:`add_circle()<glow.geometry_layouts.cells.Cell.add_circle>`
-updates the technological geometry of the cell. The same goes for the method
-:py:meth:`remove_circle()<glow.geometry_layouts.cells.Cell.remove_circle>`.
-
-When any property type (e.g. a *material*) has been assigned to the cell's *region*
-where the circle is added, the *regions* resulting from partitioning the cell
-with the circle inherit the properties of the overlapped *regions* (see
-:numref:`prop-regions`).
-
-.. _prop-regions:
-.. figure:: images/cell_prop_regions.png
-   :alt: Hexagonal cell with property colorset in SALOME
-   :width: 400px
-   :align: center
-
-   Hexagonal cell's technological geometry shown with a properties colorset;
-   the new circular *regions* have the same property type value as the *region*
-   they overlap.
-
-If the added circle is cell-centred, then it also inherits the sectorization
-options of the overlapped centred *region* (see :numref:`sect-regions`).
-
-.. _sect-regions:
-.. figure:: images/cell_sect_regions.png
-   :alt: Hexagonal cell with sectorization visualization in SALOME
-   :width: 400px
-   :align: center
-
-   Hexagonal cell's sectorized geometry; only the cell-centred circle is
-   subdivided in six regions as the the overlapped *region*.
-
-When removing a circular *region* having any property type or sectorization option
-associated, the *region* resulting from its removal keeps the same values of the
-*region* that surrounded the removed circular *region*.
-
-Transformation Operations
-"""""""""""""""""""""""""
-
-Transformation operations can be applied by calling the methods for rotating
-or translating the cell's geometric elements, i.e. the *GEOM compounds*
-representing the cell's technological and sectorized layouts, as well as the
-:py:class:`Region<glow.geometry_layouts.cells.Region>` objects corresponding
-to the layout currently displayed.
-The method :py:meth:`rotate()<glow.geometry_layouts.cells.Cell.rotate>`
-requires the rotation angle, in degrees, and assumes that the rotation is
-performed around the Z-axis. The direction of the rotation follows the standard
-*right-hand* rule.
-The method :py:meth:`translate()<glow.geometry_layouts.cells.Cell.translate>`
-needs the XYZ coordinates of the new centre of the cell.
-While the former operates on the same instance, the latter returns a deep copy
-of the original instance positioned in the new centre.
-For a hexagonal cell, the code instructions for rotating and translating the
-cell are the following:
-
-.. code-block:: python
-
-  hex_cell.rotate(90)
-  new_cell = hex_cell.translate((1.0, 1.0, 0.0))
-  new_cell.show()
+The classes for representing a cell in a geometry layout, besides inheriting
+attributes and methods from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+superclass, declare a public method for handling the sectorisation operation.
+In addition, each provides its own implementation for deriving the shape of the
+symmetry according to the cell-specific symmetry types.
 
 .. _sectorisation:
 
 Sectorization Operation
 """""""""""""""""""""""
 
-Other than the technological geometry, cells can be displayed also in terms of
-the sectorized one.
-This type of geometry consists in subdividing the cell's *regions* of the
-technological geometry in a number of angular regions (the *sectors*) which is
-specific for the type of cell. Subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>` declares
-the available number of sectors a *region* of the technological geometry can have,
-as well as the starting angle from which the subdivision starts.
-We can have the following values:
+As mentioned in :ref:`geom-def`, the geometry layout of a :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`,
+and, consequently, any :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
+and its subclasses instances, can be refined by subdividing the *regions* of
+the technological geometry into a specified number of sectors.
+:py:class:`Cell<glow.geometry_layouts.cells.Cell>` and its subclasses share
+the same internal implementation for handling the sectorisation operation by
+deriving the *GEOM* compound of edges identifying the sectors (see
+:py:meth:`sectorize()<glow.geometry_layouts.cells.Cell.sectorize>`).
+In addition, the :py:meth:`sectorize()<glow.geometry_layouts.cells.CartesianCell.sectorize>`
+method for the :py:class:`CartesianCell<glow.geometry_layouts.cells.CartesianCell>`
+class has the option of applying the *windmill* sectorization to the region
+farthest from the cell's centre, provided that the *region* is subdivided into
+eight or sixteen sectors.
 
-  - :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>` - admitted number
-    of sectors are either `1` or `6`, while `0` or `30` for the starting angle.
-  - :py:class:`RectCell<glow.geometry_layouts.cells.RectCell>` - admitted number
-    of sectors are `1`, `4`, `8` and `16`, while the corresponding angles are
-    `0` and `45.0` for a subdivision in four sectors, `0` and `22.5` for a
-    subdivision in eight sectors, `0` for a subdivision in one or sixteen
-    sectors.
+The sectorisation operation is configured by providing two lists to the
+:py:meth:`sectorize()<glow.geometry_layouts.cells.Cell.sectorize>` method, one
+containing the number of sectors into which each cell-centred region has to be
+split, the other the angle (in degrees) the subdivision should start from wrt
+the X-axis. The order of the elements in the two lists follows the outwards
+direction from the cell's centre.
+The :py:meth:`sectorize()<glow.geometry_layouts.cells.CartesianCell.sectorize>`
+method for a Cartesian cell also accepts the ``windmill`` parameter, a Boolean
+flag indicating whether the wings of the *windmill* sectorization are derived.
 
-Rectangular cells also have the option of applying a *windmill* sectorization
-to the region farthest from the cell's center, provided that the *region* is
-subdivided into eight sectors.
-
-Each of the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
-provide their own configuration for applying the sectorization. In particular,
-for a :py:class:`RectCell<glow.geometry_layouts.cells.RectCell>` the ``windmill``
-parameter can be provided to apply a *windmill* sectorization, while for
-:py:class:`HexCell<glow.geometry_layouts.cells.HexCell>` and
-:py:class:`GenericCell<glow.geometry_layouts.cells.GenericCell>` this parameter
-is absent. In any case, the logic for subdividing the *regions* in sectors is
-common to all subclasses.
+The *GEOM* edges describing the sectorization are built so that they propagate
+radially from the centre of the cell.
+The result of the intersection between each region and the subdivision edges
+is collected in a :py:class:`Compound<glow.interface.geom_entities.Compound>`
+object and stored as entry in the :py:attr:`geometry_maps<glow.geometry_layouts.fillable_layouts.Fillable.geometry_maps>`
+dictionary for the :py:attr:`SECTORIZED<glow.support.types.GeometryType.SECTORIZED>`
+type of geometry.
 
 The following code snippet shows how to apply a sectorization, with ``windmill``
-option enabled, for a cartesian cell having two cell-centred circles.
+option enabled, for a Cartesian cell having two cell-centred circles.
+:numref:`cart-cell-sect` shows the result after applying the indicated sectorization.
 
 .. code-block:: python
 
   rect_cell.sectorize([1, 4, 8], [0, 45, 22.5], windmill=True)
-  rect_cell.show(geometry_type_to_show=GeometryType.SECTORIZED)
-
-Elements in the two lists provided to the method
-:py:meth:`sectorize()<glow.geometry_layouts.cells.RectCell.sectorize>` are
-associated to the *regions* from the closest to the farthest one from the cell's
-centre.
-:numref:`cart-cell-sect` shows the result after applying the indicated sectorization.
+  rect_cell.show(GeometryType.SECTORIZED)
 
 .. _cart-cell-sect:
 .. figure:: images/cell_sectorize.png
@@ -1302,156 +1128,42 @@ centre.
    :width: 400px
    :align: center
 
-   Cartesian cell after applying the sectorization operation. The number of
-   subdivisions of the cell's *regions* matches the order in which sectorization
-   numbers are provided to the method.
+   Cartesian cell after applying the sectorization operation.
 
-.. _set-cell-prop:
+.. _cell-symm:
 
-Setting Up the Cell's Regions Properties
+Applying cell's type-specific symmetries
 """"""""""""""""""""""""""""""""""""""""
 
-Cells' *regions* can be displayed by applying a colorset that depends on the type
-of property to show, as item of the :py:class:`PropertyType<glow.support.types.PropertyType>`
-enumeration. An example of property type is the *material* constituing each
-*region*, identified by the item :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`.
-To set values for a specific property type, users can rely on two methods:
+As mentioned in the :ref:`fillable-symm` section, the method :py:meth:`apply_symmetry<glow.geometry_layouts.fillable_layouts.Fillable.apply_symmetry>`
+by default supports the construction of the shape of the symmetry associated to
+the :py:attr:`FULL<glow.support.types.SymmetryType.FULL>`, :py:attr:`HALF<glow.support.types.SymmetryType.HALF>`
+and :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>` types.
 
-  - :py:meth:`set_properties()<glow.geometry_layouts.cells.Cell.set_properties>`,
-    which allows users to set values for different types of properties for *all*
-    the regions of the cell's technological geometry.
-    The convention for declaring the values of a property is from the closest
-    to the farthest *region* with respect to the cell's centre.
-  - :py:meth:`set_region_property()<glow.geometry_layouts.cells.Cell.set_region_property>`,
-    which allows to set a value for the indicated type of property of a *single*
-    region of a cell; this can be either the *GEOM face* currently selected in
-    the *SALOME* 3D viewer or the one provided as parameter to the method.
+In addition to aforementioned common symmetry types, the
+:py:class:`CartesianCell<glow.geometry_layouts.cells.CartesianCell>` class
+supports the following ones:
 
-The following code snippet shows how to apply values for the
-:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` type of property,
-which is the only one currently implemented.
+  - :py:attr:`EIGHTH<glow.support.types.SymmetryType.EIGHTH>`: a right triangular
+    shape representing one eighth of the entire cell;
+  - :py:attr:`DIAG<glow.support.types.SymmetryType.DIAG>`: a right triangular
+    shape representing a half of the entire cell cut along the diagonal of its
+    characteristic shape.
 
-.. code-block:: python
+The :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>` class, besides the
+common symmetry types, supports also the following ones:
 
-  rect_cell.set_properties(
-      {PropertyType.MATERIAL: ['GAP', 'FUEL', 'COOLANT']}
-  )
-  rect_cell.add_circle(0.1)
-  rect_cell.set_region_property(
-      PropertyType.MATERIAL,
-      'MAT',
-      Circle(radius=0.1).face
-  )
-  rect_cell.show(PropertyType.MATERIAL)
+  - :py:attr:`THIRD<glow.support.types.SymmetryType.THIRD>`: a parallelogram
+    representing one third of the entire cell;
+  - :py:attr:`SIXTH<glow.support.types.SymmetryType.SIXTH>`: a regular triangular
+    shape representing one sixth of the entire cell;
+  - :py:attr:`TWELFTH<glow.support.types.SymmetryType.TWELFTH>`: a right triangular
+    shape representing one twelfth of the entire cell.
 
-In particular, given a cartesian cell with two cell-centred circles, the first
-method enables all the material values to be set at the same time.
-A new circular *region* is added, and the corresponding *GEOM face* is used to
-identify the *region* within the cell to which the property should be assigned.
-From within the *SALOME* 3D viewer, the *region* can be provided by simply
-selecting the corresponding *GEOM face* and calling the method from the
-integrated Python console.
-In any case, the cell's geometry layout with the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
-colorset is shown in :numref:`cell-after-props`.
-
-.. _cell-after-props:
-.. figure:: images/cell_properties.png
-   :alt: Cartesian cell after setting up the properties
-   :width: 400px
-   :align: center
-
-   Cartesian cell after setting up values for the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
-   property type for each region. It is shown with a colorset highlighting the
-   different values assigned to the cell's *regions*.
-
-Inspection of Regions
-"""""""""""""""""""""
-
-.. When *regions* of a cell are displayed in the *SALOME* 3D viewer, users can
-.. obtain information about an individual *region*, including its assigned
-.. properties. This is done by calling the method :py:meth:`get_regions_info()<glow.geometry_layouts.cells.Cell.get_regions_info>`
-.. directly in the Python console of *SALOME* from an object
-.. of any of the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`.
-.. If no *region* (as *GEOM* face), or more than one, is selected when calling the
-.. method, an exception is raised.
-.. The available information, which is printed in the Python console, includes the
-.. name of the cell's *region* and the value for each of the assigned type of
-.. properties (see :numref:`reg-info`).
-
-.. .. _reg-info:
-.. .. figure:: images/region_info.png
-..    :alt: Information about a selected region of the cell
-..    :width: 400px
-..    :align: center
-
-..    Information about a selected *region* of the cell; its name and values for
-..    the assigned properties are printed.
-
-Updating the Cell's Geometry Layout
-"""""""""""""""""""""""""""""""""""
-
-The methods of the class :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
-enable the cell's technological and sectorized geometries to be customized
-by means of circles and lines, where the latter must follow the rules tied to
-the sectorization operation (i.e. lines subdivides *regions* of the technological
-geometry in fixed numbers of angular sectors).
-To support any customization of the cell's geometry layout, while keeping the
-base *surface* (subclass of :py:class:`Surface<glow.geometry_layouts.geometries.Surface>`)
-the same, two methods are provided:
-
-  - :py:meth:`update_geometry()<glow.geometry_layouts.cells.Cell.update_geometry>`,
-    which enables to update the *GEOM compound*, representing either the
-    technological or the sectorized geometry, that is displayed in the *SALOME*
-    3D viewer with the *GEOM face* or *GEOM compound* currently selected.
-  - :py:meth:`update_geometry_from_face()<glow.geometry_layouts.cells.Cell.update_geometry_from_face>`,
-    which enables to update the *GEOM compound* corresponding to the indicated
-    :py:class:`GeometryType<glow.support.types.GeometryType>` with the given
-    *GEOM face* or *GEOM compound*.
-
-In both cases, the result is a new layout for the technological or the sectorized
-geometry where the new *regions* inherit the already assigned properties, if
-any; the same goes for the sectorization options.
-
-The following code snippet shows how the cell's technological geometry could
-be updated with a non-standard geometry built by overlapping two hexagonal
-*surfaces* with different dimensions.
-
-.. code-block:: python
-
-  hex_1 = Hexagon(edge_length=1)
-  hex_2 = Hexagon(edge_length=1.5)
-
-  shape = make_partition([hex_2.face], [hex_1.face], ShapeType.COMPOUND)
-
-  hex_cell = HexCell()
-  hex_cell.update_geometry_from_face(GeometryType.TECHNOLOGICAL, shape)
-  hex_cell.show()
-
-The function :py:func:`make_partition()<glow.interface.geom_interface.make_partition>`
-cuts a list of *GEOM faces* (in the first argument) with those provided in the
-list as second argument; the resulting type of shape is indicated as third argument.
-After applying the built geometry to the cell, the result can be displayed in
-the *SALOME* 3D viewer (see :numref:`updated-cell`).
-
-.. _updated-cell:
-.. figure:: images/updated_cell.png
-   :alt: Cell's geometry after update
-   :width: 400px
-   :align: center
-
-   Hexagonal cell's layout after updating its technological geometry.
-
-Restoring Cell's State
-""""""""""""""""""""""
-
-There could be cases where users need to reset the cell's geometry layout and
-the properties associated to its regions (see :ref:`tutorial-overlap`).
-The method :py:meth:`restore()<glow.geometry_layouts.cells.Cell.restore>`
-satisfies this need by restoring the *GEOM compound* of the cell's technological
-layout to its base *surface* (e.g. a *GEOM face* identifying a rectangle) without
-any inner circle.
-The sectorized layout, as well as the properties and sectorization options, are
-completely removed.
+Independently from the cell type, the result is the construction of a 2D shape
+used to derive the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects in common with the shape of the symmetry. For more details, please
+refer to the :ref:`fillable-symm` section.
 
 .. _lattice-def:
 

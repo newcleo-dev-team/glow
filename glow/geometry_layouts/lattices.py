@@ -240,6 +240,7 @@ class Lattice(Fillable):
         self.shape = Surface(face, get_point_coordinates(make_cdg(face)))
         self.shape.rotate(self.rot_angle)
 
+
 class CartesianLattice(Lattice):
     """
     Class for representing a Cartesian lattice characterised in terms of its

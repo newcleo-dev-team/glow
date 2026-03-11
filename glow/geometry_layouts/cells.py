@@ -125,29 +125,6 @@ class Cell(Fillable):
         self.update(wrap_shape(make_compound(self.regions)))
         self.dimensions = self.shape.dimensions
 
-    def get_centred_regions(self) -> List[Region]:
-        """
-        Method that returns a list of the cell-centred ``Region`` objects of
-        the cell sorted in terms of their distance from the centre of the
-        cell.
-
-        Returns
-        -------
-        List[Region]:
-            A list of ``Region`` objects whose centres coincide with the
-            cell's one, sorted by the distance from the centre.
-        """
-        # Re-build the regions first, if an update is required
-        if self.state.is_update_needed:
-            self.update_hierarchical_structure()
-        return sort_shapes_from_vertex(
-            [
-                region for region in self.get_regions()
-                if get_min_distance(region.o, self.o) < 1e-5
-            ],
-            self.o
-        )
-
     def sectorize(
             self, sectors_no: List[int], angles: List[float], **kwargs: Any
         ) -> None:
@@ -157,6 +134,8 @@ class Cell(Fillable):
         Given the number of sectors for each region and the values of the
         angles to start the sectorization from, edges are built so that they
         propagate radially from the centre of the cell.
+        The order of the elements in the two lists follows the outwards
+        direction from the cell's centre.
         The result of the intersection between each region and the subdivision
         edges is collected and stored as mapping from
         ``GeometryType.SECTORIZED`` to ``Compound`` object.
@@ -291,6 +270,29 @@ class Cell(Fillable):
                 f"cell regions ({no_regions})."
             )
 
+    def _get_centred_regions(self) -> List[Region]:
+        """
+        Method that returns a list of the cell-centred ``Region`` objects of
+        the cell sorted in terms of their distance from the centre of the
+        cell.
+
+        Returns
+        -------
+        List[Region]:
+            A list of ``Region`` objects whose centres coincide with the
+            cell's one, sorted by the distance from the centre.
+        """
+        # Re-build the regions first, if an update is required
+        if self.state.is_update_needed:
+            self.update_hierarchical_structure()
+        return sort_shapes_from_vertex(
+            [
+                region for region in self.get_regions()
+                if get_min_distance(region.o, self.o) < 1e-5
+            ],
+            self.o
+        )
+
     def _map_region_to_circle(self) -> Dict[Region, Circle]:
         """
         Method that associates a ``Circle`` object to each cell-centred
@@ -308,7 +310,7 @@ class Cell(Fillable):
         """
         # Associate a 'Circle' object to each cell-centred region
         regions_to_circles: Dict[Region, Circle] = {}
-        for r in self.get_centred_regions():
+        for r in self._get_centred_regions():
             # Get the diagonal of the bounding box for the current region
             x_min, x_max, y_min, y_max = get_bounding_box(r)
             width = x_max - x_min
@@ -363,7 +365,7 @@ class Cell(Fillable):
         # Check the correctness of the lists storing the information for
         # performing the sectorization
         self._check_sectorization_elements_len(
-            len(self.get_centred_regions()),
+            len(self._get_centred_regions()),
             len(sectors_no),
             len(angles)
         )
@@ -517,6 +519,8 @@ class CartesianCell(Cell):
         Given the number of sectors for each region and the values of the
         angles to start the sectorization from, edges are built so that they
         propagate radially from the centre of the cell.
+        The order of the elements in the two lists follows the outwards
+        direction from the cell's centre.
         The result of the intersection between each region and the subdivision
         edges is collected and stored as mapping from
         ``GeometryType.SECTORIZED`` to ``Compound`` object.
@@ -819,6 +823,8 @@ class HexCell(Cell):
         Given the number of sectors for each region and the values of the
         angles to start the sectorization from, edges are built so that they
         propagate radially from the centre of the cell.
+        The order of the elements in the two lists follows the outwards
+        direction from the cell's centre.
         The result of the intersection between each region and the subdivision
         edges is collected and stored as mapping from
         ``GeometryType.SECTORIZED`` to ``Compound`` object.
