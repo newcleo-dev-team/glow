@@ -670,8 +670,7 @@ class HexLattice(Lattice):
         # by the indicated index, if any; otherwise, either create a new
         # sublist or raise an exception
         layer_index = self._compute_layer_index(layer_index)
-        # Get the cell's dimensions
-        cell_side = cell.shape.dimensions[0]
+        # Get the cell's apothem
         cell_apothem = cell.shape.dimensions[1]
 
         # Evaluate the multiplication factor for determining the construction
@@ -765,8 +764,7 @@ class HexLattice(Lattice):
         # sublist or raise an exception
         layer_index = self._compute_layer_index(layer_index)
         # Loop through the ring indices starting from the indicated one
-        n0 = ring_index
-        for i_ring in range(n0, n0+no_rings):
+        for i_ring in range(ring_index, ring_index+no_rings):
             # Add a ring of cells at the current index
             self.add_ring_of_cells(cell, i_ring, layer_index)
 

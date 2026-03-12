@@ -488,10 +488,6 @@ class LayoutState():
     """
     symmetry_type : SymmetryType = SymmetryType.FULL
     """Identifying the currently applied type of symmetry."""
-    type_geo : LayoutGeometryType = LayoutGeometryType.ISOTROPIC
-    """
-    Identifying the type of layout (in terms of symmetry and BCs) in DRAGON5.
-    """
 
 
 # -------------------------------------------------------------------------- #

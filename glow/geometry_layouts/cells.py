@@ -814,48 +814,6 @@ class HexCell(Cell):
             name
         )
 
-    def sectorize(
-            self, sectors_no: List[int], angles: List[float], **kwargs: Any
-        ) -> None:
-        """
-        Method that subdivides the technological geometry of the cell into
-        sectors.
-        Given the number of sectors for each region and the values of the
-        angles to start the sectorization from, edges are built so that they
-        propagate radially from the centre of the cell.
-        The order of the elements in the two lists follows the outwards
-        direction from the cell's centre.
-        The result of the intersection between each region and the subdivision
-        edges is collected and stored as mapping from
-        ``GeometryType.SECTORIZED`` to ``Compound`` object.
-
-        Parameters
-        ----------
-        sectors_no : List[int]
-            List of integers representing the number of subdivision for each
-            cell region coming from the technological geometry.
-        angles : List[float]
-            List of angles (in degrees) the sectorization should start from
-            for each cell's region coming from the technological geometry.
-        kwargs : Any
-            Additional parameters specific to the type of cell to be
-            sectorized. No parameters must be passed.
-
-        Raises
-        ------
-        TypeError
-            If additional keyword arguments are provided.
-        """
-        if kwargs:
-            raise TypeError(
-                "No additional keyword arguments are expected for a "
-                f"'{self.__class__.__name__}' instance."
-            )
-        # Since the hexagonal cell type does not come with a 'windmill'
-        # sectorization, 'False' is passed to the method that performs
-        # the cell sectorization
-        self._sectorize_cell(sectors_no, angles, False)
-
     def _build_symmetry_shape(
             self,
             symmetry: SymmetryType,

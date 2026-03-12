@@ -795,12 +795,10 @@ In case of a :py:class:`Cell<glow.geometry_layouts.cells.Cell>`, properties are
 assigned to the :py:class:`Region<glow.geometry_layouts.layouts.Region>` object
 built from the characteristic shape of the cell.
 
-To handle the need for setting or updating the value for a specific property
-type of a :py:class:`Region<glow.geometry_layouts.layouts.Region>` object
-belonging to the hierarchical tree of the current *fillable*, the method
+To set or update the value for a specific property type of a :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+object belonging to the hierarchical tree of the current *fillable*, the method
 :py:meth:`set_region_properties()<glow.geometry_layouts.fillable_layouts.Fillable.set_region_properties>`
 is available for all subclasses of :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`.
-
 This method allows users to set values for the indicated property types for
 the :py:class:`Region<glow.geometry_layouts.layouts.Region>` object of the
 *fillable* whose *GEOM* face is provided as input. If none is given, the *GEOM*
@@ -832,7 +830,7 @@ For the construction of a Cartesian cell, see :ref:`cell-def`.
   cell.add(Region(circle))
   # Set the circular region properties
   cell.set_region_properties(
-    {PropertyType.MATERIAL: "MAT_4"}, circle
+      {PropertyType.MATERIAL: "MAT_4"}, circle
   )
   # Display the cell
   cell.show(PropertyType.MATERIAL)
@@ -1165,236 +1163,168 @@ used to derive the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
 objects in common with the shape of the symmetry. For more details, please
 refer to the :ref:`fillable-symm` section.
 
+:numref:`quarter-symm` and :numref:`twelfth-symm` show the results of applying
+a :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>` and a
+:py:attr:`TWELFTH<glow.support.types.SymmetryType.TWELFTH>` symmetry to a
+Cartesian and a hexagonal assembly, respectively.
+
+.. _twelfth-symm:
+.. figure:: images/lattice_twsym.png
+   :alt: Hexagonal assembly after applying a twelfth symmetry
+   :width: 400px
+   :align: center
+
+   Hexagonal assembly after applying the :py:attr:`TWELFTH<glow.support.types.SymmetryType.TWELFTH>`
+   type of symmetry.
+
 .. _lattice-def:
 
 Lattice Definition
 ^^^^^^^^^^^^^^^^^^
 
-|TOOL| comes with classes to build lattices characterised by either hexagonal
-or cartesian cells.
-The module :py:mod:`glow.geometry_layouts.lattices` provides the class
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` to describe any
-kind of lattice of cells.
-The type of lattice is determined by the type of the cells, either cartesian or
-hexagonal. All the cells in the lattice must be of the same type, identified by
-an item of the enumeration :py:class:`CellType<glow.support.types.CellType>`.
-This is automatically set at instantiation time or when adding cells to the
-lattice.
+|TOOL| comes with classes to build lattices according to a generic, a Cartesian
+and a hexagonal pattern of the cells.
+According to the hierarchical tree logic, cells are the *nodes* as they inherit
+from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+abstract class.
+The module :py:mod:`glow.geometry_layouts.lattices` provides the base class
+:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` to represent any
+lattice made of cells without the need to follow a specific pattern. For this
+reason, this class can be used to model a portion of a generic lattice assembled
+by positioning the cells at the indicated coordinates.
 
-The :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` class can be
-instantiated either without any cell or by providing a list of objects of the
-subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`.
+Subclasses of :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` present
+type-specific patterns:
 
-In |TOOL|, the logic behind the construction of a lattice relies on the *layer*
-concept: when a new cell, or a group of cells is added to the lattice, the cells
-are associated to a layer (either a new layer or an existing one already
-containing some cells). The layer to which the cells are added depends on the
-specific method used to add them.
-By adopting this logic, |TOOL| can easily handle the construction of the *GEOM
-compound* that identifies the lattice geometry layout, especially in the case
-of lattices made by superimposing cells with different dimensions.
+  - class :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+    for representing a Cartesian pattern of cells.
+  - class :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>`
+    for representing a hexagonal pattern of cells.
 
-The following code snippet shows how to instantiate a lattice with the cartesian
-or hexagonal cells available in |TOOL|.
+The :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` class and its
+subclasses can be instantiated either with or without providing a list of
+:py:class:`Cell<glow.geometry_layouts.cells.Cell>` objects.
+The method :py:meth:`add()<glow.geometry_layouts.fillable_layouts.Fillable.add>`
+inherited from the :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+superclass can be used to include the cells. Dedicated methods for adding one
+or more rings of cells at once are present as well (see :ref:`add-cells`).
+
+The following code snippet shows how to instantiate the different type of lattice
+available in |TOOL|.
 
 .. code-block:: python
 
-  from glow.geometry_layouts.cells import HexCell, RectCell
-  from glow.geometry_layouts.lattices import Lattice
+  from glow.geometry_layouts.cells import CartesianCell, HexCell
+  from glow.geometry_layouts.lattices import CartesianLattice, Lattice, HexLattice
 
   hex_cell = HexCell()
-  rect_cell = RectCell()
+  rect_cell = CartesianCell()
 
-  # Lattice instantiation by providing all the cartesian cells at once
+  # Lattice instantiation by providing all the Cartesian cells at once
+  cart_cells = []
+  cells_centres = [
+      (0.5, 0.5, 0.0), (-0.5, 0.5, 0.0), (-0.5, -0.5, 0.0), (0.5, -0.5, 0.0)
+  ]
+  for xyz in cells_centres:
+      # Clone and translate the original cell
+      cell = rect_cell.clone()
+      cell.translate(xyz)
+      cart_cells.append(cell)
   cart_lattice = Lattice(
-      cells=[
-          rect_cell.translate((0.5, 0.5, 0.0)),
-          rect_cell.translate((-0.5, 0.5, 0.0)),
-          rect_cell.translate((-0.5, -0.5, 0.0)),
-          rect_cell.translate((0.5, -0.5, 0.0)),
-      ],
-      name="Cartesian Lattice",
+      cells=cart_cells,
       center=(0.0, 0.0, 0.0),
-      boxes_thick=[0.075, 0.075]
+      name="Cartesian Lattice"
   )
   # Lattice instantiation without any cell
-  lattice = Lattice()
+  lattice = CartesianLattice()
   # Lattice instantiation with a hexagonal central cell
-  hex_lattice = Lattice([hex_cell])
+  hex_lattice = HexLattice([hex_cell])
 
 The three examples show different instantiations; in particular, we have:
 
-  - a cartesian lattice built from a list of cells positioned to recreate a
-    2x2 pattern; by specifying the ``boxes_thick`` parameter, the built lattice
-    is enclosed within a rectangular box made by two layers of given thicknesses.
-  - a lattice built without any cell. The lattice's methods for adding cells
-    need to be called to define its geometry layout (see :ref:`add-cells`).
+  - a generic lattice built from a list of cells that are properly translated
+    to recreate a 2x2 pattern;
+  - a Cartesian lattice built without any cell;
   - a hexagonal lattice built from a single cell positioned in the centre of
     the lattice.
 
-Similarly to the cells, the two types of geometry layout, the technological and
-the sectorized ones, apply to the lattice (see :ref:`geom-def`).
+When a list of instances of the :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
+class, or its subclasses, is provided at the instantiation of the lattice, the
+:py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
+attribute is filled with the list of the given cells, meaning that these cells
+occupy the bottom layer of the hierarchical tree of the lattice.
+A :py:class:`Surface<glow.geometry_layouts.geometries.Surface>` instance is
+then initialised with the 2D shape built from the boundaries of the compound of
+the provided cells. Whenever the layout of the lattice changes (e.g., when new
+cells are added) the characteristic shape that encloses the lattice is updated.
+The characteristic shape for the :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>`
+class is a X-oriented hexagon. This means that cells should be rotated by 90°
+before being provided when instantiating the lattice or when adding rings of
+cells. After finalising the layout, the lattice can still be rotated by any
+angle.
 
-The :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` public methods
-cover the following functionalities:
-
-  - building the lattice's *regions*, as elements of the dataclass
-    :py:class:`Region<glow.geometry_layouts.cells.Region>`, according to either
-    the technological or the sectorized type of geometry of the cells in the
-    lattice;
-  - displaying the lattice's geometry layout in the *SALOME* 3D viewer;
-  - adding a single cell or a group of the same cell organised in one or more
-    rings around the lattice's centre;
-  - transformation operations for rotating or translating the lattice's cells;
-  - enclosing the lattice in a box declared from the thicknesses of its layers
-    or by means of an instance of the subclasses of
-    :py:class:`Cell<glow.geometry_layouts.cells.Cell>`;
-  - setting up the properties associated to one *region* of the lattice or to
-    the ones of the box;
-  - applying a specific type of symmetry in accordance with the type of lattice;
-  - setting the type of geometry in accordance with the type of lattice and of
-    applied symmetry;
-  - inspecting the information related to a specific *region* of the lattice
-    that has been selected in the *SALOME* 3D viewer;
-  - restoring a list of cells of the lattice to their original state, both in
-    terms of geometry and properties.
-
-Building Lattice's Regions
-""""""""""""""""""""""""""
-
-To facilitate displaying and exporting the lattice's geometry layout, the method
-:py:meth:`build_regions()<glow.geometry_layouts.lattices.Lattice.build_regions>`
-is provided. It builds a list of :py:class:`Region<glow.geometry_layouts.cells.Region>`
-objects that are representative of the *regions* in which the lattice is subdivided
-when assembling all the cells together with the box, if present.
-Cells can be associated with different layers of cells in the lattice. When the
-lattice's regions are built to be displayed in the *SALOME* 3D viewer, a process
-is carried out. This can be imagined as if all the layers were collapsed into a
-single layer of cells. The layers are traversed from top to bottom, and any cells
-that are found to be overlapped by those of a higher layer are either cut or
-removed from the lattice.
-:numref:`overlap` shows the result of overlapping a cell with others.
-
-.. _overlap:
-.. figure:: images/lattice_overlap_cells.png
-   :alt: Lattice with a cell overlapping other cells
-   :width: 400px
-   :align: center
-
-   Hexagonal lattice where a cell overlaps other cells of an inferior layer.
-
-If any symmetry is applied or the lattice is enclosed in a box, the *GEOM compound*
-of the assembled cells is either cut to extract the portion that replicates the
-symmetry or assembled with the geometry layout of the box.
-Given the final *GEOM compound*, the contained *GEOM faces* are extracted and
-a :py:class:`Region<glow.geometry_layouts.cells.Region>` object is built for
-each one.
-In any case, the property assignment involves identifying the corresponding
-*region* among the ones of the technological geometry of the lattice's cells.
-
-According to the type of geometry of the cells that is provided to the method
-:py:meth:`build_regions()<glow.geometry_layouts.lattices.Lattice.build_regions>`,
-the resulting regions describe either the technological or the sectorized
-geometry of the lattice.
-
-Displaying the Lattice's Geometry Layout
-""""""""""""""""""""""""""""""""""""""""
-
-The lattice's geometry layout can be displayed in the *SALOME* 3D viewer by
-calling the method :py:meth:`show()<glow.geometry_layouts.lattices.Lattice.show>`.
-Depending on its parameters, it builds and displays the corresponding *regions*
-(i.e. the *GEOM faces*) of the lattice.
-
-Regions are built and shown according to either the technological or the
-sectorized geometry by specifying it as parameter of the method.
-The same considerations on the parameters done for the method
-:py:meth:`show()<glow.geometry_layouts.cells.Cell.show>` of the subclasses of
-:py:class:`Cell<glow.geometry_layouts.cells.Cell>` are valid for the lattice
-as well (see :ref:`cell-show`).
-It is important to note that when displaying the lattice's *regions* with a
-colorset according to the indicated :py:class:`PropertyType<glow.support.types.PropertyType>`,
-regions with the same property type value are coloured the same.
-
-In *SALOME*, regions are added to the *Object Browser* as children of the
-lattice they belong to, similarly to what happens for cells (see
-:numref:`show-children`).
-
-The following code snippet shows how to display the regions of the lattice's
-technological geometry (indicated by the :py:attr:`TECHNOLOGICAL<glow.support.types.GeometryType.TECHNOLOGICAL>`
-type of geometry) with a colorset in terms of the property type
-:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`.
-
-.. code-block:: python
-
-  cart_lattice.show(
-      property_type_to_show=PropertyType.MATERIAL,
-      geometry_type_to_show=GeometryType.TECHNOLOGICAL
-  )
-
-:numref:`lattice-show` shows the resulting geometry layout of the lattice after
-running the above code.
-
-.. _lattice-show:
-.. figure:: images/lattice_show_col.png
-   :alt: Lattice's technological geometry with the MATERIAL colorset
-   :width: 400px
-   :align: center
-
-   Cartesian lattice's technological geometry with the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
-   colorset.
+The :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+and the :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>`
+classes, besides inheriting attributes and methods from the
+:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` superclass,
+declare two additional public methods for handling the inclusion of one or more
+rings of the same cell around the centre of the lattice at once.
 
 .. _add-cells:
 
 Adding cell(s)
 """"""""""""""
 
-A lattice can be built by instantianting a :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`
-object, providing a list of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
-subclasses. In addition to this approach, it is often useful to contruct a
-lattice by adding a cell or a ring of cells with simple methods. For this reason,
-the following methods have been introduced:
+A lattice geometry layout can be modelled from a :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`
+instance (or one of its subclasses) by providing a list of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
+objects when instantianting the lattice.
+In addition to this approach, it is often useful to contruct a lattice by adding
+a single cell, one or more rings of cells. The method :py:meth:`add()<glow.geometry_layouts.fillable_layouts.Fillable.add>`
+can be used to include cells one-by-one by providing the XYZ coordinates at which
+they have to be positioned. For details about this method, please refer to :ref:`fillable-add`.
+In addition to this method that is common to all *fillables*, the
+:py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+and the :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>`
+classes provide their own implementation for adding one or more rings of cells.
 
-  - :py:meth:`add_cell()<glow.geometry_layouts.lattices.Lattice.add_cell>`,
-    which allows to add a single cell at an indicated position;
-  - :py:meth:`add_ring_of_cells()<glow.geometry_layouts.lattices.Lattice.add_ring_of_cells>`,
-    which allows to add a ring of the same cell at the indicated ring index;
-  - :py:meth:`add_rings_of_cells()<glow.geometry_layouts.lattices.Lattice.add_rings_of_cells>`,
-    which allows to add the indicated number of rings of the same cell, starting
-    from the current ring index occupied by cells.
+Lattices made by Cartesian or hexagonal patterns of cells can be considered as
+consisting of several rings, each occupied by an increasing number of cells as
+the ring index increases.
+The method :py:meth:`add_ring_of_cells()<glow.geometry_layouts.lattices.CartesianLattice.add_ring_of_cells>`
+for a :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+iteratively adds the provided :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
+object at specific construction points on the borders of a rectangle whose
+dimensions are determined by the given ring index.
+The method :py:meth:`add_ring_of_cells()<glow.geometry_layouts.lattices.HexLattice.add_ring_of_cells>`
+for a :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>` works
+similarly, but considering a hexagon as the reference figure for placing the
+cells.
+Both methods accept as third parameter the index of the layer to which the ring
+of cells is added; if none is provided, the cells are added to a new layer.
 
-The method :py:meth:`add_cell()<glow.geometry_layouts.lattices.Lattice.add_cell>`
-adds the cell to the specified position, if any is provided, otherwise the cell
-is placed at the position indicated by the cell's centre. It is important to
-note that any cell added with this method is included in a new *layer*, i.e. a
-new sub-list is created for the attribute :py:attr:`layers<glow.geometry_layouts.lattices.Lattice.layers>`
-containing the cell itself.
-
-The layout of a lattice can be considered as consisting of several rings, each
-occupied by an increasing number of cells as the ring index increases. The two
-methods :py:meth:`add_ring_of_cells()<glow.geometry_layouts.lattices.Lattice.add_ring_of_cells>`
-and :py:meth:`add_rings_of_cells()<glow.geometry_layouts.lattices.Lattice.add_rings_of_cells>`
-provide a quick way for adding one or more rings of cells. The former adds the
-cells at the given ring index while the latter adds the indicated number of
-rings of cells starting from the maximum value of ring index currently present
-in the lattice.
-Users should also note that, while the former method enables them to specify
-the *layer* to which the ring of cells is added (by providing its index), the
-latter always adds the rings of cells to a new *layer*.
-
-All the aforementioned methods do not allow to mix cells with different types
-(i.e. having different item of the enumeration :py:class:`CellType<glow.support.types.CellType>`);
-this ensures that all the cells have either a cartesian or a hexagonal type.
+The method :py:meth:`add_rings_of_cells()<glow.geometry_layouts.lattices.CartesianLattice.add_rings_of_cells>`
+for a :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+and :py:meth:`add_rings_of_cells()<glow.geometry_layouts.lattices.HexLattice.add_rings_of_cells>`
+for a :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>` allow
+users to add an indicated number of rings of cells at once starting from the
+given ring index.
+Optionally, users can specify the index of the layer to which the rings of cells
+are added; if none is provided, the cells are added to a new layer.
 
 The following code snippet shows the different ways to add cells to a lattice.
 
 .. code-block:: python
 
+  # Declare the hexagonal cell rotated by 90° to satisfy the fact that a
+  # 'HexLattice' is X-oriented by default
   cell = HexCell()
-  lattice = Lattice([cell])
-
+  cell.rotate(90)
+  # Instantiate the lattice with a central cell
+  lattice = HexLattice([cell])
+  # Add the rings of cells
   lattice.add_ring_of_cells(cell, 1)
-  lattice.add_rings_of_cells(cell, 2)
-  lattice.add_cell(cell, (1.5, 1.5, 0.0))
+  lattice.add_rings_of_cells(cell, 2, 2)
+  lattice.add(cell, (1.5, 1.5, 0.0))
   lattice.show()
 
 The lattice's geometry layout resulting from adding hexagonal cells using the
@@ -1407,396 +1337,6 @@ three methods is shown in :numref:`lattice-add`.
    :align: center
 
    Hexagonal lattice built by applying the three methods for adding cells.
-
-Lattice's Transformation Operations
-"""""""""""""""""""""""""""""""""""
-
-Transformation operations can be applied by calling the methods for rotating
-or translating the lattice's geometric elements, i.e. the *GEOM compound* objects
-representing its full and partial (if any symmetry is applied) geometry layouts,
-the contained cells, including the box (if present), and all the *regions*.
-The method :py:meth:`rotate()<glow.geometry_layouts.lattices.Lattice.rotate>`
-requires the rotation angle, in degrees, and assumes that the rotation is
-performed around the Z-axis. The direction of the rotation follows the standard
-*right-hand* rule.
-The method :py:meth:`translate()<glow.geometry_layouts.lattices.Lattice.translate>`
-needs the new XYZ coordinates of the centre of the lattice.
-Users should note that both methods operate on the same instance and the result
-of the transformation is directly shown in the *SALOME* 3D viewer.
-
-Enclosing the Lattice in a Box
-""""""""""""""""""""""""""""""
-
-In nuclear reactors, fuel assemblies are typically framed in a metallic container.
-To replicate exactly the same kind of layouts, |TOOL| allows to insert a lattice
-within a box.
-A box is an instance of the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
-which can be built either from the thickness of its layers or by instantiating
-the corresponding :py:class:`Cell<glow.geometry_layouts.cells.Cell>` object
-directly.
-The former case relies on the method :py:meth:`build_lattice_box()<glow.geometry_layouts.lattices.Lattice.build_lattice_box>`,
-which, given the type of lattice (i.e. hexagonal or cartesian), automatically
-instantiates a :py:class:`Cell<glow.geometry_layouts.cells.Cell>` object built
-by overlapping as many rectangles or hexagons as the number of the indicated
-thicknesses of the layers.
-If all the values provided to the :py:meth:`build_lattice_box()<glow.geometry_layouts.lattices.Lattice.build_lattice_box>`
-method are positive (independently from the value), the borders of the layer
-closest to the centre of the lattice touch the outermost ring of cells without
-overlapping it (see :numref:`box-pos`).
-The method also allows the first thickness value in the list to be negative,
-which handles a situation where the layer closest to the centre cuts the
-farthest ring of cells (see :numref:`box-neg`).
-
-The following code snippet shows how to build a box for the lattice using the
-method :py:meth:`build_lattice_box()<glow.geometry_layouts.lattices.Lattice.build_lattice_box>`
-with the thickness of the first layer either being positive or negative.
-
-.. code-block:: python
-
-  lattice.build_lattice_box([0.1, 0.1])
-  lattice.show()
-
-  lattice.build_lattice_box([-0.1, 0.1])
-  lattice.show()
-
-The result of applying both method calls separately, for a hexagonal lattice,
-is shown in :numref:`box-pos` and in :numref:`box-neg` respectively.
-
-.. _box-pos:
-.. figure:: images/lattice_box_pos.png
-   :alt: Lattice within a box with positive thicknesses
-   :width: 400px
-   :align: center
-
-   Hexagonal lattice framed in a box with all positive thicknesses for the
-   layers.
-
-.. _box-neg:
-.. figure:: images/lattice_box_neg.png
-   :alt: Lattice within a box with negative first thickness
-   :width: 400px
-   :align: center
-
-   Hexagonal lattice framed in a box with a negative thickness for the first
-   layer. The box cuts the farthest ring of cells.
-
-The lattice's box can also be declared by setting the corresponding property
-:py:attr:`lattice_box<glow.geometry_layouts.lattices.Lattice.lattice_box>` with
-an object of the subclasses of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`.
-The setter of the property requires the cell's centre to coincide with that of
-the lattice, otherwise an exception is raised.
-Both :py:class:`Cell<glow.geometry_layouts.cells.Cell>` objects or ``None`` are
-valid inputs for the setter. The latter can be used to remove any box previously
-set.
-
-Both approaches to setting a box lead to the same result: the *GEOM compound*
-representing the geometry layout of the lattice is updated by assembling the
-*GEOM compound* of each cell with that of the box, which can potentially cut the
-*GEOM compound* of the cells of the farthest ring.
-
-Setting Up Properties
-"""""""""""""""""""""
-
-Just like for cells, the *regions* of a lattice can be displayed with a colorset
-according to the type of property to display, as item of the
-:py:class:`PropertyType<glow.support.types.PropertyType>` enumeration.
-
-There are different ways for users to set values for a specific property type
-of a *region* of the lattice.
-If the *region* belongs to any cell, the methods previously described (see
-:ref:`set-cell-prop`) for a :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
-object remain valid, provided they are applied to the correct instance stored
-in the attribute :py:attr:`layers<glow.geometry_layouts.lattices.Lattice.layers>`.
-
-In addition, users can rely on the following methods of the class
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`:
-
-  - :py:meth:`set_region_property()<glow.geometry_layouts.lattices.Lattice.set_region_property>`,
-    which allows to set a value for the indicated type of property of a single
-    lattice's *region* (i.e. a *GEOM face*); this can be either the *GEOM face*
-    currently selected in the *SALOME* 3D viewer or the one provided as parameter
-    to the method.
-  - :py:meth:`set_lattice_box_properties()<glow.geometry_layouts.lattices.Lattice.set_lattice_box_properties>`,
-    which allows users to set values for different types of properties for all
-    the regions of the :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
-    instance, which is the box that encloses the lattice.
-    The convention for declaring the values of a property is always the same,
-    i.e. from the *region* closest to the center to the farthest *region*.
-    Users should note that for hexagonal boxes, the number of values to provide
-    is always equal to that of the layers plus one. The reason is that the first
-    value in the list is associated with the *regions* between the cells and the
-    first layer of the box. These regions all share the same property type value.
-
-The following code snippet shows the different ways to apply values for the
-:py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` property type,
-i.e. either to all the cells or to an indicated *region* or to the regions of
-the lattice's box.
-
-.. code-block:: python
-
-  # Build the lattice geometry layout
-  hex_cell = HexCell()
-  hex_cell.rotate(90)
-  lattice = Lattice([hex_cell])
-  lattice.add_ring_of_cells(hex_cell, 1)
-  lattice.build_lattice_box([0.1])
-  # The same value for the 'MATERIAL' property is assigned to all the cells
-  for layer in lattice.layers:
-      for cell in layer:
-          cell.set_properties(
-              {PropertyType.MATERIAL: ['COOLANT']}
-          )
-  # A different value for the 'MATERIAL' property is assigned to the central
-  # cell
-  lattice.set_region_property(PropertyType.MATERIAL, 'GAP', hex_cell.face)
-  # Values for the 'MATERIAL' property are assigned to the box's regions
-  lattice.set_lattice_box_properties(
-      {PropertyType.MATERIAL: ['COOLANT', 'METAL']}
-  )
-  lattice.show(PropertyType.MATERIAL)
-
-The resulting lattice's geometry layout with the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
-colorset is shown in :numref:`lattice-set-props`.
-
-.. _lattice-set-props:
-.. figure:: images/lattice_properties.png
-   :alt: Lattice after setting up the properties
-   :width: 400px
-   :align: center
-
-   Lattice after setting up the values for a type of property. It is shown
-   with the corresponding colorset.
-
-Applying Symmetries
-"""""""""""""""""""
-
-Solving the Boltzmann transport equation on the full geometry layout of a fuel
-assembly can be computationally expensive, in particular if the geometry contains
-many rings of cells.
-To speed up the calculations, users can rely on cuts to extract parts out of
-the existing layout, thereby isolating the minimum portion of the geometry
-required to describe the entire pattern.
-|TOOL| supports the application of specific types of symmetries to the lattice.
-According to the type of cells in the lattice, we can have:
-
-  - Half, quarter, and eighth symmetries for a cartesian lattice. Half and quarter
-    symmetries cut out the corresponding rectangular portion of the lattice,
-    while the eighth symmetry cuts out a right triangular portion with a centre
-    angle of 45°.
-  - Third, sixth and twelfth symmetries for a hexagonal lattice framed in a box.
-    The third symmetry cuts out a parallelogram of the lattice, the sixth symmetry
-    a regular triangle and the twelfth a right triangle with a centre angle of
-    30°.
-
-The method :py:meth:`apply_symmetry()<glow.geometry_layouts.lattices.Lattice.apply_symmetry>`
-allows users to apply the indicated type of symmetry as item of the enumeration
-:py:class:`SymmetryType<glow.support.types.SymmetryType>`.
-Since |TOOL| considers that only specific types of symmetry are allowed for
-each type of lattice, an exception is raised if the user tries to apply an
-invalid symmetry.
-Independently from the type of symmetry, the method
-:py:meth:`apply_symmetry()<glow.geometry_layouts.lattices.Lattice.apply_symmetry>`
-automatically performs *cut* operations on the *GEOM compound* of the lattice
-so that the remaining part describes the requested symmetry.
-
-For cartesian lattices, the operation of applying a symmetry is performed
-independently of the presence of a box. However, for hexagonal lattices, |TOOL|
-requires the lattice to be framed in a box. This is because the *SALT* module
-of *DRAGON5* cannot track the resulting geometry layout if the shape is not
-triangular or quadrilateral.
-
-The following code snippet shows different applications of a symmetry type
-for a cartesian and a hexagonal lattice.
-
-.. code-block:: python
-
-  rect_lattice.apply_symmetry(SymmetryType.QUARTER)
-  hex_lattice.apply_symmetry(SymmetryType.TWELFTH)
-
-When calling the method :py:meth:`apply_symmetry()<glow.geometry_layouts.lattices.Lattice.apply_symmetry>`,
-the geometry layout of the lattice is automatically updated and displayed in
-the *SALOME* 3D viewer (if the method is called from its Python console).
-If the :py:attr:`FULL<glow.support.types.SymmetryType.FULL>` is provided to the
-method, any previously applied symmetry is removed and the entire geometry layout
-of the lattice is displayed.
-
-:numref:`quarter-symm` and :numref:`twelfth-symm` show the results of applying
-a :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>` and a
-:py:attr:`TWELFTH<glow.support.types.SymmetryType.TWELFTH>` symmetry to a
-cartesian and a hexagonal lattice, respectively.
-
-.. _twelfth-symm:
-.. figure:: images/lattice_twsym.png
-   :alt: Hexagonal lattice after applying a twelfth symmetry
-   :width: 400px
-   :align: center
-
-   Hexagonal lattice after applying the :py:attr:`TWELFTH<glow.support.types.SymmetryType.TWELFTH>`
-   type of symmetry.
-
-Users should note that |TOOL| does not recognize whether the layout of cells
-replicates the full layout when any valid symmetry is applied.
-It is up to the user to apply a symmetry that can be representative for the
-specific layout of the lattice.
-
-Setting the Lattice's Type of Geometry
-""""""""""""""""""""""""""""""""""""""
-
-The *SALT* module of *DRAGON5* identifies each type of geometry layout of the
-lattice with a specific index value. In the *TDT* file, this is identified by
-the *typgeo* value which is representative of the geometry layout (either full
-or partial, if any symmetry is applied) and the type of BCs on the lattice's
-borders.
-User should note that specific values of *typgeo* are also associated to the
-two different types of tracking allowed by the *SALT* module of *DRAGON5*
-:cite:`dragon5-ug`. In particular, we have that:
-
-  - values of `0`, `1` and `2` for *typgeo* are associated with a *TISO* tracking
-    type, which produces non-cycling tracks distributed uniformally over the
-    domain.
-  - values greater that `2` for *typgeo* are associated with a *TSPC* tracking
-    type, which indicates a cyclic tracking over a closed domain.
-
-The items of the enumeration :py:class:`LatticeGeometryType<glow.support.types.LatticeGeometryType>`
-identify the different *typgeo* values available in |TOOL|. In particular, we have:
-
-  - :py:attr:`ISOTROPIC<glow.support.types.LatticeGeometryType.ISOTROPIC>` to
-    represent a layout having an isotropic reflection on its boundaries. It is
-    associated with a *TISO* tracking.
-  - :py:attr:`SYMMETRIES_TWO<glow.support.types.LatticeGeometryType.SYMMETRIES_TWO>`
-    to represent a layout having symmetries of two axis of angle ``pi/n`` (
-    :math:`n>0`) on its boundaries. It is associated with a *TISO* tracking.
-  - :py:attr:`ROTATION<glow.support.types.LatticeGeometryType.ROTATION>` to
-    represent a layout with a rotation of angle ``2*pi/n`` (:math:`n>1`) for
-    its boundaries. It is associated with a *TISO* tracking.
-  - :py:attr:`RECTANGLE_TRAN<glow.support.types.LatticeGeometryType.RECTANGLE_TRAN>`
-    to represent a cartesian layout having a translation BC to its boundaries.
-    It is associated with a *TSPC* tracking.
-  - :py:attr:`RECTANGLE_SYM<glow.support.types.LatticeGeometryType.RECTANGLE_SYM>`
-    to represent a full, half and quarter symmetry for a cartesian layout.
-    It is associated with a *TSPC* tracking.
-  - :py:attr:`RECTANGLE_EIGHT<glow.support.types.LatticeGeometryType.RECTANGLE_EIGHT>`
-    to represent a layout with an eighth symmetry. It is associated with a *TSPC*
-    tracking.
-  - :py:attr:`SA60<glow.support.types.LatticeGeometryType.SA60>` to represent a
-    layout with an sixth symmetry. It is associated with a *TSPC* tracking.
-  - :py:attr:`HEXAGON_TRAN<glow.support.types.LatticeGeometryType.HEXAGON_TRAN>`
-    to represent a full hexagonal layout having a translation BC to its boundaries.
-    It is associated with a *TSPC* tracking.
-  - :py:attr:`RA60<glow.support.types.LatticeGeometryType.RA60>` to represent a
-    layout with an sixth symmetry with both rotation and translation BCs to its
-    boundaries. It is associated with a *TSPC* tracking.
-  - :py:attr:`R120<glow.support.types.LatticeGeometryType.R120>` to represent a
-    layout with an third symmetry with both rotation and translation BCs to its
-    boundaries. It is associated with a *TSPC* tracking.
-  - :py:attr:`S30<glow.support.types.LatticeGeometryType.S30>` to represent a
-    layout with a twelfth symmetry. It is associated with a *TSPC* tracking.
-
-When a :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` class is
-instantiated, a default value for the property :py:attr:`type_geo<glow.geometry_layouts.lattices.Lattice.type_geo>`
-is assigned according to the number and the type of cells.
-Users can assign a value to this property directly, provided it is valid for
-the lattice's geometry layout. This means that values specific for a type of
-lattice and symmetry cannot be applied if not matching the current state of the
-lattice.
-For any values of *typgeo* involving BCs of type *translation*, the assignement
-is performed only if the lattice is either made by a single cell or if enclosed
-in a box.
-
-|TOOL| provides also the method :py:meth:`set_type_geo()<glow.geometry_layouts.lattices.Lattice.set_type_geo>`
-to set the item of the enumeration
-:py:class:`LatticeGeometryType<glow.support.types.LatticeGeometryType>`.
-
-The following code snippet shows different applications of the property
-:py:attr:`type_geo<glow.geometry_layouts.lattices.Lattice.type_geo>`.
-
-.. code-block:: python
-
-  rect_lattice.type_geo = LatticeGeometryType.RECTANGLE_TRAN
-  hex_lattice.set_type_geo(LatticeGeometryType.SA60)
-
-Setting the value for the property does not result in any change in the lattice's
-geometry layout. It influences the information written in the output *TDT* file
-in terms of the BCs section, as this is strictly related to the *typgeo*.
-
-Lattice's Regions Inspection
-""""""""""""""""""""""""""""
-
-When the regions of the lattice's technological or sectorized geometry are
-displayed in the *SALOME* 3D viewer, information about a selected *region*,
-including the assigned properties, can be inspected.
-The method :py:meth:`get_regions_info()<glow.geometry_layouts.lattices.Lattice.get_regions_info>`
-can be called directly in the Python console of *SALOME* from an object
-of :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`.
-If no *region* (i.e. a *GEOM face*), or more than one, is selected when calling
-the method, an exception is raised.
-The available information, that is printed in the Python console, includes the
-name of the lattice's *region* and the value for each of the assigned type of
-properties.
-
-Restoring Lattice's Cells
-"""""""""""""""""""""""""
-
-Similarly to the class :py:class:`Cell<glow.geometry_layouts.cells.Cell>`, also
-the class :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` offers
-a *restore* functionality.
-The method :py:meth:`restore_cells()<glow.geometry_layouts.lattices.Lattice.restore_cells>`
-allows users to restore the geometry layout of a group of cells of the lattice
-by calling the method :py:meth:`restore()<glow.geometry_layouts.cells.Cell.restore>`
-for each cell. The result is that any circular *region* of the cells is removed,
-while also setting the cell's properties accordingly with the ones passed as
-input to the method.
-If any cells have no centered circular regions, the *restore* operation is not
-performed for those specific cells.
-In addition, users can specify whether the operation should be ignored for cells
-whose circular regions (being part of the technological geometry) have not been
-cut when overlapping with another cell (see :numref:`overlap`).
-
-This method can be combined with the function :py:func:`get_changed_cells()<glow.geometry_layouts.lattices.get_changed_cells>`
-to retrieve any cells whose geometry layout has been modified, making it easy
-to restore them.
-
-The following code snippet shows the case of a hexagonal lattice where a
-central cell overlaps those of the layer below it. The *restore* operation
-is applied to all the overlapped cells resulting in the lattice's geometry
-layout of :numref:`restored-cells`.
-
-.. code-block:: python
-
-  # Build the lattice geometry layout
-  cell = HexCell()
-  cell.add_circle(0.2)
-  cell.add_circle(0.3)
-  cell.add_circle(0.4)
-  cell.rotate(90)
-  cell.set_properties({PropertyType.MATERIAL: ['MAT_1', 'MAT_2', 'MAT_3', 'MAT_4']})
-  lattice = Lattice([])
-  lattice.add_ring_of_cells(cell, 2)
-  # A cell with greater dimensions is added in the lattice centre, overlapping
-  # those of the layer below
-  central_cell = HexCell(edge_length=1.5)
-  central_cell.rotate(90)
-  central_cell.set_properties({PropertyType.MATERIAL: ['MAT_4']})
-  lattice.add_cell(central_cell, ())
-  # Assemble all the layers
-  lattice.build_regions()
-  # Restore the overlapped cells
-  lattice.restore_cells(
-      get_changed_cells(lattice),
-      {PropertyType.MATERIAL: 'MAT_4'},
-      ignore_not_cut=False
-  )
-  lattice.show(PropertyType.MATERIAL)
-
-.. _restored-cells:
-.. figure:: images/lattice_restore.png
-   :alt: Lattice's after restoring overlapped cells shown with MATERIAL colorset
-   :width: 400px
-   :align: center
-
-   Hexagonal lattice's technological geometry showing the result of restoring
-   the overlapped cells. The geometry layout is displayed with the
-   :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` colorset.
 
 .. _layout-export:
 
@@ -1841,13 +1381,13 @@ include:
   - the value of the *albedo*, indicating how much reflective the BCs are,
     i.e. the ratio of exiting to entering neutrons. This attribute can assume
     values between `0.0` (no reflection) and `1.0` (full reflection) for a
-    :py:attr:`ISOTROPIC<glow.support.types.LatticeGeometryType.ISOTROPIC>`
+    :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`
     type of geometry of the lattice. If nothing is provided, a default value
     that corresponds to the lattice's geometry type is adopted (i.e. `1.0` for
-    :py:attr:`ISOTROPIC<glow.support.types.LatticeGeometryType.ISOTROPIC>`
+    :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`
     geometry layouts, `0.0` for the others). An exception is raised if users
     provide a value different from `0.0` for a geometry type other than
-    :py:attr:`ISOTROPIC<glow.support.types.LatticeGeometryType.ISOTROPIC>`,
+    :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`,
     as this would not make sense.
   - the value for the *typegeo* parameter, which is strictly related to the
     type of cells, the applied symmetry and the type of tracking;
@@ -1876,20 +1416,20 @@ edges, shared by two adjacent regions, while those associated with only one
 Lastly, the indices of the border edges are associated to a *boundary*, whose
 type (as item of the enumeration :py:class:`BoundaryType<glow.support.types.BoundaryType>`)
 and geometric data are determined on the basis of the
-:py:class:`LatticeGeometryType<glow.support.types.LatticeGeometryType>` and the
+:py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>` and the
 applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
 
 .. only:: html
 
    :numref:`tdt-types` provides the association between
-   :py:class:`LatticeGeometryType<glow.support.types.LatticeGeometryType>` and
+   :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>` and
    :py:class:`BoundaryType<glow.support.types.BoundaryType>` for the two type of
    cells with the symmetries available in |TOOL|.
-   The first group of coloumns *LatticeGeometryType*-*BoundaryType* indicates the
+   The first group of coloumns *LayoutGeometryType*-*BoundaryType* indicates the
    values for which a uniform tracking (i.e. *TISO*) should be performed in *SALT*;
    the second group refers to values which correspond to a cyclic tracking (i.e.
    *TSPC*).
-   An :py:attr:`ISOTROPIC<glow.support.types.LatticeGeometryType.ISOTROPIC>` type
+   An :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>` type
    of geometry does not correspond to any BC, whereas those having two types of
    BCs applies a :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
    on the internal boundaries and a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
@@ -1898,13 +1438,13 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
 .. only:: latex
 
    The following tables provides the association between
-   :py:class:`LatticeGeometryType<glow.support.types.LatticeGeometryType>` and
+   :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>` and
    :py:class:`BoundaryType<glow.support.types.BoundaryType>` for the two type of
    cells with the symmetries available in |TOOL|.
    The first table indicates the values for which a uniform tracking (i.e.
    *TISO*) should be performed in *SALT*; the second table refers to values
    which correspond to a cyclic tracking (i.e. *TSPC*).
-   An :py:attr:`ISOTROPIC<glow.support.types.LatticeGeometryType.ISOTROPIC>` type
+   An :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>` type
    of geometry does not correspond to any BC, whereas those having two types of
    BCs applies a :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
    on the internal boundaries and a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
@@ -1919,7 +1459,7 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       :align: center
 
       +----------+--------------+---------------------+----------------------+---------------------+----------------------+
-      | CellType | SymmetryType | LatticeGeometryType | BoundaryType         | LatticeGeometryType | BoundaryType         |
+      | CellType | SymmetryType | LayoutGeometryType | BoundaryType         | LayoutGeometryType | BoundaryType         |
       +==========+==============+=====================+======================+=====================+======================+
       |          | FULL         | ISOTROPIC           |          /           | HEXAGON_TRAN        | TRANSLATION          |
       |          +--------------+---------------------+----------------------+---------------------+----------------------+
@@ -1950,7 +1490,7 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       \begin{table}[ht]
       \centering
       \begin{tabularx}{.95\textwidth}{|X|X|X|X|}\hline
-        \textbf{CellType} & \textbf{SymmetryType} & \textbf{LatticeGeometryType} & \textbf{BoundaryType} \\ \hline
+        \textbf{CellType} & \textbf{SymmetryType} & \textbf{LayoutGeometryType} & \textbf{BoundaryType} \\ \hline
         HEX & FULL & ISOTROPIC & N.D.\\ \hline
         HEX & THIRD & ROTATION & TRANSLATION\-ROTATION\\ \hline
         HEX & SIXTH & SYMMETRIES\_TWO & AXIAL\_SYMMETRY\\ \hline
@@ -1969,7 +1509,7 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       \begin{table}[ht]
       \centering
       \begin{tabularx}{.95\textwidth}{|X|X|X|X|}\hline
-        \textbf{CellType} & \textbf{SymmetryType} & \textbf{LatticeGeometryType} & \textbf{BoundaryType} \\ \hline
+        \textbf{CellType} & \textbf{SymmetryType} & \textbf{LayoutGeometryType} & \textbf{BoundaryType} \\ \hline
         HEX & FULL & HEXAGON\_TRAN & TRANSLATION\\ \hline
         HEX & THIRD & R120 & TRANSLATION\-ROTATION\\ \hline
         HEX & SIXTH & SA60 & AXIAL\_SYMMETRY\\ \hline
