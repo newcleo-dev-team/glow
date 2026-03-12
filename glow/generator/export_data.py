@@ -28,7 +28,7 @@ EPSILON = 1e-05
 class FaceData():
     """
     Class that provides a data representation for a face object of the layout,
-    i.e. a `Region` object, which represents a calculation zone containing a
+    i.e. a ``Region`` object, which represents a calculation zone containing a
     list of properties.
     This dataclass can be ordered on the basis of the ``no`` attribute, which
     provides a global index for the faces in the layout.

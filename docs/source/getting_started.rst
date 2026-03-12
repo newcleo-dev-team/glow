@@ -1340,82 +1340,101 @@ three methods is shown in :numref:`lattice-add`.
 
 .. _layout-export:
 
-Lattice Analysis and Export
----------------------------
+Layout Export
+-------------
 
-The aim of |TOOL| is to provide neutronics code users with a tool that allows
-them to create geometry layouts and export the surface geometry representation
-to a file. This file can then be used to perform a tracking with the *SALT*
-module of *DRAGON5*.
-The generated file is in the format *APOLLO2* requires for its *TDT* solver.
-
+The aim of |TOOL| is to provide *DRAGON5* users with a tool that allows
+them to create geometry layouts not available natively and export the surface
+geometry representation to an output *.dat* file having a format similar to
+the one used by the *APOLLO2* *TDT* solver.
+The *.dat* file can be used directly as input to the *DRAGON5* ``SALT:`` module
+for producing tracking information in the *DRAGON5* format.
 To meet this requirement, |TOOL| comes with a functionality for extracting the
 necessary information about the geometry and generate the output file in the
 required format.
 
-Once the geometry layout has been created using one or more
-:py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>` instances, users
-can run the export process by calling the function
-:py:func:`analyse_and_generate_tdt()<glow.main.analyse_and_generate_tdt>`.
-This function first analyses the provided list of lattices with respect to the
-compound layout representing a portion of them, if any is provided, then
-generates the output file containing the extracted information.
+Once the geometry layout has been created, users can run the export process by
+calling the function :py:func:`export_layout_to_tdt()<glow.main.export_layout_to_tdt>`.
+This function first analyses the provided instance of the
+:py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` subclasses
+to extract information about the characteristics of its geometry and the
+properties associated to its *regions*. A *TDT* file, whose name is provided as
+second parameter, is generated, collecting all this information.
 
-This function operates on the provided list of :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`
-instances on the basis of specific configuration options defined in the dataclass
-:py:class:`TdtSetup<glow.main.TdtSetup>`. Values for these options influence
-the data about the surface geometry representation of the layout contained in
-the output *TDT* file, but only if a portion of the entire geometry layout is
-provided.
-The available settings in the :py:class:`TdtSetup<glow.main.TdtSetup>` instance
-include:
+Users can indicate which information about the geometry needs to be extracted
+from the layout and the tracking setup on the basis of specific configuration
+options defined in the dataclass :py:class:`TdtSetup<glow.main.TdtSetup>`, whose
+instance is provided to the :py:func:`export_layout_to_tdt()<glow.main.export_layout_to_tdt>`
+function.
+The available settings are the following ones:
 
-  - the type of geometry layout of the lattice's cells, as item of the enumeration
-    :py:class:`GeometryType<glow.support.types.GeometryType>`. A value different
-    from that used to display the lattice in the *SALOME* 3D viewer can be
-    specified.
-  - the type of property associated to the lattice's *regions*, as item of the
-    enumeration :py:class:`PropertyType<glow.support.types.PropertyType>`.
-    A value different to that used to apply the colorset to the *regions* can
-    be specified.
-  - the value of the *albedo*, indicating how much reflective the BCs are,
-    i.e. the ratio of exiting to entering neutrons. This attribute can assume
-    values between `0.0` (no reflection) and `1.0` (full reflection) for a
-    :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`
-    type of geometry of the lattice. If nothing is provided, a default value
-    that corresponds to the lattice's geometry type is adopted (i.e. `1.0` for
-    :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`
-    geometry layouts, `0.0` for the others). An exception is raised if users
-    provide a value different from `0.0` for a geometry type other than
-    :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`,
-    as this would not make sense.
-  - the value for the *typegeo* parameter, which is strictly related to the
-    type of cells, the applied symmetry and the type of tracking;
-  - the type of symmetry applied to the geometry layout.
+  - the geometry type of the layout (either the technological or the refined
+    geometry), as item of the enumeration :py:class:`GeometryType<glow.support.types.GeometryType>`.
+    A value different from the one used to display the layout in the *SALOME*
+    3D viewer can be specified.
+  - the type of properties associated to the *regions* of the layout that should
+    be included in the *.dat* file.
+  - the value for the *albedo* applied to the BCs of the layout. This information
+    indicates how much reflective the BCs are, i.e. the ratio of exiting to
+    entering neutrons. This attribute can assume values between `0.0` (no
+    reflection) and `1.0` (full reflection), with the latter case indicating
+    the ``ALBE 1.0`` BC used in DRAGON5 with a uniform tracking (i.e. with
+    the :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`).
+    If not specified, the default value corresponding to the layout type is
+    adopted, i.e. `1.0` for the :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>`
+    case and `0.0` for the other types.
+  - the value for the *typgeo* index of the *.dat* file. This value identifies
+    the type of layout (in terms of symmetry and BCs) and of tracking (i.e.
+    *TSPC* or *TISO*) to apply. Values are expressed in terms of elements of
+    the :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>`
+    enumeration, and they match the ones expected by the ``SALT:`` module of
+    *DRAGON5*.
+  - the type of symmetry to consider, as element of the enumeration
+    :py:class:`SymmetryType<glow.support.types.SymmetryType>`. The indicated
+    symmetry type is applied, if the corresponding shape of the symmetry has
+    already been built by calling the :py:meth:`apply_symmetry()<glow.geometry_layouts.fillable_layouts.Fillable.apply_symmetry>`
+    method.
+
+The function :py:func:`export_layout_to_tdt()<glow.main.export_layout_to_tdt>`
+also support the possibility to export the surface geometry representation for
+a custom portion of the provided :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
+instance. This portion, which is *GEOM* compound, is provided as last argument
+to the export function.
+When providing a portion of the layout, users should note that the configuration
+values provided in the :py:class:`TdtSetup<glow.main.TdtSetup>` instance must
+match with the indicated *GEOM* compound object. If values that do not match
+with the shape of the compound are provided, the validity of the results in
+*DRAGON5* cannot be assured.
 
 The analysis step involves the extraction of the geometric data, that is needed
 for the generation of the output *TDT* file, from the layout.
-The first step consists in determining the *GEOM compound* to analyse, if one
-or more lattices are provided; this compound is selected on the basis of the
-:py:class:`GeometryType<glow.support.types.GeometryType>` and on the applied
-:py:class:`SymmetryType<glow.support.types.SymmetryType>`.
-In case a *GEOM compound* is directly provided, it will be used for extracting
-the geometric data, provided that the *GEOM compound* is a portion of the given
-lattice(s).
-For each :py:class:`Region<glow.geometry_layouts.cells.Region>` object, which
-corresponds to the *regions* of the layout's compound, a
-`Face<glow.generator.geom_extractor.Face>` object is built and associated with
-the property type value (:py:class:`PropertyType<glow.support.types.PropertyType>`)
+The first step consists in determining the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects that correspond to the *GEOM* faces the layout to export can be subdivided
+into. A traslation of layout, and of its *regions*, is performed, if needed, so
+that its lower-left corner coincides with the origin of the XYZ space as this
+is needed by *DRAGON5* when processing the geometry layout with the ``SALT:``
+module.
+In addition, if the :py:attr:`SECTORIZED<glow.support.types.GeometryType.SECTORIZED>`
+geometry type is indicated, the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects are partitioned according to the edges of the refined geometry.
+
+For each :py:class:`Region<glow.geometry_layouts.layouts.Region>` object, a
+:py:class:`FaceData<glow.generator.export_data.FaceData>` object is built and associated
+with the property types (:py:class:`PropertyType<glow.support.types.PropertyType>`)
 for which the layout is analysed. In addition, an index is assigned to ensure
 their identification.
-The *GEOM edge* objects are then extracted and associated to the corresponding
-regions. This means that each edge, identified with another index, has one or
-two regions associated with it. Those associated with two regions are internal
-edges, shared by two adjacent regions, while those associated with only one
-*region* are border edges.
-Lastly, the indices of the border edges are associated to a *boundary*, whose
-type (as item of the enumeration :py:class:`BoundaryType<glow.support.types.BoundaryType>`)
-and geometric data are determined on the basis of the
+For each *GEOM* edge object of the layout to export, an :py:class:`EdgeData<glow.generator.export_data.EdgeData>`
+instance is built storing the :py:class:`FaceData<glow.generator.export_data.FaceData>`
+objects of the *regions* that share it. This means that each edge, identified
+with another index, has one or two *regions* associated with it.
+Edges that are shared by two adjacent *regions* are *internal edges*, while
+those associated with only one *region* are *border edges*.
+
+Lastly, :py:class:`glow.generator.export_data.BoundaryData` instances are built
+for each border of the layout to export. These instances store the indices of
+the corresponding *border edges*, as well as the type of boundary (as item of
+the :py:class:`BoundaryType<glow.support.types.BoundaryType>` enumeration) and
+its geometric data, both determined on the basis of the indicated
 :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>` and the
 applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
 
@@ -1423,31 +1442,35 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
 
    :numref:`tdt-types` provides the association between
    :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>` and
-   :py:class:`BoundaryType<glow.support.types.BoundaryType>` for the two type of
-   cells with the symmetries available in |TOOL|.
-   The first group of coloumns *LayoutGeometryType*-*BoundaryType* indicates the
-   values for which a uniform tracking (i.e. *TISO*) should be performed in *SALT*;
-   the second group refers to values which correspond to a cyclic tracking (i.e.
-   *TSPC*).
+   :py:class:`BoundaryType<glow.support.types.BoundaryType>` for the hexagonal
+   and Cartesian type of layouts identified by the corresponding cell and lattice
+   classes. In case of generic cells and lattices, all the :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>`
+   values are valid.
+   The first group of columns *LayoutGeometryType*-*BoundaryType* indicates the
+   values for which a uniform tracking (i.e. *TISO*) should be performed in
+   ``SALT:``; the second group refers to values which correspond to a cyclic
+   tracking (i.e. *TSPC*).
    An :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>` type
-   of geometry does not correspond to any BC, whereas those having two types of
-   BCs applies a :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
-   on the internal boundaries and a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
+   does not correspond to any BC, whereas those values that show two types of
+   BCs correspond to a geometry layout in which a :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
+   is applied on the internal boundaries and a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
    on the external ones (see :numref:`tran-rota`).
 
 .. only:: latex
 
    The following tables provides the association between
    :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>` and
-   :py:class:`BoundaryType<glow.support.types.BoundaryType>` for the two type of
-   cells with the symmetries available in |TOOL|.
+   :py:class:`BoundaryType<glow.support.types.BoundaryType>` for the hexagonal
+   and Cartesian type of layouts identified by the corresponding cell and lattice
+   classes. In case of generic cells and lattices, all the :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>`
+   values are valid.
    The first table indicates the values for which a uniform tracking (i.e.
-   *TISO*) should be performed in *SALT*; the second table refers to values
+   *TISO*) should be performed in ``SALT:``; the second table refers to values
    which correspond to a cyclic tracking (i.e. *TSPC*).
    An :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>` type
-   of geometry does not correspond to any BC, whereas those having two types of
-   BCs applies a :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
-   on the internal boundaries and a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
+   of geometry does not correspond to any BC, whereas those values that show two types of
+   BCs correspond to a geometry layout in which a :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
+   is applied on the internal boundaries and a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
    on the external ones (see :numref:`tran-rota`).
 
 .. only:: html
@@ -1458,29 +1481,29 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       :widths: auto
       :align: center
 
-      +----------+--------------+---------------------+----------------------+---------------------+----------------------+
-      | CellType | SymmetryType | LayoutGeometryType | BoundaryType         | LayoutGeometryType | BoundaryType         |
-      +==========+==============+=====================+======================+=====================+======================+
-      |          | FULL         | ISOTROPIC           |          /           | HEXAGON_TRAN        | TRANSLATION          |
-      |          +--------------+---------------------+----------------------+---------------------+----------------------+
-      |          | THIRD        | ROTATION            | TRANSLATION/ROTATION | R120                | TRANSLATION/ROTATION |
-      |          +--------------+---------------------+----------------------+---------------------+----------------------+
-      |  HEX     |              | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | SA60                | AXIAL_SYMMETRY       |
-      |          | SIXTH        +---------------------+----------------------+---------------------+----------------------+
-      |          |              | ROTATION            | TRANSLATION/ROTATION | RA60                | TRANSLATION/ROTATION |
-      |          +--------------+---------------------+----------------------+---------------------+----------------------+
-      |          | TWELFTH      | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | S30                 | AXIAL_SYMMETRY       |
-      +----------+--------------+---------------------+----------------------+---------------------+----------------------+
-      |          |              |                     |                      | RECTANGLE_TRAN      | TRANSLATION          |
-      |          | FULL         | ISOTROPIC           |          /           +---------------------+----------------------+
-      |          |              |                     |                      | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
-      |          +--------------+---------------------+----------------------+---------------------+----------------------+
-      |  RECT    | HALF         | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
-      |          +--------------+---------------------+----------------------+---------------------+----------------------+
-      |          | QUARTER      | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
-      |          +--------------+---------------------+----------------------+---------------------+----------------------+
-      |          | EIGHTH       | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_EIGHTH    | AXIAL_SYMMETRY       |
-      +----------+--------------+---------------------+----------------------+---------------------+----------------------+
+      +------------+--------------+---------------------+----------------------+---------------------+----------------------+
+      | LayoutType | SymmetryType | LayoutGeometryType  | BoundaryType         | LayoutGeometryType  | BoundaryType         |
+      +============+==============+=====================+======================+=====================+======================+
+      |            | FULL         | ISOTROPIC           |          /           | HEXAGON_TRAN        | TRANSLATION          |
+      |            +--------------+---------------------+----------------------+---------------------+----------------------+
+      |            | THIRD        | ROTATION            | TRANSLATION/ROTATION | R120                | TRANSLATION/ROTATION |
+      |            +--------------+---------------------+----------------------+---------------------+----------------------+
+      |  HEX       |              | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | SA60                | AXIAL_SYMMETRY       |
+      |            | SIXTH        +---------------------+----------------------+---------------------+----------------------+
+      |            |              | ROTATION            | TRANSLATION/ROTATION | RA60                | TRANSLATION/ROTATION |
+      |            +--------------+---------------------+----------------------+---------------------+----------------------+
+      |            | TWELFTH      | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | S30                 | AXIAL_SYMMETRY       |
+      +------------+--------------+---------------------+----------------------+---------------------+----------------------+
+      |            |              |                     |                      | RECTANGLE_TRAN      | TRANSLATION          |
+      |            | FULL         | ISOTROPIC           |          /           +---------------------+----------------------+
+      |            |              |                     |                      | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
+      |            +--------------+---------------------+----------------------+---------------------+----------------------+
+      |  RECT      | HALF         | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
+      |            +--------------+---------------------+----------------------+---------------------+----------------------+
+      |            | QUARTER      | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
+      |            +--------------+---------------------+----------------------+---------------------+----------------------+
+      |            | EIGHTH       | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_EIGHTH    | AXIAL_SYMMETRY       |
+      +------------+--------------+---------------------+----------------------+---------------------+----------------------+
 
 .. only:: latex
 
@@ -1490,7 +1513,7 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       \begin{table}[ht]
       \centering
       \begin{tabularx}{.95\textwidth}{|X|X|X|X|}\hline
-        \textbf{CellType} & \textbf{SymmetryType} & \textbf{LayoutGeometryType} & \textbf{BoundaryType} \\ \hline
+        \textbf{LayoutType} & \textbf{SymmetryType} & \textbf{LayoutGeometryType} & \textbf{BoundaryType} \\ \hline
         HEX & FULL & ISOTROPIC & N.D.\\ \hline
         HEX & THIRD & ROTATION & TRANSLATION\-ROTATION\\ \hline
         HEX & SIXTH & SYMMETRIES\_TWO & AXIAL\_SYMMETRY\\ \hline
@@ -1509,7 +1532,7 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       \begin{table}[ht]
       \centering
       \begin{tabularx}{.95\textwidth}{|X|X|X|X|}\hline
-        \textbf{CellType} & \textbf{SymmetryType} & \textbf{LayoutGeometryType} & \textbf{BoundaryType} \\ \hline
+        \textbf{LayoutType} & \textbf{SymmetryType} & \textbf{LayoutGeometryType} & \textbf{BoundaryType} \\ \hline
         HEX & FULL & HEXAGON\_TRAN & TRANSLATION\\ \hline
         HEX & THIRD & R120 & TRANSLATION\-ROTATION\\ \hline
         HEX & SIXTH & SA60 & AXIAL\_SYMMETRY\\ \hline
@@ -1525,8 +1548,53 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       \end{table}
       }
 
+The items of the enumeration :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>`
+identify the different values for the *typgeo* index in the *.dat* output file.
+The ``SALT:`` module of *DRAGON5* associates one of the two types of tracking
+according to the *typgeo* value :cite:`dragon5-ug`:
+
+  - values of `0`, `1` and `2` are associated with a *TISO* tracking type,
+    which produces non-cycling tracks distributed uniformally over the domain.
+  - values greater that `2` are associated with a *TSPC* tracking type, which
+    indicates a cyclic tracking over a closed domain.
+
+The meaning of each items of the enumeration :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>`
+is detailed in the following:
+
+  - :py:attr:`ISOTROPIC<glow.support.types.LayoutGeometryType.ISOTROPIC>` to
+    represent a layout having an isotropic reflection on its boundaries. It is
+    associated with a *TISO* tracking.
+  - :py:attr:`SYMMETRIES_TWO<glow.support.types.LayoutGeometryType.SYMMETRIES_TWO>`
+    to represent a layout having symmetries of two axis of angle ``pi/n`` (
+    :math:`n>0`) on its boundaries. It is associated with a *TISO* tracking.
+  - :py:attr:`ROTATION<glow.support.types.LayoutGeometryType.ROTATION>` to
+    represent a layout with a rotation of angle ``2*pi/n`` (:math:`n>1`) for
+    its boundaries. It is associated with a *TISO* tracking.
+  - :py:attr:`RECTANGLE_TRAN<glow.support.types.LayoutGeometryType.RECTANGLE_TRAN>`
+    to represent a Cartesian layout having a translation BC on its boundaries.
+    It is associated with a *TSPC* tracking.
+  - :py:attr:`RECTANGLE_SYM<glow.support.types.LayoutGeometryType.RECTANGLE_SYM>`
+    to represent a full, half, or quarter symmetry for a Cartesian layout.
+    It is associated with a *TSPC* tracking.
+  - :py:attr:`RECTANGLE_EIGHT<glow.support.types.LayoutGeometryType.RECTANGLE_EIGHT>`
+    to represent a layout with an eighth symmetry. It is associated with a
+    *TSPC* tracking.
+  - :py:attr:`SA60<glow.support.types.LayoutGeometryType.SA60>` to represent a
+    layout with a sixth symmetry. It is associated with a *TSPC* tracking.
+  - :py:attr:`HEXAGON_TRAN<glow.support.types.LayoutGeometryType.HEXAGON_TRAN>`
+    to represent a full hexagonal layout having a translation BC on its boundaries.
+    It is associated with a *TSPC* tracking.
+  - :py:attr:`RA60<glow.support.types.LayoutGeometryType.RA60>` to represent a
+    layout with a sixth symmetry with both rotation and translation BCs on its
+    boundaries. It is associated with a *TSPC* tracking.
+  - :py:attr:`R120<glow.support.types.LayoutGeometryType.R120>` to represent a
+    layout with an third symmetry with both rotation and translation BCs on its
+    boundaries. It is associated with a *TSPC* tracking.
+  - :py:attr:`S30<glow.support.types.LayoutGeometryType.S30>` to represent a
+    layout with a twelfth symmetry. It is associated with a *TSPC* tracking.
+
 The different values of BCs that are automatically applied by |TOOL| to the
-boundaries of the lattice's geometry layout are identified by the items of the
+boundaries of the geometry layout to export are identified by the items of the
 enumeration :py:class:`BoundaryType<glow.support.types.BoundaryType>`. Their
 meaning and usage is the same as specified in :cite:`dragon5-ug`:
 
@@ -1550,11 +1618,12 @@ meaning and usage is the same as specified in :cite:`dragon5-ug`:
    :width: 400px
    :align: center
 
-   Showing to which boundaries the :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
+   Showing to which borders the :py:attr:`ROTATION<glow.support.types.BoundaryType.ROTATION>`
    and :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>` BC
-   types are assigned to (third symmetry case).
+   types are assigned to (:py:attr:`THIRD<glow.support.types.SymmetryType.THIRD>`
+   symmetry case).
 
-Given all the geometric data extracted from the lattice, the output file is
+Given all the geometric data extracted from the layout, the output file is
 generated. Its structure consists of five sections, that are:
 
   - the *header* section, providing information about the type of geometry
@@ -1569,9 +1638,9 @@ generated. Its structure consists of five sections, that are:
     to.
   - the *boundary conditions* section, providing information about the BC types
     and the indices of the edges belonging to each boundary.
-  - the *property* section, indicating the index of each value of the considered
-    property type (e.g. the :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
-    one). The order in which values are present matches the indices of the
+  - the *material* section, indicating the index of each value of the
+    :py:attr:`MATERIAL<glow.support.types.PropertyType.MATERIAL>` type of
+    property. The order in which values are present matches the indices of the
     regions.
 
 .. _usage:
@@ -1590,10 +1659,10 @@ at once to have them available by setting the following import instruction:
 Given that, classes and methods are directly accessible and users can exploit
 them to:
 
-- assemble the geometry;
+- assemble the geometry layout;
 - assign properties to regions;
-- visualize the result in the *SALOME* 3D viewer;
-- perform the geometry analysis and the output file generation.
+- visualise the result in the *SALOME* 3D viewer;
+- export the geometry layout to a *.dat* file in the *TDT*-compatible format.
 
 To run this script, users can:
 
@@ -1607,6 +1676,14 @@ To run this script, users can:
 
 In addition, since *SALOME* comes with an embedded Python console, users can
 import the |TOOL| modules and exploit its functionalities directly.
+
+The built script can also be executed in *batch mode*, i.e. without running the
+*SALOME* GUI, by providing it as argument when running *SALOME* shell
+environment:
+
+.. code-block:: bash
+
+  salome shell my_script.py
 
 To see some of the |TOOL| functionalities in action, please refer to the script
 files present in the ``tutorials`` folder and described in the :ref:`tutorials`

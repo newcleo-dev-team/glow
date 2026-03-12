@@ -50,7 +50,7 @@ class TdtSetup:
     """Identifying the value for the typegeo related to the layout."""
     symmetry_type: SymmetryType = SymmetryType.FULL
     """Identifying the value for the symmetry type applied to the layout."""
-    layout_type: LayoutType = field(init=False)
+    layout_type: LayoutType = field(init=False, repr=False)
     """Identifying the type of the layout."""
 
     def __post_init__(self) -> None:
@@ -91,7 +91,7 @@ def export_layout_to_tdt(
     A TDT file, whose name is provided as second parameter, is generated,
     collecting all this information.
 
-    By properly configuring the `TdtSetup` instance, provided as third
+    By properly configuring the ``TdtSetup`` instance, provided as third
     parameter, users can indicate which information about the geometry needs
     to be extracted from the layout and the tracking setup. In particular,
     the available options are:

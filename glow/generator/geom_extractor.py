@@ -120,10 +120,10 @@ class LayoutDataExtractor():
 
     def build_boundaries(self, type_geo: LayoutGeometryType) -> None:
         """
-        Method that constructs a list of ``Boundary`` objects representing
+        Method that constructs a list of ``BoundaryData`` objects representing
         the layout boundary edges, i.e. those connected to a single face.
         All the GEOM edges being part of each boundary are associated to the
-        same ``Boundary`` object.
+        same ``BoundaryData`` object.
 
         Parameters
         ----------
@@ -152,7 +152,7 @@ class LayoutDataExtractor():
         # Loop through all the edge objects representing the layout borders
         print("LEN BORDERS:", len(self.borders))
         for border in self.borders:
-            # Build an object of the 'Boundary' class
+            # Build an object of the 'BoundaryData' class
             boundary = BoundaryData(
                 border=border,
                 type_geo=type_geo,
@@ -161,23 +161,24 @@ class LayoutDataExtractor():
             )
             # Store all the indices of the edges belonging to the border
             boundary.find_edges_on_border(boundary_edgs_cmpd, self.id_vs_edge)
-            # Append the built 'Boundary' object to the corresponding list
+            # Append the built 'BoundaryData' object to the corresponding list
             self.boundaries.append(boundary)
 
     def build_edges(
-            self, edge_names_vs_faces: Dict[str, List[Any | FaceData]]) -> None:
+            self, edge_names_vs_faces: Dict[str, List[Any | FaceData]]
+        ) -> None:
         """
         Method that builds a list of ``EdgeData`` objects from the given
         dictionary.
         It associates for each edge name a list containing the corresponding
-        GEOM edge and the ``Face`` objects; the latter represent the faces
+        GEOM edge and the ``FaceData`` objects; the latter represent the faces
         sharing the same edge.
 
         Parameters
         ----------
-        edge_names_vs_faces : Dict[str, List[Any | Face]]
+        edge_names_vs_faces : Dict[str, List[Any | FaceData]]
             Dictionary of edge names VS the list with the corresponding
-            GEOM edge and the connected ``Face`` objects.
+            GEOM edge and the connected ``FaceData`` objects.
         """
         # Loop through all the lists of objects associated to each edge
         for shapes in edge_names_vs_faces.values():
@@ -204,7 +205,7 @@ class LayoutDataExtractor():
         # Loop through all the layout subfaces ('FaceData' objects)
         print("LEN SUBFACES", len(self.subfaces))
         for subface in self.subfaces:
-            # Log the 'Face' characteristics
+            # Log the 'FaceData' characteristics
             print(subface)
             # Loop through all the edges of the current subface
             for subface_edge, edge_id in subface.edge_vs_id.items():
@@ -770,7 +771,7 @@ class LayoutDataExtractor():
 
         This method updates the hierarchical structure of the layout, if it
         is needed, and builds the ``Region`` objects of the layout that
-        corresponds to the faces the layout compound can be subdivided into.
+        correspond to the faces the layout compound can be subdivided into.
         The layout compound is either provided as input or determined from the
         ``Fillable`` object according to the indicated symmetry type.
         If the layout falls in one of the cases identified by the attribute
