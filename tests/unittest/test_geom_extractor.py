@@ -559,7 +559,7 @@ class TestFace(unittest.TestCase):
         self.assertTrue(
             are_same_shapes(face.face, rect_face.face, ShapeType.FACE)
         )
-        self.assertEqual(face.property, prop_val)
+        self.assertEqual(face.properties, prop_val)
         self.assertEqual(face.no, 1)
         self.assertEqual(face.sort_index, 1)
         self.assertTrue(

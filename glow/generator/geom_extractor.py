@@ -217,7 +217,7 @@ class LayoutDataExtractor():
         # Return the dictionary of edge names VS the list of connected faces
         return edges_name_vs_faces
 
-    def build_faces(self, property_type: PropertyType) -> None:
+    def build_faces(self, property_types: List[PropertyType]) -> None:
         """
         Method that builds a list of ``FaceData`` objects from the GEOM face
         objects, extracted from the layout regions, and the property
@@ -228,8 +228,8 @@ class LayoutDataExtractor():
 
         Parameters
         ----------
-        property_type : PropertyType = PropertyType.MATERIAL
-            The type of property associated to the layout regions.
+        property_type : List[PropertyType]
+            The list of property types associated to the layout regions.
 
         Raises
         ------
@@ -248,7 +248,7 @@ class LayoutDataExtractor():
             # Build a 'FaceData' object and append to the corresponding list
             try:
                 self.subfaces.append(
-                    FaceData(region, indx+1, [property_type])
+                    FaceData(region, indx+1, property_types)
                 )
             except RuntimeError as e:
                 raise RuntimeError("The layout analysis failed.") from e
@@ -932,7 +932,7 @@ def analyse_layout(
         compound_to_analyse
     )
     # Call its method for performing the analysis
-    data_extractor.build_faces(tdt_setup.property_type)
+    data_extractor.build_faces(tdt_setup.property_types)
     edge_name_vs_faces = data_extractor.build_edges_and_faces_association()
     data_extractor.build_edges(edge_name_vs_faces)
     data_extractor.build_boundaries(tdt_setup.type_geo)

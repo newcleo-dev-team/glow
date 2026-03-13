@@ -3,7 +3,7 @@ import os
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from glow.geometry_layouts.cells import CartesianCell, Cell, HexCell
 from glow.geometry_layouts.fillable_layouts import Fillable
@@ -41,9 +41,9 @@ class TdtSetup:
     ``1.0`` otherwise.
     """
     geom_type: GeometryType = GeometryType.TECHNOLOGICAL
-    """Identifying the type of geometry of the layout."""
-    property_type: PropertyType = PropertyType.MATERIAL
-    """Identifying the type of property associated to layout's regions."""
+    """Identifying the type of geometry of the lattice's cells."""
+    property_types: PropertyType | List[PropertyType] = PropertyType.MATERIAL
+    """Identifying the type(s) of property associated to lattice's regions."""
     albedo: float | None = None
     """Identifying the value for the albedo applied to the layout's BCs."""
     type_geo: LayoutGeometryType = LayoutGeometryType.ISOTROPIC
@@ -73,6 +73,9 @@ class TdtSetup:
                 raise RuntimeError(
                     f"The value {self.albedo} for the albedo is out of "
                     "bounds [0.0, 1.0]")
+        # Transform the given property type to a list
+        if not isinstance(self.property_types, List):
+            self.property_types = [self.property_types]
 
 
 def export_layout_to_tdt(

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 from glow.generator.geom_extractor import BoundaryData, EdgeData, FaceData
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
@@ -59,6 +60,8 @@ class TdtData():
         init=False, default_factory=dict
     )
     """
+    Dictionary with keys the property types and values the list of names for
+    each property the regions of the geometry layout are associated with.
     Dictionary with keys the property types and values the list of names for
     each property the regions of the geometry layout are associated with.
     """
@@ -191,13 +194,17 @@ def _write_header(file: TextIOWrapper, tdt_data: TdtData) -> None:
     typegeom   = tdt_data.type_geo.value
     # Get the number of folds of the layout
     nb_folds   = tdt_data.nb_folds
+    # Get the number of macro regions, if any
+    nb_macros = 1
+    if PropertyType.MACRO in tdt_data.properties:
+        nb_macros = len(tdt_data.properties[PropertyType.MACRO])
     file.writelines([
          "\n",
          "	dat input file for DRAGON5\n",
          "------------------------------------------------------------\n\n\n",
          "* typge, nbfo, node, elem, macr, nreg,    z, mac2\n",
         f"  {typegeom:5d},{nb_folds:5d}, {nbnodes:5d}, {nbelements:5d}, "
-        f"{1:5d},{nbregions:5d}, {0:5d}, {1:5d}\n",
+        f"{nb_macros:5d},{nbregions:5d}, {0:5d}, {1:5d}\n",
          "* index  kindex\n",
         f"  {tdt_data.impressions[0]:5d}  {tdt_data.impressions[1]:6d}  1\n",
          "*     eps    eps0\n",
@@ -207,6 +214,9 @@ def _write_header(file: TextIOWrapper, tdt_data: TdtData) -> None:
 def _write_regions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
     Function for writing to file the list of regions and macros.
+    Information about the latter ones is included only if the
+    ``PropertyType.MACRO`` has been assigned to the regions of the
+    layout.
 
     Parameters
     ----------
@@ -220,22 +230,24 @@ def _write_regions(file: TextIOWrapper, tdt_data: TdtData) -> None:
     nbregions = len(tdt_data.faces)
     # Write a line in the file
     file.writelines(["*   flux region number per geometry region (mesh)\n"])
-
     # Write the list of region numbers
-    for i in range(1, nbregions):
-        file.write(f"{i:4d},")
-        # Write on a new line after 12 values
-        if i % 12 == 0: file.write("\n")
-    # Write the last region number without ','
-    file.write(f"{nbregions:4d}")
-    file.write("\n")
+    _write_values(file, range(1, nbregions + 1), 3, 12, ",")
 
-    # Write the information about the macros
-    file.writelines([
-        "*   names of macros\n",
-        "mac\n",
-        "*   macro order number per flux region\n",
-        f"{nbregions}*1\n"])
+    # Write the information about the macros, if any has been assigned to the
+    # regions of the layout
+    file.write("*   names of macros\n")
+    if PropertyType.MACRO not in tdt_data.properties:
+        file.writelines([
+            "mac\n",
+            "*   macro order number per flux region\n",
+            f"{nbregions}*1\n"]
+        )
+        return
+    # Write the macro names
+    _write_values(file, tdt_data.properties[PropertyType.MACRO], 7, 4)
+    # Write the macro index for each region
+    file.write("*   macro order number per flux region\n")
+    _write_values(file, tdt_data.property_ids[PropertyType.MACRO], 2, 12, ",")
 
 
 def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
@@ -388,8 +400,9 @@ def _write_boundary_conditions(
 
 def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
-    Function for writing the indices of the properties associated with each
-    region of the layout to the TDT-format file.
+    Function for writing the indices of the ``PropertyType.MATERIAL``
+    property, which is associated with each region of the layout, to the
+    TDT-format file.
 
     Parameters
     ----------
@@ -424,3 +437,53 @@ def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     for material_id in mat_indices:
         # Write the ID of the material associated to a face to the TDT file
         file.write(f"  {material_id}\n")
+
+
+def _write_values(
+        file: TextIOWrapper,
+        values: List[int | str],
+        width: int,
+        items_per_line: int,
+        sep_char: str = ""
+    ) -> None:
+    """
+    Function for writing a sequence of values to a file with fixed width
+    formatting. Values are separated by a given character and a new line
+    is added after a specified number of items. The last value is written
+    without any trailing character.
+
+    Parameters
+    ----------
+    file : TextIOWrapper
+        Handle for the opened file to write.
+    values : List[int]
+        The list of indices or names to write in the TDT file.
+    width : int
+        The width formatting value used when writing the values.
+    items_per_line : int
+        The number of values written on the same line.
+    sep_char : str = ""
+        The character separating the values written on the same line.
+
+    Raises
+    ------
+    RuntimeError
+        If the values in the input list are not all integers or strings.
+    """
+    # Set the formatting type depending on the type of the values
+    if all(isinstance(v, int) for v in values):
+        formatting = 'd'
+    elif all(isinstance(v, str) for v in values):
+        formatting = 's'
+    else:
+        raise RuntimeError(
+            "Values in the input list must all be integers or strings.")
+    # Loop through the values of the given list, excluding the last one
+    for i, val in enumerate(values[:-1]):
+        # Write the value to file with the given width formatting
+        file.write(f" {val:{width}{formatting}}{sep_char}")
+        # Write on a new line after the given number of values
+        if (i + 1) % items_per_line == 0:
+            file.write("\n")
+    # Write last value without any trailing character
+    file.write(f" {values[-1]:{width}{formatting}}\n")
