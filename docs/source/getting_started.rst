@@ -182,12 +182,18 @@ the :py:class:`PropertyType<glow.support.types.PropertyType>` enumeration to any
 :py:class:`Region<glow.geometry_layouts.layouts.Region>` object. These property
 types include:
 
-  - :py:class:`MATERIAL<glow.support.types.MATERIAL>`, to indicate the name of
-    the material.
+  - :py:class:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`, to indicate
+    the name of the material.
+  - :py:class:`MACRO<glow.support.types.PropertyType.MACRO>`, to indicate the
+    name of the macro. Adjacent *regions* can be grouped together in a *macro
+    region* to enable support for the *multicell surfacic approximation* in
+    *DRAGON5*.
 
-Information about the :py:class:`MATERIAL<glow.support.types.MATERIAL>`
-property, in terms of its assigned values for the *regions*, is included in
-the output file when the geometry is exported.
+Information about the :py:class:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`
+property, in terms of its assigned values and indices for the *regions*, is
+always included in the output file when the geometry is exported.
+The names and indices of the *macro regions* are included only if indicated by
+the user (see :ref:`layout-export`).
 
 The specific classes associated to *cells* and *lattices*, which can be used to
 model assemblies, and even the entire core, are the following ones:
@@ -856,6 +862,65 @@ colour map is shown in :numref:`cell-after-props`.
    property type for each region. It is shown with a colour map highlighting
    the different values assigned to the cell's *regions*.
 
+The following example shows how to set the :py:attr:`MACRO<glow.support.types.PropertyType.MACRO>`
+property to the regions of a hexagonal assembly, modelled as a :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>`
+containing a :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>`.
+For details about the construction of a lattice of cells, please refer to
+:ref:`lattice-def`.
+
+.. code-block:: python
+
+    from glow import *
+
+    # Build the lattice geometry layout
+    hex_cell = HexCell()
+    hex_cell.add(Region(Circle(radius=0.3)))
+    hex_cell.rotate(90)
+    lattice = HexLattice([hex_cell])
+    lattice.add_ring_of_cells(hex_cell, 1)
+    # Build the assembly so that it is slightly greater than the lattice
+    assembly = HexCell(side=1.1*lattice.dimensions[0])
+    assembly.add(Region(Hexagon(edge_length=lattice.dimensions[0])))
+    assembly.add(lattice)
+    assembly.update_hierarchical_structure()
+    # Assign the 'MACRO' property so that the box layer and the background has
+    # the same value, whereas each cell of the lattice has a different value
+    assembly.set_region_properties(
+        {PropertyType.MACRO: "MAC_001"},
+        assembly.layers[0][0]
+    )
+    # Loop through the regions of the background of the assembly
+    for region in assembly.layers[1]:
+        assembly.set_region_properties(
+            {PropertyType.MACRO: "MAC_001"}, region
+        )
+
+    macro_index = 1
+    # Loop through the layers of the lattice, and through those of each cell
+    for layer in assembly.layers[2][0].layers:
+        for cell in layer:
+            # Increment the macro index for each cell
+            macro_index += 1
+            for cell_layer in cell.layers:
+                for cell_region in cell_layer:
+                    cell_region.properties = \
+                        {PropertyType.MACRO: "MAC_00" + str(macro_index)}
+
+    # Show the assembly regions according to the 'MACRO' colour map
+    assembly.show(PropertyType.MACRO)
+
+The resulting geometry layout of the assembly with the :py:attr:`MACRO<glow.support.types.PropertyType.MACRO>`
+colour map is shown in :numref:`assembly-set-props`.
+
+.. _assembly-set-props:
+.. figure:: images/assembly_macros.png
+   :alt: Assembly after setting up the 'MACRO' property
+   :width: 400px
+   :align: center
+
+   Assembly after setting up the values for the :py:attr:`MACRO<glow.support.types.PropertyType.MACRO>`
+   type of property. It is shown with the corresponding colour map.
+
 .. _show:
 
 Displaying the geometry layout
@@ -1372,8 +1437,9 @@ The available settings are the following ones:
     geometry), as item of the enumeration :py:class:`GeometryType<glow.support.types.GeometryType>`.
     A value different from the one used to display the layout in the *SALOME*
     3D viewer can be specified.
-  - the type of properties associated to the *regions* of the layout that should
-    be included in the *.dat* file.
+  - the type of properties, as elements of the :py:class:`PropertyType<glow.support.PropertyType>`
+    enumeration, associated to the *regions* of the layout that should be
+    included in the *.dat* file.
   - the value for the *albedo* applied to the BCs of the layout. This information
     indicates how much reflective the BCs are, i.e. the ratio of exiting to
     entering neutrons. This attribute can assume values between `0.0` (no
@@ -1632,7 +1698,9 @@ generated. Its structure consists of five sections, that are:
     the number of *elements* (i.e. the edges).
   - the *regions* section, providing a list of indices attributed to the
     *regions* in the lattice. It also contains the definition of the *macros*
-    to indicate subvolumes of the assembly.
+    to indicate subvolumes of the assembly. Names and indices of the *macros*
+    match the assignment of the corresponding :py:attr:`MACRO<glow.support.types.PropertyType.MACRO>`
+    type of property to the regions.
   - the *edges* section, providing the geometric information about all the edges
     in the geometry layout, as well as the indices of the regions they belong
     to.

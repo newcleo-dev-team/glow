@@ -28,6 +28,9 @@ equation by means of the following methods :cite:`hebert2020`:
   - the *Collision Probability Method* (*CPM*), an approach that computes the
     probability of a neutron emitted in one region to have the first collision
     in another region. It generally assumes isotropic neutron emission.
+  - the *multicell surfacic approximation*, where macro geometries are coupled
+    using incoming and outgoing interface currents. This method is also known
+    as the *Interface Current* method (*IC*).
 
 Having a proper description of the geometry layout is essential to perform
 tracking calculations in *DRAGON5*.
