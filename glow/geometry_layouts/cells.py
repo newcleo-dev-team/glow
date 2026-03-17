@@ -8,9 +8,11 @@ from typing import Any, Dict, List, Tuple
 
 from glow.geometry_layouts.fillable_layouts import Fillable
 from glow.geometry_layouts.geometries import Circle, Hexagon, Surface, \
-    Rectangle, build_parallelogram, build_regular_triangle, \
-    build_right_triangle, build_right_triangle_from_catheti
+    Rectangle
 from glow.geometry_layouts.layouts import Region
+from glow.geometry_layouts.symmetry_management import SymmetryDomain, \
+    build_cartesian_symmetry_shape, build_hex_symmetry_shape, \
+    use_symmetry_logic
 from glow.interface.geom_entities import Edge, wrap_shape
 from glow.interface.geom_interface import get_bounding_box, get_min_distance, \
     get_point_coordinates, make_cdg, make_compound, make_edge, \
@@ -656,16 +658,18 @@ class CartesianCell(Cell):
         # Return the list collecting all the edges of the sectorization
         return sect_edges
 
+    @use_symmetry_logic(build_cartesian_symmetry_shape)
     def _build_symmetry_shape(
             self,
             symmetry: SymmetryType,
-            x_min_max: Tuple[float, float],
-            y_min_max: Tuple[float, float],
-            o_xyz: Tuple[float, float, float]
+            domain: SymmetryDomain
         ) -> Surface:
         """
-        Method that builds the geometric shape corresponding to the given
-        symmetry type for a Cartesian cell.
+        Method that builds the geometric shape that corresponds to the given
+        symmetry type and domain for a Cartesian-type layout.
+        In addition to the symmetry types available for all the geometry
+        layouts, this method supports those symmetries specific for a
+        Cartesian layout.
 
         Supported symmetries are:
         - FULL: returns the characteristic shape of the cell.
@@ -679,14 +683,9 @@ class CartesianCell(Cell):
         ----------
         symmetry : SymmetryType
             The symmetry type for which the characteristic shape is built.
-        x_min_max : tuple[float, float]
-            The minimum and maximum extension of the geometry bounding box
-            along X-axis.
-        y_min_max : tuple[float, float]
-            The minimum and maximum extension of the geometry bounding box
-            along Y-axis.
-        o_xyz : tuple[float, float, float]
-            The XYZ coordinates of the cell centre.
+        domain : SymmetryDomain
+            Instance providing the domain of the full layout in terms of
+            XY-bounding extents, full shape and its centre.
 
         Returns
         -------
@@ -697,27 +696,16 @@ class CartesianCell(Cell):
         ------
         RuntimeError
             If the indicated symmetry type is not supported for a Cartesian
-            cell.
+            layout.
+
+        Notes
+        -----
+        The method is decorated so that it calls the function handling the
+        construction of the symmetry shape for hexagonal-type layouts. For
+        this reason, no implementation is included here.
         """
-        # Get the XY dimensions of the bounding box for the geometry layout
-        x_min, x_max = x_min_max
-        y_min, y_max = y_min_max
-        # Get the coordinates of the cell centre
-        o_x, o_y, o_z = o_xyz
-        # Match the shape with the type of symmetry
-        match symmetry:
-            case SymmetryType.DIAG:
-                return build_right_triangle_from_catheti(
-                    x_max - x_min, y_max - y_min, (x_min, y_min, o_z)
-                )
-            case SymmetryType.EIGHTH:
-                return build_right_triangle_from_catheti(
-                    x_max - o_x, y_max - o_y, (o_x, o_y, o_z)
-                )
-            case _:
-                return super()._build_symmetry_shape(
-                    symmetry, x_min_max, y_min_max, o_xyz
-                )
+        pass
+
 
 class HexCell(Cell):
     """
@@ -814,38 +802,36 @@ class HexCell(Cell):
             name
         )
 
+    @use_symmetry_logic(build_hex_symmetry_shape)
     def _build_symmetry_shape(
             self,
             symmetry: SymmetryType,
-            x_min_max: Tuple[float, float],
-            y_min_max: Tuple[float, float],
-            o_xyz: Tuple[float, float, float]
+            domain: SymmetryDomain
         ) -> Surface:
         """
-        Method that builds the geometric shape corresponding to the given
-        symmetry type for a hexagonal cell.
+        Method that builds the geometric shape that corresponds to the given
+        symmetry type and domain for a hexagonal-type layout.
+        In addition to the symmetry types available for all the geometry
+        layouts, this method supports those symmetries specific for a
+        hexagonal layout.
 
         Supported symmetries are:
-        - FULL: returns the characteristic shape of the cell.
-        - HALF: builds a rectangle representing half of the cell.
-        - QUARTER: builds a rectangle representing one quarter of the cell.
-        - THIRD: builds a parallelogram representing one third of the cell.
-        - SIXTH: builds a regular triangle representing one sixth of the cell.
+        - FULL: returns the characteristic shape of the layout.
+        - HALF: builds a rectangle representing half of the layout.
+        - QUARTER: builds a rectangle representing one quarter of the layout.
+        - THIRD: builds a parallelogram representing one third of the layout.
+        - SIXTH: builds a regular triangle representing one sixth of the
+          layout.
         - TWELFTH: builds a right triangle representing one twelfth of the
-          cell.
+          layout.
 
         Parameters
         ----------
         symmetry : SymmetryType
             The symmetry type for which the characteristic shape is built.
-        x_min_max : tuple[float, float]
-            The minimum and maximum extension of the geometry bounding box
-            along X-axis.
-        y_min_max : tuple[float, float]
-            The minimum and maximum extension of the geometry bounding box
-            along Y-axis.
-        o_xyz : tuple[float, float, float]
-            The XYZ coordinates of the cell centre.
+        domain : SymmetryDomain
+            Instance providing the domain of the full layout in terms of
+            XY-bounding extents, full shape and its centre.
 
         Returns
         -------
@@ -855,36 +841,13 @@ class HexCell(Cell):
         Raises
         ------
         RuntimeError
-            If the indicated symmetry type is not supported for a hexagonal
-            cell.
+            If the indicated symmetry type is not supported for a generic
+            layout.
+
+        Notes
+        -----
+        The method is decorated so that it calls the function handling the
+        construction of the symmetry shape for hexagonal-type layouts. For
+        this reason, no implementation is included here.
         """
-        # Get the XY dimensions of the bounding box for the geometry layout
-        x_min, x_max = x_min_max
-        y_min, y_max = y_min_max
-        # Get the coordinates of the cell centre
-        o_x, o_y, o_z = o_xyz
-        # Get the characteristic dimension of the hexagon
-        side_len = (x_max - x_min) / 2
-        apothem = (y_max - y_min) / 2
-        # Match the shape with the type of symmetry
-        match symmetry:
-            case SymmetryType.THIRD:
-                return build_parallelogram(
-                    side_len,
-                    side_len,
-                    60,
-                    (-(o_x + side_len/2), -(o_y + apothem), o_z)
-                )
-            case SymmetryType.SIXTH:
-                return build_regular_triangle(
-                    side_len,
-                    (-(o_x + side_len/2), -(o_y + apothem), o_z)
-                )
-            case SymmetryType.TWELFTH:
-                return build_right_triangle(
-                    side_len, side_len*math.cos(math.pi/6), o_xyz
-                )
-            case _:
-                return super()._build_symmetry_shape(
-                    symmetry, x_min_max, y_min_max, o_xyz
-                )
+        pass

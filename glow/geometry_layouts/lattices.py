@@ -10,9 +10,13 @@ from glow.geometry_layouts.cells import Cell
 from glow.geometry_layouts.fillable_layouts import Fillable
 from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface
 from glow.geometry_layouts.layouts import Region
+from glow.geometry_layouts.symmetry_management import SymmetryDomain, \
+    build_cartesian_symmetry_shape, build_hex_symmetry_shape, \
+    use_symmetry_logic
 from glow.interface.geom_entities import Edge, wrap_shape
 from glow.interface.geom_interface import ShapeType, get_bounding_box, \
     get_point_coordinates, make_cdg, make_compound, make_face, make_vertex
+from glow.support.types import SymmetryType
 from glow.support.utility import are_same_shapes, build_compound_borders, \
     build_subdvision_vertices_on_edge, build_z_axis_from_vertex
 
@@ -181,6 +185,7 @@ class Lattice(Fillable):
         Method that returns the layer index to which cells have to be added.
         Depending on the value of ``layer_index``, different actions are
         taken:
+
         - If ``None`` or equal to ``len(self.layers)``, a new empty layer is
           created and appended to the ``self.layers`` attribute.
         - If in ``[0, len(self.layers) - 1]``, the given index is returned.
@@ -502,6 +507,55 @@ class CartesianLattice(Lattice):
         construction_fig.rotate(self.rot_angle)
         return construction_fig
 
+    @use_symmetry_logic(build_cartesian_symmetry_shape)
+    def _build_symmetry_shape(
+            self,
+            symmetry: SymmetryType,
+            domain: SymmetryDomain
+        ) -> Surface:
+        """
+        Method that builds the geometric shape that corresponds to the given
+        symmetry type and domain for a Cartesian-type layout.
+        In addition to the symmetry types available for all the geometry
+        layouts, this method supports those symmetries specific for a
+        Cartesian layout.
+
+        Supported symmetries are:
+
+        - FULL: returns the characteristic shape of the cell.
+        - HALF: builds a rectangle representing half of the cell.
+        - QUARTER: builds a rectangle representing one quarter of the cell.
+        - EIGHTH: builds a right triangle representing one eighth of the cell.
+        - DIAG: builds a right triangle representing the diagonal symmetry of
+          the cell.
+
+        Parameters
+        ----------
+        symmetry : SymmetryType
+            The symmetry type for which the characteristic shape is built.
+        domain : SymmetryDomain
+            Instance providing the domain of the full layout in terms of
+            XY-bounding extents, full shape and its centre.
+
+        Returns
+        -------
+        Surface
+            A geometric shape representing the requested symmetry.
+
+        Raises
+        ------
+        RuntimeError
+            If the indicated symmetry type is not supported for a Cartesian
+            layout.
+
+        Notes
+        -----
+        The method is decorated so that it calls the function handling the
+        construction of the symmetry shape for hexagonal-type layouts. For
+        this reason, no implementation is included here.
+        """
+        pass
+
     def _evaluate_ring_factor(self, ring_indx: int) -> int:
         """
         Method that evaluates the multiplication factor used to derive
@@ -805,6 +859,58 @@ class HexLattice(Lattice):
         # Rotate the construction figure, if needed
         construction_fig.rotate(self.rot_angle)
         return construction_fig
+
+
+    @use_symmetry_logic(build_hex_symmetry_shape)
+    def _build_symmetry_shape(
+            self,
+            symmetry: SymmetryType,
+            domain: SymmetryDomain
+        ) -> Surface:
+        """
+        Method that builds the geometric shape that corresponds to the given
+        symmetry type and domain for a hexagonal-type layout.
+        In addition to the symmetry types available for all the geometry
+        layouts, this method supports those symmetries specific for a
+        hexagonal layout.
+
+        Supported symmetries are:
+        
+        - FULL: returns the characteristic shape of the layout.
+        - HALF: builds a rectangle representing half of the layout.
+        - QUARTER: builds a rectangle representing one quarter of the layout.
+        - THIRD: builds a parallelogram representing one third of the layout.
+        - SIXTH: builds a regular triangle representing one sixth of the
+          layout.
+        - TWELFTH: builds a right triangle representing one twelfth of the
+          layout.
+
+        Parameters
+        ----------
+        symmetry : SymmetryType
+            The symmetry type for which the characteristic shape is built.
+        domain : SymmetryDomain
+            Instance providing the domain of the full layout in terms of
+            XY-bounding extents, full shape and its centre.
+
+        Returns
+        -------
+        Surface
+            A geometric shape representing the requested symmetry.
+
+        Raises
+        ------
+        RuntimeError
+            If the indicated symmetry type is not supported for a generic
+            layout.
+
+        Notes
+        -----
+        The method is decorated so that it calls the function handling the
+        construction of the symmetry shape for hexagonal-type layouts. For
+        this reason, no implementation is included here.
+        """
+        pass
 
     def _update_shape(self) -> None:
         """

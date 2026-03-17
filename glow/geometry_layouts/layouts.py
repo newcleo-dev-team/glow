@@ -433,6 +433,7 @@ class Region(Face, Layout):
         """
         Return a descriptive string about the current ``Region`` instance
         indicating its characteristics, i.e.:
+        
         - the region name;
         - the associated properties;
         - the color associated to the GEOM face the region corresponds to;
@@ -657,6 +658,7 @@ def is_layout_contained(
     contained within a `container` planar shape.
 
     This containment check is based on three successive steps:
+
     - areas comparison;
     - bounding box comparison;
     - exact geometric intersection area check.

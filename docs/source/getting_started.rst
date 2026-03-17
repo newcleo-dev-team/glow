@@ -1203,7 +1203,7 @@ by default supports the construction of the shape of the symmetry associated to
 the :py:attr:`FULL<glow.support.types.SymmetryType.FULL>`, :py:attr:`HALF<glow.support.types.SymmetryType.HALF>`
 and :py:attr:`QUARTER<glow.support.types.SymmetryType.QUARTER>` types.
 
-In addition to aforementioned common symmetry types, the
+In addition to the aforementioned common symmetry types, the
 :py:class:`CartesianCell<glow.geometry_layouts.cells.CartesianCell>` class
 supports the following ones:
 
@@ -1402,6 +1402,36 @@ three methods is shown in :numref:`lattice-add`.
    :align: center
 
    Hexagonal lattice built by applying the three methods for adding cells.
+
+.. _lattice-symm:
+
+Applying lattice's type-specific symmetries
+"""""""""""""""""""""""""""""""""""""""""""
+
+In addition to the common symmetry types that can be applied to a generic
+layout (see :ref:`fillable-symm` section), the :py:class:`CartesianLattice<glow.geometry_layouts.lattices.CartesianLattice>`
+and the :py:class:`HexLattice<glow.geometry_layouts.lattices.HexLattice>`
+classes supports the same symmetry types of the :py:class:`CartesianCell<glow.geometry_layouts.cells.CartesianCell>`
+and :py:class:`HexCell<glow.geometry_layouts.cells.HexCell>` classes
+respectively, as based on the same characteristic shape. See :ref:`cell-symm`
+for the supported types.
+
+Independently from the lattice type, the result is the construction of a 2D
+shape used to derive the :py:class:`Region<glow.geometry_layouts.layouts.Region>`
+objects in common with the shape of the symmetry. For more details, please
+refer to the :ref:`fillable-symm` section.
+
+:numref:`sixth-symm` shows the results of applying a :py:attr:`SIXTH<glow.support.types.SymmetryType.SIXTH>`
+symmetry to a hexagonal lattice.
+
+.. _sixth-symm:
+.. figure:: images/lattice_sixsym.png
+   :alt: Hexagonal lattice after applying a sixth symmetry
+   :width: 400px
+   :align: center
+
+   Hexagonal lattice after applying the :py:attr:`SIXTH<glow.support.types.SymmetryType.SIXTH>`
+   type of symmetry.
 
 .. _layout-export:
 

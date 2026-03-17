@@ -48,3 +48,11 @@ glow.geometry\_layouts.layouts module
    :members:
    :show-inheritance:
    :undoc-members:
+
+glow.geometry\_layouts.symmetry\_management module
+--------------------------------------------------
+
+.. automodule:: glow.geometry_layouts.symmetry_management
+   :members:
+   :show-inheritance:
+   :undoc-members:

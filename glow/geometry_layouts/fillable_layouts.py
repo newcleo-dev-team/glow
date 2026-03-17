@@ -9,9 +9,11 @@ from abc import abstractmethod
 from copy import deepcopy
 from typing import Any, Dict, Iterator, List, Self, Tuple
 
-from glow.geometry_layouts.geometries import Rectangle, Surface
+from glow.geometry_layouts.geometries import Surface
 from glow.geometry_layouts.layouts import Layout, LayoutState, Region, \
     associate_colors_to_regions, is_layout_contained
+from glow.geometry_layouts.symmetry_management import SymmetryDomain, \
+    build_common_symmetry_shape, use_symmetry_logic
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
@@ -197,26 +199,23 @@ class Fillable(Compound, Layout):
         Raises
         ------
         RuntimeError
-            If no GEOM object for the layout has been created yet.
+            If the indicated symmetry type is not supported for the current
+            instance.
         """
         # Update the layout characteristic shape from its regions, if needed
         if self.geom_obj is None:
-            raise RuntimeError(
-                "Before applying a symmetry operation to the layout "
-                f"'{self.name}', call the method "
-                "'update_hierarchical_structure()' first to update the "
-                "GEOM object of the layout."
-            )
-        # Get the XY dimensions of the bounding box for the geometry layout
-        x_min, x_max, y_min, y_max = get_bounding_box(self.shape)
-        o_xyz = get_point_coordinates(self.o)
+            self.update_hierarchical_structure()
         # Build the shape of the symmetry
-        symm_shape = self._build_symmetry_shape(
-            symmetry,
-            (x_min, x_max),
-            (y_min, y_max),
-            o_xyz
-        )
+        try:
+            symm_shape = self._build_symmetry_shape(
+                symmetry,
+                SymmetryDomain(get_point_coordinates(self.o), self.shape)
+            )
+        except RuntimeError as e:
+            raise RuntimeError(
+                "Error while building the symmetry shape for a "
+                f"'{self.__class__.__name__}' instance."
+            ) from e
         # Rotate the shape of the symmetry, if needed
         symm_shape.rotate(self.rot_angle, build_z_axis_from_vertex(self.o))
         # Store the shape of the symmetry in the mapping
@@ -465,21 +464,12 @@ class Fillable(Compound, Layout):
             The rotation angle in degrees.
         axis : Edge | None = None
             The ``Edge`` object representing the rotation axis, if any.
-
-        Raises
-        ------
-        RuntimeError
-            If no GEOM object for the layout has been created yet.
         """
         # Return immediately if the angle is zero
         if math.isclose(angle, 0.0, abs_tol=1e-6):
             return
         if self.geom_obj is None:
-            raise RuntimeError(
-                f"Before rotating the layout '{self.name}', call the "
-                "method 'update_hierarchical_structure()' first to update "
-                "the GEOM object of the layout."
-            )
+            self.update_hierarchical_structure()
         # Build a Z-axis, if none is provided
         if not axis:
             # Build the Z-axis of rotation positioned in the figure center
@@ -507,8 +497,6 @@ class Fillable(Compound, Layout):
         ------
         ValueError
             If the scaling factor is less than or equal to zero.
-        RuntimeError
-            If no GEOM object for the layout has been created yet.
         """
         # Check the validity of the scaling factor
         if factor <= 0.0:
@@ -517,11 +505,7 @@ class Fillable(Compound, Layout):
                 "Please, provide a value greater than zero."
             )
         if self.geom_obj is None:
-            raise RuntimeError(
-                f"Before scaling the layout '{self.name}', call the "
-                "method 'update_hierarchical_structure()' first to update "
-                "the GEOM object of the layout."
-            )
+            self.update_hierarchical_structure()
         # Perform the scaling wrt to the given origin, otherwise the layout's
         # centre
         if origin is None:
@@ -737,22 +721,13 @@ class Fillable(Compound, Layout):
         ----------
         new_cntr : Tuple[float, float, float]
             The XYZ coordinates of the new center of the layout.
-
-        Raises
-        ------
-        RuntimeError
-            If no GEOM object for the layout has been created yet.
         """
         # Return immediately if the new centre coincides with the current one
         new_cntr_vrtx = make_vertex(new_cntr)
         if are_same_shapes(self.o, new_cntr_vrtx, ShapeType.VERTEX):
             return
         if self.geom_obj is None:
-            raise RuntimeError(
-                f"Before translating the layout '{self.name}', call the "
-                "method 'update_hierarchical_structure()' first to update "
-                "the GEOM object of the layout."
-            )
+            self.update_hierarchical_structure()
         # Build a vector from the current center to the new one
         transl_vect = make_vector_from_points(self.o, new_cntr_vrtx)
         prev_o = self.o
@@ -779,8 +754,6 @@ class Fillable(Compound, Layout):
             symm_type: wrap_shape(make_translation(layout, transl_vect))
             for symm_type, layout in self.symmetry_map.items()
         })
-        # Set the update flag to False
-        self.state.is_update_needed = False
 
     def update(self, layout: Compound | Face) -> None:
         """
@@ -860,9 +833,10 @@ class Fillable(Compound, Layout):
             self._collapse_layers(reversed_layers)
         # Collapse the hierarchical tree to only one layer made of regions
         if collapse_layers:
-            # Store any geometry map present in the Fillable objects along
+            # Store any geometry map present in the 'Fillable' objects along
             # the hierarchical tree as collapsing it will lose any reference
-            # to them
+            # to them. If no mapping is present for a geometry type, the
+            # exception is caught but not re-raised as not an error.
             for geom_type in GeometryType:
                 try:
                     if geom_type == GeometryType.TECHNOLOGICAL:
@@ -888,6 +862,7 @@ class Fillable(Compound, Layout):
 
         A loop through all the layout objects of the given layer is performed
         to handle the overlap operations:
+        
         - if the distance between the cutting tool and the layout object is
           greater than 0 (with a tolerance), no overlapping is expected and a
           new layout is considered;
@@ -953,18 +928,20 @@ class Fillable(Compound, Layout):
         for index in sorted(layouts_to_remove, reverse=True):
             layer.pop(index)
 
+    @use_symmetry_logic(build_common_symmetry_shape)
     def _build_symmetry_shape(
             self,
-            symmetry: SymmetryType,
-            x_min_max: Tuple[float, float],
-            y_min_max: Tuple[float, float],
-            o_xyz: Tuple[float, float, float]
+            symmetry_type: SymmetryType,
+            context: SymmetryDomain
         ) -> Surface:
         """
-        Method that builds the geometric shape corresponding to the given
-        symmetry type for a generic layout.
+        Method that builds the geometric shape that corresponds to the given
+        symmetry type and domain for a generic layout.
+        This method supports only the symmetry types that are common to all
+        layouts, indipendently from their characteristic shape.
 
         Supported symmetries are:
+
         - FULL: returns the characteristic shape of the layout.
         - HALF: builds a rectangle representing half of the layout.
         - QUARTER: builds a rectangle representing one quarter of the layout.
@@ -973,14 +950,9 @@ class Fillable(Compound, Layout):
         ----------
         symmetry : SymmetryType
             The symmetry type for which the characteristic shape is built.
-        x_min_max : tuple[float, float]
-            The minimum and maximum extension of the geometry bounding box
-            along X-axis.
-        y_min_max : tuple[float, float]
-            The minimum and maximum extension of the geometry bounding box
-            along Y-axis.
-        o_xyz : tuple[float, float, float]
-            The XYZ coordinates of the layout centre.
+        domain : SymmetryDomain
+            Instance providing the domain of the full layout in terms of
+            XY-bounding extents, full shape and its centre.
 
         Returns
         -------
@@ -992,33 +964,14 @@ class Fillable(Compound, Layout):
         RuntimeError
             If the indicated symmetry type is not supported for a generic
             layout.
+
+        Notes
+        -----
+        The method is decorated so that it calls the function handling the
+        construction of the symmetry shape for generic-type layouts. For this
+        reason, no implementation is included here.
         """
-        # Get the XY dimensions of the bounding box for the geometry layout
-        x_min, x_max = x_min_max
-        y_min, y_max = y_min_max
-        # Get the coordinates of the layout centre
-        o_x, o_y, o_z = o_xyz
-        # Match the shape with the type of symmetry
-        match symmetry:
-            case SymmetryType.FULL:
-                return deepcopy(self.shape)
-            case SymmetryType.HALF:
-                return Rectangle(
-                    (o_x + (x_max - o_x)/2, o_y, o_z),
-                    y_max - y_min,
-                    x_max - o_x
-                )
-            case SymmetryType.QUARTER:
-                return Rectangle(
-                    (o_x + (x_max - o_x)/2, o_y + (y_max - o_y)/2, o_z),
-                    (y_max - y_min)/2,
-                    (x_max - x_min)/2
-                )
-            case _:
-                raise RuntimeError(
-                    f"Symmetry '{symmetry}' not supported for a "
-                    f"'{self.__class__.__name__}' instance."
-                )
+        pass
 
     def _collapse_layers(self, layers: List[List[Region | Self]]) -> None:
         """
@@ -1156,8 +1109,6 @@ class Fillable(Compound, Layout):
             symm_type: wrap_shape(make_rotation(layout, axis, rot_angle))
             for symm_type, layout in self.symmetry_map.items()
         })
-        # Set the update flag to False
-        self.state.is_update_needed = False
 
     def _show_geometry_type_edges(self, geom_type: GeometryType) -> None:
         """
