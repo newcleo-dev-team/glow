@@ -18,8 +18,8 @@ from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
-    get_bounding_box, get_closed_free_boundary, get_min_distance, \
-    get_object_from_id, get_point_coordinates, get_shape_name, get_shape_type, \
+    get_closed_free_boundary, get_min_distance, get_object_from_id, \
+    get_point_coordinates, get_shape_name, get_shape_type, \
     is_point_inside_shape, make_cdg, make_common, make_compound, make_cut, \
     make_face, make_partition, make_rotation, make_scale, make_translation, \
     make_vector_from_points, make_vertex, make_vertex_inside_face, \
@@ -862,7 +862,7 @@ class Fillable(Compound, Layout):
 
         A loop through all the layout objects of the given layer is performed
         to handle the overlap operations:
-        
+
         - if the distance between the cutting tool and the layout object is
           greater than 0 (with a tolerance), no overlapping is expected and a
           new layout is considered;
