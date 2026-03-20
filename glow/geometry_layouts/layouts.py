@@ -585,6 +585,10 @@ def build_compound_regions(
                 break
         else:
             raise RuntimeError(f"Missing region for subface {i}.")
+    if not regions:
+        raise RuntimeError(
+            "No regions matching the faces of the compound could be found."
+        )
     return regions
 
 

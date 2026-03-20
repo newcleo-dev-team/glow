@@ -9,13 +9,13 @@ from math import degrees, sqrt, atan2
 from pathlib import Path
 from typing import Any, List, Tuple
 
-from glow.geometry_layouts.cells import Cell, HexCell, RectCell
+from glow.geometry_layouts.cells import Cell, HexCell, CartesianCell
 from glow.geometry_layouts.geometries import Surface
-from glow.geometry_layouts.lattices import Lattice
+from glow.geometry_layouts.lattices import CartesianLattice, Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     make_circle, make_edge, make_vector_from_points, make_vertex,\
     make_vertex_on_curve
-from glow.support.types import BoundaryType, CellType, LatticeGeometryType, \
+from glow.support.types import BoundaryType, LayoutType, LayoutGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import build_contiguous_edges
 
@@ -106,7 +106,7 @@ def build_bd_full_hex(lx: float, ly: float) -> BoundaryData:
 
 
 def build_bd_sixth_hex(
-        lx: float, ly: float, type_geo: LatticeGeometryType) -> BoundaryData:
+        lx: float, ly: float, type_geo: LayoutGeometryType) -> BoundaryData:
     """
     Function that creates a `BoundaryData` object representing a sixth
     symmetry of a regular hexagon. The information related to the borders of
@@ -134,10 +134,10 @@ def build_bd_sixth_hex(
         corresponding angles (as needed by DRAGON), and the type of boundary,
         assigned to each border depending on the `type_geo` parameter.
     """
-    if type_geo in [LatticeGeometryType.SA60,
-                    LatticeGeometryType.SYMMETRIES_TWO]:
+    if type_geo in [LayoutGeometryType.SA60,
+                    LayoutGeometryType.SYMMETRIES_TWO]:
         bd_type = [BoundaryType.AXIAL_SYMMETRY]*3
-    elif type_geo in [LatticeGeometryType.RA60, LatticeGeometryType.ROTATION]:
+    elif type_geo in [LayoutGeometryType.RA60, LayoutGeometryType.ROTATION]:
         bd_type = [
             BoundaryType.ROTATION,
             BoundaryType.TRANSLATION,
@@ -401,9 +401,9 @@ def build_bd_eighth_rect(lx: float, ly: float) -> BoundaryData:
 
 def build_boundary_data(
         dimensions: Tuple[float, float],
-        cell_type: CellType,
+        cell_type: LayoutType,
         symm_type: SymmetryType,
-        type_geo: LatticeGeometryType) -> BoundaryData:
+        type_geo: LayoutGeometryType) -> BoundaryData:
     """
     Function that constructs a `BoundaryData` object providing the boundary
     characteristics to use as a reference for test purposes.
@@ -415,12 +415,12 @@ def build_boundary_data(
     ----------
     dimensions : Tuple[float, float]
         The lattice X-Y characteristic dimensions.
-    cell_type : CellType
+    cell_type : LayoutType
         The type of cells in the lattice.
     symm_type : SymmetryType
         The type of symmetry applied to the lattice; it drives the selection
         of the builder function to generate the `BoundaryData` instance.
-    type_geo : LatticeGeometryType
+    type_geo : LayoutGeometryType
         The lattice geometry type, used to further specialize the
         `BoundaryData` instance in the case of a sixth symmetry.
 
@@ -430,7 +430,7 @@ def build_boundary_data(
         A boundary representation including vertex positions, edges, axis
         directions, corresponding angles, and associated BC types.
     """
-    if cell_type == CellType.HEX:
+    if cell_type == LayoutType.HEX:
         match symm_type:
             case SymmetryType.FULL:
                 return build_bd_full_hex(*dimensions)
@@ -488,58 +488,39 @@ def build_cell_ref_vectors(cell: Cell) -> List[Any]:
     ]
 
 
-def build_colorset(lattice: Lattice) -> List[Lattice]:
+def build_colorset(cell: Cell) -> CartesianLattice:
     """
-    Function that facilitates the construction of a colorset as a list of
-    ``Lattice`` instances.
+    Function that facilitates the construction of a colorset as a
+    `CartesianLattice` instance made of the given `Cell`.
 
     Parameters
     ----------
-    lattice : Lattice
-        The reference lattice.
+    cell : Cell
+        The reference cell.
 
     Returns
     -------
-    List[Lattice]
-        A list of ``Lattice`` instances each positioned appropriately to
-        replicate a colorset.
+    CartesianLattice
+        A `CartesianLattice` instance where cells are positioned appropriately
+        to replicate a colorset.
     """
-    # Deepcopy the given lattice
-    lattice = deepcopy(lattice)
-    # Build a ring of cells around the only cell present in the given
-    # lattice and add a box
-    lattice.add_ring_of_cells(lattice.lattice_cells[0], 1, 0)
-    lattice.build_lattice_box([0.1])
-    lattice.set_lattice_box_properties(
-        {PropertyType.MATERIAL: ["MAT1"]})
-    # Build the regions
-    lattice.build_regions()
-    # Build the positions of the lattices in the colorset
-    lattices: List[Lattice] = [lattice]
-    pos = [
-        (lattice.lattice_box.figure.lx, 0.0, 0.0),
-        (lattice.lattice_box.figure.lx,
-            lattice.lattice_box.figure.ly,
-            0.0),
-        (0.0, lattice.lattice_box.figure.ly, 0.0),
-        (-lattice.lattice_box.figure.lx,
-            lattice.lattice_box.figure.ly,
-            0.0),
-        (-lattice.lattice_box.figure.lx, 0.0, 0.0),
-        (-lattice.lattice_box.figure.lx,
-            -lattice.lattice_box.figure.ly,
-            0.0),
-        (0.0, -lattice.lattice_box.figure.ly, 0.0),
-        (lattice.lattice_box.figure.lx,
-            -lattice.lattice_box.figure.ly,
-            0.0)
-    ]
-    # Copy and translate the given lattice to the calculated positions
-    for xyz in pos:
-        l = deepcopy(lattice)
-        l.translate(xyz)
-        lattices.append(l)
-    return lattices
+    # Clone the given cell
+    cell = cell.clone()
+    # Build a lattice made by a ring of cells around the central one and
+    # include it in another cell to replicate an assembly
+    lattice = CartesianLattice([cell])
+    lattice.add_ring_of_cells(cell, 1, 0)
+    assembly = CartesianCell(
+        width_height=tuple(xy + 0.25 for xy in lattice.dimensions),
+        base_props={PropertyType.MATERIAL: "MAT1"}
+    )
+    assembly.add(lattice)
+
+    # Assemble the colorset as a lattice of assemblies
+    colorset = CartesianLattice([assembly])
+    colorset.add_ring_of_cells(assembly, 1)
+    colorset.update_hierarchical_structure()
+    return colorset
 
 
 def build_hex_geom_elements(
@@ -683,8 +664,8 @@ def set_up_hex_cells(hex_cell: HexCell) -> List[HexCell]:
         hex_cell.translate((-2*dx, 0, 0))
     ]
 
-def set_up_rect_cells(rect_cell: RectCell,
-                      is_even: bool = False) -> List[RectCell]:
+def set_up_rect_cells(rect_cell: CartesianCell,
+                      is_even: bool = False) -> List[CartesianCell]:
     """
     Function that builds a list of cartesian cells. Depending on the
     boolean flag `is_even`, the resulting list is made by a central
@@ -694,15 +675,15 @@ def set_up_rect_cells(rect_cell: RectCell,
 
     Parameters
     ----------
-    rect_cell : RectCell
-        The `RectCell` object representing a cartesian cell.
+    rect_cell : CartesianCell
+        The `CartesianCell` object representing a cartesian cell.
     is_even : bool
         Boolean flag indicating the kind of pattern of cells (either with
         an odd or even number of cells).
 
     Returns
     -------
-    List[RectCell]
+    List[CartesianCell]
         A list of cartesian cells with a specific pattern.
     """
     dx = rect_cell.width

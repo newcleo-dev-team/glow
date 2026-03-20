@@ -41,13 +41,15 @@ class TdtSetup:
     ``1.0`` otherwise.
     """
     geom_type: GeometryType = GeometryType.TECHNOLOGICAL
-    """Identifying the type of geometry of the lattice's cells."""
+    """Identifying the type of geometry layout."""
     property_types: PropertyType | List[PropertyType] = PropertyType.MATERIAL
-    """Identifying the type(s) of property associated to lattice's regions."""
+    """
+    Identifying the type(s) of property associated to the layout's regions.
+    """
     albedo: float | None = None
     """Identifying the value for the albedo applied to the layout's BCs."""
     type_geo: LayoutGeometryType = LayoutGeometryType.ISOTROPIC
-    """Identifying the value for the typegeo related to the layout."""
+    """Identifying the value for the `SALT:` `typgeo` index."""
     symmetry_type: SymmetryType = SymmetryType.FULL
     """Identifying the value for the symmetry type applied to the layout."""
     layout_type: LayoutType = field(init=False, repr=False)
