@@ -591,7 +591,7 @@ def is_gui_available() -> None:
     return salome.sg.hasDesktop()
 
 
-def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
+def make_arc(point1: Any, point2: Any, point3: Any) -> Any:
     """
     Function that returns the arc edge object built from the given three
     vertex objects.
@@ -599,9 +599,9 @@ def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     Parameters
     ----------
     point1 : Any
-        The vertex object being the arc's center.
-    point2 : Any
         The vertex object being the arc's start point.
+    point2 : Any
+        The vertex object being the arc's middle point.
     point3 : Any
         The vertex object being the arc's end point.
 
@@ -610,7 +610,29 @@ def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     Any
         The arc edge built from the given three construction points.
     """
-    return geompy.MakeArcCenter(point1, point2, point3, False)
+    return geompy.MakeArc(point1, point2, point3)
+
+
+def make_arc_center(center: Any, point1: Any, point2: Any) -> Any:
+    """
+    Function that returns the arc edge object built from the center, start
+    and end vertex objects.
+
+    Parameters
+    ----------
+    center : Any
+        The vertex object being the arc's center.
+    point1 : Any
+        The vertex object being the arc's start point.
+    point2 : Any
+        The vertex object being the arc's end point.
+
+    Returns
+    -------
+    Any
+        The arc edge built from the given three construction points.
+    """
+    return geompy.MakeArcCenter(center, point1, point2, False)
 
 
 def make_cdg(shape: Any) -> Any:
@@ -1087,6 +1109,27 @@ def make_wire(edges: List[Any]) -> Any:
         A wire object build from the given edges.
     """
     return geompy.MakeWire(edges)
+
+
+def remove_extra_edges(shape: Any, fuse_faces: bool = False) -> Any:
+    """
+    Function that removes all the seams and degenerated edges from the given
+    shape, thus returning a shape cleaned from any unnecessary edges.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape to heal by removing extra edges.
+    fuse_faces : bool = False
+        Flag stating whether the faces, sharing a common surface, should be
+        united. It defaults to ``False``.
+
+    Returns
+    -------
+    Any
+        The given shape healed from the unnecessary extra edges.
+    """
+    return geompy.RemoveExtraEdges(shape, fuse_faces)
 
 
 def remove_from_study(entry_id: str) -> None:

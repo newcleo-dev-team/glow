@@ -16,10 +16,10 @@ from glow.geometry_layouts.symmetry_management import SymmetryDomain, \
 from glow.interface.geom_entities import Edge, wrap_shape
 from glow.interface.geom_interface import get_bounding_box, get_min_distance, \
     get_point_coordinates, make_cdg, make_compound, make_edge, \
-    make_intersection
+    make_intersection, make_rotation
 from glow.support.types import GeometryType, PropertyType, SymmetryType
 from glow.support.utility import build_subdvision_vertices_on_edge, \
-    get_vertices_on_edges, sort_shapes_from_vertex
+    build_z_axis_from_vertex, get_vertices_on_edges, sort_shapes_from_vertex
 
 
 class Cell(Fillable):
@@ -203,12 +203,6 @@ class Cell(Fillable):
         # Associate each cell-centred region of the technological geometry
         # to a circle that fully contains it
         regions_to_circles = self._map_region_to_circle()
-        # Determine the parameter identifying where a point on the circles
-        # will be added. It based on the rotation of the cell and ranges
-        # from 0 to 1. In case the rotation is negative, the opposite value
-        # is taken into account.
-        u_rotation = self.rot_angle / (2 * math.pi)
-        rotation = u_rotation if self.rot_angle >= 0 else 1 + u_rotation
         # Loop through all the cell-centred regions to build the edges of
         # the sectors
         for i, (region, circle) in enumerate(regions_to_circles.items()):
@@ -225,8 +219,15 @@ class Cell(Fillable):
             # centre to the subdivision points are sectorization edges to
             # collect
             for pnt in build_subdvision_vertices_on_edge(
-                sector, circle.borders[0], angle/360.0 + rotation
+                sector, circle.borders[0], 0.0
             ):
+                # Rotate the subdivision point around the cell's centre by
+                # the specified rotation + the cell's rotation angle
+                pnt = make_rotation(
+                    pnt,
+                    build_z_axis_from_vertex(self.o),
+                    math.radians(angle + self.rot_angle)
+                )
                 sect_edges.append(
                     wrap_shape(
                         make_intersection(region, make_edge(self.o, pnt))

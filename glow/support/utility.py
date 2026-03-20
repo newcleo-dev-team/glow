@@ -8,13 +8,13 @@ import random
 from typing import Any, Generator, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
-    extract_sorted_sub_shapes, extract_sub_shapes, fuse_edges_in_wire, \
-    get_angle_between_shapes, get_basic_properties, get_closed_free_boundary, \
-    get_kind_of_shape, get_min_distance, get_point_coordinates, \
-    get_selected_object, get_shape_name, get_shape_type, is_gui_available, \
-    make_arc_edge, make_cdg, make_compound, make_cut, make_edge, make_face, \
-    make_fuse, make_partition, make_translation, make_vector_from_points, \
-    make_vertex, make_vertex_on_curve
+    extract_sub_shapes, fuse_edges_in_wire, get_basic_properties, \
+    get_closed_free_boundary, get_kind_of_shape, get_min_distance, \
+    get_point_coordinates, get_selected_object, get_shape_name, \
+    get_shape_type, is_gui_available, make_arc_center, make_cdg,  \
+    make_compound, make_cut, make_edge, make_face, make_fuse, make_partition, \
+    make_translation, make_vector_from_points, make_vertex, \
+    make_vertex_on_curve, remove_extra_edges
 from glow.support.types import LAYOUT_VS_SYMM_VS_TYP_GEO, LayoutGeometryType, \
     LayoutType, SymmetryType
 
@@ -74,7 +74,8 @@ def build_arcs_for_rounded_corners(
         rounded_corners: List[Tuple[int, float]],
         center: Tuple[float, float, float],
         height: float,
-        width: float) -> List[Any]:
+        width: float
+    ) -> List[Any]:
     """
     Function that builds the arcs (as GEOM edge objects) that represent the
     rounded corners of a rectangle with given dimensions.
@@ -98,6 +99,13 @@ def build_arcs_for_rounded_corners(
     List[Any]
         A list of GEOM edge objects representing the arcs of circle for
         the rounded corners on the borders of the rectangle.
+
+    Raises
+    ------
+    RuntimeError
+        In case any of the radii of the corners is greater than the maximum
+        allowed radius being the minimum between the rectangle's halved width
+        or height.
     """
     arcs = []
     max_radius = min(width/2, height/2)
@@ -147,7 +155,7 @@ def build_arcs_for_rounded_corners(
         v2 = make_vertex((*xy2, 0.0))
         cv = make_vertex((*cxy, 0.0))
         # Add the arc edge to the list
-        arcs.append(make_arc_edge(cv, v1, v2))
+        arcs.append(make_arc_center(cv, v1, v2))
     # Return the built arcs
     return arcs
 
@@ -194,45 +202,10 @@ def build_compound_borders(cmpd: Any) -> List[Any]:
         return extract_sub_shapes(shape, ShapeType.EDGE)
 
     # Suppress vertices internal to the edges of the wire
-    borders_wire = fuse_edges_in_wire(closed_boundaries[0])
-
-    # Extract the vertices and sort them in counterclockwise order
-    vertices = extract_sub_shapes(borders_wire, ShapeType.VERTEX)
-    vertices = sorted(
-        vertices,
-        key=lambda v: get_vertex_polar_position(
-            v, make_cdg(cmpd), is_cw=False
-        )
+    borders_wire = fuse_edges_in_wire(
+        remove_extra_edges(closed_boundaries[0])
     )
-    # Loop through edges to find vertices belonging to arcs of circle edges
-    arc_edges_vs_vertices = {}
-    for e in extract_sub_shapes(borders_wire, ShapeType.EDGE):
-        if str(get_kind_of_shape(e)[0]) == 'ARC_CIRCLE':
-            arc_edges_vs_vertices[e] = extract_sub_shapes(
-                e, ShapeType.VERTEX
-            )
-    # Build edges between vertices
-    edges = []
-    if len(vertices) >= 3:
-        edges = build_contiguous_edges(vertices)
-    # Substitute those edges whose vertices coincides with those belonging to
-    # the found arcs of circle
-    for arc, vs in arc_edges_vs_vertices.items():
-        not_found = False
-        # Build a segment between the two vertices of the arc
-        cord = make_edge(vs[0], vs[1])
-        # If any edge coincides with the one built over the arc, substitute
-        # the edge in the list
-        for i, edge in enumerate(edges):
-            if are_same_shapes(cord, edge, ShapeType.EDGE):
-                edges[i] = arc
-                break
-        else:
-            not_found = True
-        if not_found:
-            edges.append(arc)
-    # Return the list of segment + arc edges
-    return edges
+    return extract_sub_shapes(borders_wire, ShapeType.EDGE)
 
 
 def build_contiguous_edges(vertices: List[Any]) -> List[Any]:
@@ -312,21 +285,36 @@ def build_subdvision_vertices_on_edge(
     edge : Any
         The edge object on which vertices are derived.
     i_0 : float = 0.0
-        The starting position along the edge from which points are built.
+        The starting position along the edge from which points are built. It
+        must be expressed as fraction of the edge's length.
 
     Returns
     -------
     List[Any]
         A list of vertex objects built on the given edge.
+
+    Raises
+    ------
+    ValueError
+        If the starting position is not in the [0-1) range.
     """
+    # Raise an exception if the starting position is not in the [0-1) range
+    if i_0 < 0.0 or i_0 >= 1.0:
+        raise ValueError(
+            "The starting position must be in the [0-1) range "
+            f"({i_0} provided)."
+        )
     vertices = []
     for i in range(no_vertices):
-        vertices.append(make_vertex_on_curve(edge, i_0 + i/no_vertices))
+        vertices.append(
+            make_vertex_on_curve(edge, i_0 + (1.0 - i_0) * (i / no_vertices))
+        )
     return vertices
 
 
-def check_shape_expected_types(shape: Any,
-                               expected_types: List[ShapeType]) -> None:
+def check_shape_expected_types(
+        shape: Any, expected_types: List[ShapeType]
+    ) -> None:
     """
     Function that checks if the type of the given shape matches any of
     the expected types.
@@ -489,10 +477,13 @@ def generate_unique_random_colors(
 
 def get_angle_between_points(
         point1: Tuple[float, float, float],
-        point2: Tuple[float, float, float]) -> float:
+        point2: Tuple[float, float, float],
+        to_degrees: bool = False
+    ) -> float:
     """
     Function that, given two points, calculates the angle between the line
-    connecting the two points and the X-axis.
+    connecting the two points and the X-axis. If indicated, the output angle
+    is provided in degrees, otherwise in radians.
 
     Parameters
     ----------
@@ -504,10 +495,13 @@ def get_angle_between_points(
     Returns
     -------
     float
-        The angle, in radians, between the line connecting the two points
-        and the X-axis.
+        The angle, by default in radians, between the line connecting the
+        two points and the X-axis.
     """
-    return math.atan2(point1[1] - point2[1], point1[0] - point2[0])
+    angle = math.atan2(point2[1] - point1[1], point2[0] - point1[0])
+    if to_degrees:
+        return math.degrees(angle)
+    return angle
 
 
 def get_id_from_name(name: str) -> int:
@@ -534,8 +528,10 @@ def get_id_from_name(name: str) -> int:
     try:
         return int(name.split('_')[1])
     except:
-        raise RuntimeError("No index could be retrieved for the given "
-                           f"shape's name '{name}'.")
+        raise RuntimeError(
+            "No index could be retrieved for the given shape's name "
+            f"'{name}'."
+        )
 
 
 def get_id_from_shape(shape: Any) -> int:
@@ -653,7 +649,7 @@ def get_vertices_on_edges(
         ref_vertex: Any
     ) -> List[Any]:
     """
-    Method that extracts vertices from the first list of edges that lie on
+    Function that extracts vertices from the first list of edges that lie on
     the edges of the second list. These vertices are returned sorted in
     counterclockwise order around a reference vertex.
 
@@ -676,101 +672,23 @@ def get_vertices_on_edges(
         sorted in counterclockwise order around `ref_vertex`.
     """
     vertices = []
-    cell_borders = make_compound(edges_2)
+    edges_2_cmpd = make_compound(edges_2)
     for edge in edges_1:
         v1, v2 = extract_sub_shapes(edge, ShapeType.VERTEX)
         if math.isclose(
-            get_min_distance(v1, cell_borders), 0.0, abs_tol=1e-6
+            get_min_distance(v1, edges_2_cmpd), 0.0, abs_tol=1e-6
         ):
             vertices.append(v1)
-        else:
+            continue
+        if math.isclose(
+            get_min_distance(v2, edges_2_cmpd), 0.0, abs_tol=1e-6
+        ):
             vertices.append(v2)
     # Sort vertices in counterclockwise order
     return sorted(
         vertices,
         key=lambda v: get_vertex_polar_position(v, ref_vertex, is_cw=False)
     )
-
-
-def is_collinear(edge: Any, collinear_edges: List[Any]) -> bool:
-    """
-    Function that determines whether the given edge is collinear with a group
-    of collinear edges.
-    Collinearity is determined by checking if the angle between the edge and
-    any edge in the group is close to ``0`` or ``pi``, and if the minimum
-    distance between the edge and the infinite axis defined by the group is
-    close to zero.
-
-    Parameters
-    ----------
-    edge : Any
-        The edge to check for collinearity.
-    group_of_collinear_edges : List[Any]
-        A list of edges that are collinear.
-
-    Returns
-    -------
-    bool
-        True if the edge is collinear with the group, False otherwise.
-    """
-    for collinear_edge in collinear_edges:
-        angle = get_angle_between_shapes(edge, collinear_edge)
-        if (
-            math.isclose(angle, 0.0, abs_tol=1e-5) or
-            math.isclose(angle, math.pi, abs_tol=1e-5)
-        ):
-            distance = get_min_distance(
-                edge, make_infinite_axis(collinear_edges[0]))
-            if math.isclose(distance, 0.0, abs_tol=1e-5):
-                return True
-    return False
-
-
-def make_infinite_axis(edge, length=1e6) -> Any:
-    """
-    Function that creates an infinite-like axis along the direction of the
-    given edge.
-
-    It computes the direction vector of the provided edge and extends it
-    in both directions by a specified length, resulting in a much longer edge
-    that simulates an infinite axis.
-
-    Parameters
-    ----------
-    edge : Any
-        The edge object from which to derive the axis direction.
-    length : float, optional
-        The distance to extend the axis in both directions from the edge's
-        endpoints. Default is 1e6.
-
-    Returns
-    -------
-    Any
-        An edge object resulting from extending the given edge along its
-        direction vector.
-
-    Notes
-    -----
-    The function assumes that the edge lies in the XY plane (Z=0).
-    """
-    # Get start and end points of the edge
-    v1, v2 = extract_sorted_sub_shapes(edge, ShapeType.VERTEX)
-    p1 = get_point_coordinates(v1)
-    p2 = get_point_coordinates(v2)
-    # Compute direction vector
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
-    dz = 0.0
-    # Normalize direction
-    norm = (dx**2 + dy**2 + dz**2)**0.5
-    dx /= norm
-    dy /= norm
-    dz /= norm
-    # Create extended points
-    p_start = (p1[0] - dx * length, p1[1] - dy * length, p1[2] - dz * length)
-    p_end = (p2[0] + dx * length, p2[1] + dy * length, p2[2] + dz * length)
-    # Build and return the extended edge
-    return make_edge(make_vertex(p_start), make_vertex(p_end))
 
 
 def retrieve_selected_object(error_msg: str) -> Any:
@@ -799,7 +717,8 @@ def retrieve_selected_object(error_msg: str) -> Any:
     """
     if not is_gui_available():
         raise RuntimeError(
-            "This function can only be called from the SALOME GUI")
+            "This function can only be called from the SALOME GUI"
+        )
     shape = get_selected_object()
     if not shape:
         raise RuntimeError(error_msg)
@@ -819,7 +738,8 @@ def sort_shapes_from_vertex(
     vertex : Any
         The reference vertex used to compute distances.
     reverse : bool = False
-        The sorting order. It defaults to ``False``
+        The sorting order. It defaults to ``False`` meaning an ascending
+        order is considered.
 
     Returns
     -------
@@ -831,35 +751,6 @@ def sort_shapes_from_vertex(
         shapes,
         key=lambda shape: get_min_distance(vertex, shape),
         reverse=reverse
-    )
-
-
-def sort_vertices_radially(vertices) -> List[Any]:
-    """
-    Function that sorts a list of vertices in radial order around their
-    centroid.
-    The function computes the centroid of the given vertices, then sorts them
-    based on the angle each vertex makes with respect to the centroid.
-
-    Parameters
-    ----------
-    vertices : list
-        A list of vertex objects to be sorted.
-
-    Returns
-    -------
-    List[Any]
-        A list of vertex objects sorted in radial order around the centroid.
-    """
-    # Compute the centroid X-Y coordinates
-    coords = [get_point_coordinates(v) for v in vertices]
-    cx = sum(p[0] for p in coords) / len(coords)
-    cy = sum(p[1] for p in coords) / len(coords)
-    # Sort vertices according to the angle wrt to the centroid
-    return sorted(
-        vertices,
-        key=lambda v: get_angle_between_points(get_point_coordinates(v),
-                                               (cx, cy, 0.0))
     )
 
 

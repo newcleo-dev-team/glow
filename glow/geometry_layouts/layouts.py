@@ -351,10 +351,9 @@ class Region(Face, Layout):
         axis : Edge
             The ``Edge`` object representing the rotation axis.
         """
-        # Convert the rotation angle in radians
-        self.rot_angle = math.radians(angle)
+        self.rot_angle += angle
         # Rotate the GEOM face of the region
-        self.geom_obj = make_rotation(self, axis, self.rot_angle)
+        self.geom_obj = make_rotation(self, axis, math.radians(angle))
 
     def __add__(self, other: Self | Sequence[Self]) -> Self:
         """
@@ -433,7 +432,7 @@ class Region(Face, Layout):
         """
         Return a descriptive string about the current ``Region`` instance
         indicating its characteristics, i.e.:
-        
+
         - the region name;
         - the associated properties;
         - the color associated to the GEOM face the region corresponds to;
