@@ -15,7 +15,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
     make_circle, make_edge, make_face, make_partition, make_rotation, \
     make_scale, make_translation,make_vector_from_points, make_vertex, \
     make_vertex_on_curve, remove_from_study, update_salome_study
-from glow.support.utility import build_arcs_for_rounded_corners, \
+from glow.support.utility import are_same_shapes, build_arcs_for_rounded_corners, \
     build_contiguous_edges, build_z_axis_from_vertex, \
     check_shape_expected_types, sort_shapes_from_vertex
 
@@ -112,7 +112,18 @@ class Surface(Face, Layout):
         origin : Vertex | None = None
             Identifying the point wrt the scaling is performed. If ``None``,
             the reference point is the surface's centre.
+
+        Raises
+        ------
+        ValueError
+            If the scaling factor is less than or equal to zero.
         """
+        # Check the validity of the scaling factor
+        if factor <= 0.0:
+            raise ValueError(
+                f"The indicated scaling factor of {factor} is not valid. "
+                "Please, provide a value greater than zero."
+            )
         # Perform the scaling wrt to the given origin, otherwise the surface's
         # centre
         if origin is None:
@@ -150,7 +161,7 @@ class Surface(Face, Layout):
         # Update the SALOME view
         update_salome_study()
 
-    def translate(self, new_pos: Tuple[float, float, float]) -> None:
+    def translate(self, new_cntr: Tuple[float, float, float]) -> None:
         """
         Method that translates the surface geometry to the given position.
         All the geometrical elements (center, face, its borders, vertices
@@ -159,13 +170,17 @@ class Surface(Face, Layout):
 
         Parameters
         ----------
-        new_pos : Tuple[float, float, float]
+        new_cntr : Tuple[float, float, float]
             The XYZ coordinates of the new center of the shape.
         """
+        # Return immediately if the new centre coincides with the current one
+        new_cntr_vrtx = make_vertex(new_cntr)
+        if are_same_shapes(self.o, new_cntr_vrtx, ShapeType.VERTEX):
+            return
         # Build a vector from the current center to the new one
-        transl_vect = make_vector_from_points(self.o, make_vertex(new_pos))
+        transl_vect = make_vector_from_points(self.o, new_cntr_vrtx)
         # Translate the characteristic geometrical elements of the shape
-        self.o = wrap_shape(make_vertex(new_pos))
+        self.o = wrap_shape(new_cntr_vrtx)
         self.geom_obj = make_translation(self, transl_vect)
         # Re-build the borders
         self.borders = extract_sub_shapes(self.geom_obj, ShapeType.EDGE)
@@ -459,7 +474,8 @@ class Rectangle(Surface):
         # Check if the borders represent a rectangular shape
         borders = extract_sub_shapes(layout, ShapeType.EDGE)
         borders_lengths = {
-            round(get_basic_properties(b)[0], 6): b for b in borders}
+            round(get_basic_properties(b)[0], 6): b for b in borders
+        }
         if len(borders) != 4 or len(borders_lengths) != 2:
             raise RuntimeError(
                 "The provided face does not represent a rectangular shape.")
@@ -473,16 +489,17 @@ class Rectangle(Surface):
         # parallel to the X-axis
         o_x, o_y, _ = get_point_coordinates(self.o)
         x_axis = make_vector_from_points(
-            self.o, make_vertex((o_x+1, o_y, 0.0)))
+            self.o, make_vertex((o_x+1, o_y, 0.0))
+        )
+        dimensions = [0.0, 0.0]
         for l, b in borders_lengths.items():
             if math.isclose(
                 get_angle_between_shapes(b, x_axis), 0.0, abs_tol=1e-6
             ):
-                self.dimensions[0] = l
-                break
-            self.dimensions[1] = l
-        else:
-            self.dimensions = list(borders_lengths.keys())
+                dimensions[0] = l
+                continue
+            dimensions[1] = l
+        self.dimensions = tuple(dimensions)
 
 
 class Hexagon(Surface):
@@ -617,7 +634,8 @@ class Hexagon(Surface):
 
 def build_hexagon_from_apothem(
         apothem: float,
-        center: Tuple[float, float, float] | None = None) -> Hexagon:
+        center: Tuple[float, float, float] | None = None
+    ) -> Hexagon:
     """
     Function that builds an instance of the ``Hexagon`` class from the value
     of the apothem.
