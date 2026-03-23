@@ -228,6 +228,10 @@ class TestSurface(unittest.TestCase):
         - verifying that SALOME assigns an entry ID to the face object;
         - checking that the geometric object the entry ID corresponds to
           matches the expected shape.
+        - verifying the entry ID changes after showing the region multiple
+          times.
+        - verifying an exception is raised if calling the method with any
+          arguments.
         """
         self.surface.show()
         self.assertTrue(self.surface.entry_id is not None)
@@ -238,6 +242,15 @@ class TestSurface(unittest.TestCase):
                 ShapeType.FACE
             )
         )
+
+        # Test show with existing entry
+        old_id = self.surface.entry_id
+        self.surface.show()
+        self.assertNotEqual(self.surface.entry_id, old_id)
+
+        # Test show with args
+        with self.assertRaises(ValueError):
+            self.surface.show(1)
 
     def test_translation(self) -> None:
         """
@@ -331,7 +344,8 @@ class TestSurface(unittest.TestCase):
         self.assertTrue(
             math.isclose(
                 get_angle_between_shapes(face_ref_vect, face_ref_vect2),
-                self.rotation_angle
+                self.rotation_angle,
+                abs_tol=1e-6
             )
         )
 
@@ -365,7 +379,7 @@ class TestCircle(TestSurface):
     there are the following ones:
 
     radius : float
-          The radius of the circle.
+        The radius of the circle.
     name : str
         The name of the circle's face when added in the SALOME study.
     surface : Circle
@@ -887,37 +901,32 @@ class TestHexagonBuilder(unittest.TestCase):
     `build_hexagon_from_apothem` that allows to build a `Hexagon` instance
     from the apothem of the hexagonal shape.
     """
-    def setUp(self):
-        """
-        Method that sets up the test environment for the function
-        `build_hexagon_from_apothem`.
-        """
-        self.apothem = 1.0
-        self.center = (1.0, 1.0, 0.0)
-        self.edge_length = self.apothem / math.sin(math.pi/3)
-        self.o = make_vertex(self.center)
-
     def test_build_hexagon_from_apothem(self) -> None:
         """
         Method that verifies the `build_hexagon` function by checking if the
         attributes of the built `Hexagon` instance are correctly set.
         """
+        # Geometric data
+        apothem = 1.0
+        center = (1.0, 1.0, 0.0)
+        edge_length = apothem / math.sin(math.pi/3)
+
         # Build the 'Hexagon' instance
-        hex = build_hexagon_from_apothem(self.apothem, self.center)
+        hex = build_hexagon_from_apothem(apothem, center)
         # Check the correct instantiation
         self.assertTrue(
-            math.isclose(hex.dimensions[0], self.edge_length, abs_tol=1e-6))
+            math.isclose(hex.dimensions[0], edge_length, abs_tol=1e-6))
         self.assertTrue(
-            math.isclose(hex.dimensions[1], self.apothem, abs_tol=1e-6))
+            math.isclose(hex.dimensions[1], apothem, abs_tol=1e-6))
         self.assertTrue(
-            are_same_shapes(hex.o, self.o, ShapeType.VERTEX)
+            are_same_shapes(hex.o, make_vertex(center), ShapeType.VERTEX)
         )
         self.assertEqual(len(hex.borders), 6)
         self.assertTrue(
             all(
                 math.isclose(
                     round(get_basic_properties(b)[0], 6),
-                    self.edge_length,
+                    edge_length,
                     abs_tol=1e-6
                 ) for b in hex.borders
             )

@@ -17,9 +17,8 @@ from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
     make_cdg, make_common, make_rotation, make_scale, make_translation, \
     make_vector_from_points, make_vertex, make_vertex_inside_face, \
     remove_from_study, update_salome_study
-from glow.support.types import GeometryType, LayoutGeometryType, \
-    PropertyType, SymmetryType
-from glow.support.utility import build_z_axis_from_vertex, \
+from glow.support.types import GeometryType, PropertyType, SymmetryType
+from glow.support.utility import are_same_shapes, build_z_axis_from_vertex, \
     generate_unique_random_colors
 
 
@@ -260,7 +259,18 @@ class Region(Face, Layout):
         origin : Vertex | None = None
             Identifying the point wrt the scaling is performed. If ``None``,
             the reference point is the region's centre.
+
+        Raises
+        ------
+        ValueError
+            If the scaling factor is less than or equal to zero.
         """
+        # Check the validity of the scaling factor
+        if factor <= 0.0:
+            raise ValueError(
+                f"The indicated scaling factor of {factor} is not valid. "
+                "Please, provide a value greater than zero."
+            )
         # Perform the scaling wrt to the given origin, otherwise the region's
         # centre
         if origin is None:
@@ -321,6 +331,10 @@ class Region(Face, Layout):
         new_cntr : Tuple[float, float, float]
             The XYZ coordinates the region centre should be placed at.
         """
+        # Return immediately if the new centre coincides with the current one
+        new_cntr_vrtx = make_vertex(new_cntr)
+        if are_same_shapes(self.o, new_cntr_vrtx, ShapeType.VERTEX):
+            return
         # Build a vector from the current center to the new one
         transl_vect = make_vector_from_points(self.o, make_vertex(new_cntr))
         # Translate the wrapped GEOM face object
@@ -352,8 +366,10 @@ class Region(Face, Layout):
             The ``Edge`` object representing the rotation axis.
         """
         self.rot_angle += angle
-        # Rotate the GEOM face of the region
-        self.geom_obj = make_rotation(self, axis, math.radians(angle))
+        angle_rad = math.radians(angle)
+        # Rotate the GEOM objects of the region
+        self.geom_obj = make_rotation(self, axis, angle_rad)
+        self.o = Vertex(make_rotation(self.o, axis, angle_rad))
 
     def __add__(self, other: Self | Sequence[Self]) -> Self:
         """
@@ -424,7 +440,7 @@ class Region(Face, Layout):
             the current region and the given one.
         """
         return Region(
-            wrap_shape(self.geom_obj) * wrap_shape(other).geom_obj,
+            wrap_shape(self.geom_obj) * wrap_shape(other.geom_obj).geom_obj,
             properties=deepcopy(other.properties)
         )
 
@@ -516,7 +532,7 @@ def associate_colors_to_regions(
         Showing the coordinates of the points of the regions having any
         issue with their properties.
     """
-    # If no colorset to display, reset the region colors
+    # If no colour map to display, reset the region colors
     if not property_type:
         for region in regions:
             # Set the region color to its default value

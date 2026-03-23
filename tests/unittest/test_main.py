@@ -131,8 +131,8 @@ class TestMainFunction(unittest.TestCase):
         generated output TDT file, if exists.
         """
         # Remove the generated TDT file
-        # if os.path.exists(self.file_name):
-        #     os.remove(self.file_name)
+        if os.path.exists(self.file_name):
+            os.remove(self.file_name)
 
     def test_export_layout_to_tdt_cell(self) -> None:
         """

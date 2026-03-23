@@ -251,6 +251,7 @@ class Surface(Face, Layout):
         angle_rad = math.radians(angle)
         # Rotate the geometric elements of the surface
         self.geom_obj = make_rotation(self, axis, angle_rad)
+        self.o = make_rotation(self.o, axis, angle_rad)
         # Re-build the borders
         self.borders = extract_sub_shapes(self.geom_obj, ShapeType.EDGE)
         # Update the rotation angle of the surface wrt X-axis
