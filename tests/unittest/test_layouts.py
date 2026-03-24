@@ -13,7 +13,7 @@ from glow.geometry_layouts.layouts import Layout, Region, LayoutState, \
     associate_colors_to_regions, build_compound_regions, \
     get_unique_values_for_property, is_layout_contained, DEFAULT_REGION_COLOR
 from glow.support.types import GeometryType, SymmetryType, PropertyType
-from glow.interface.geom_entities import Face, Vertex, Edge
+from glow.interface.geom_entities import Compound, Face, Vertex, Edge
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     extract_sorted_sub_shapes, get_angle_between_shapes, get_min_distance, \
     make_common, make_compound, make_cut, make_fuse, make_partition, \
@@ -221,7 +221,7 @@ class TestRegion(unittest.TestCase):
         face_ref_vect = make_vector_from_points(
             self.region.o, make_vertex_on_curve(borders[0], 0.0)
         )
-        # Rotate the surface
+        # Rotate the region
         rot_angle = 90.0
         self.region.rotate(rot_angle)
         # Build reference vector after the rotation
@@ -276,11 +276,11 @@ class TestRegion(unittest.TestCase):
     def test_scale(self) -> None:
         """
         Method that tests the scaling of a `Region` object by checking the
-        area of the surface before and after the operation.
+        area of the region before and after the operation.
         """
         scale_factor = 2
         area_before = get_basic_properties(self.region)[1]
-        # Scale the surface wrt to its centre
+        # Scale the region wrt to its centre
         self.region.scale(scale_factor)
         # Check the area has increased by the scaling factor^2
         self.assertTrue(
@@ -380,6 +380,27 @@ class TestRegion(unittest.TestCase):
         self.region.translate(center_after_transl)
         self.assertTrue(
             are_same_shapes(self.region.o, new_pos_vrtx, ShapeType.VERTEX)
+        )
+
+    def test_update(self) -> None:
+        """
+        Method that tests the implementation of the `update` method for a
+        `Region` class.
+        """
+        # Verify the exception is raised when providing an invalid shape
+        with self.assertRaises(RuntimeError):
+            self.region.update(
+                Compound(make_compound([self.region.geom_obj]))
+            )
+        # Update the region with another one
+        new_layout = Circle()
+        self.region.update(new_layout)
+        # Verify that the geometric elements has changed correctly
+        self.assertTrue(
+            are_same_shapes(self.region, new_layout, ShapeType.FACE)
+        )
+        self.assertTrue(
+            are_same_shapes(self.region.o, new_layout.o, ShapeType.VERTEX)
         )
 
     def test_boolean_subtraction(self) -> None:

@@ -54,8 +54,13 @@ def are_same_shapes(shape1: Any, shape2: Any, shapes_type: ShapeType) -> bool:
         If the two shapes are not of the same type.
     """
     # Check whether the two shapes have the same type
-    if get_shape_type(shape1) != get_shape_type(shape2):
-        raise RuntimeError("Shapes not compatible")
+    shape1_type = get_shape_type(shape1)
+    shape2_type = get_shape_type(shape2)
+    if shape1_type != shape2_type:
+        raise RuntimeError(
+            f"Shapes not compatible. Shape 1 type '{shape1_type}' differs "
+            f"from shape 2 type '{shape2_type}'."
+        )
     # Check whether the two shapes has same perimeter, area and volume
     for bp1, bp2 in zip(get_basic_properties(shape1),
                         get_basic_properties(shape2)):

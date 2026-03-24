@@ -85,8 +85,8 @@ class Fillable(Compound, Layout):
         layout.
     state : LayoutState
         Providing the state of the layout in the SALOME study.
-    symmetry_map : Dict[SymmetryType, Face]
-        A mapping from ``SymmetryType`` values to ``Face`` objects. Each
+    symmetry_map : Dict[SymmetryType, Surface]
+        A mapping from ``SymmetryType`` values to ``Surface`` objects. Each
         entry provides the characteristic shape of the corresponding symmetry
         type.
     """
@@ -97,7 +97,7 @@ class Fillable(Compound, Layout):
         self.geometry_maps: Dict[GeometryType, Compound] = {}
         self.state = LayoutState()
         self.regions: List[Region] = []
-        self.symmetry_map: Dict[SymmetryType, Face] = {}
+        self.symmetry_map: Dict[SymmetryType, Surface] = {}
         self.shape: Surface | None = None
 
     def add(self,
@@ -172,7 +172,7 @@ class Fillable(Compound, Layout):
         if layer_index is None or layer_index == len(self.layers):
             # Create a new layer
             self.layers.append([layout])
-        elif layer_index >= 0 or layer_index < len(self.layers):
+        elif layer_index >= 0 and layer_index < len(self.layers):
             # Add to existing layer
             self.layers[layer_index].append(layout)
         else:
@@ -398,7 +398,8 @@ class Fillable(Compound, Layout):
         # SALOME study, if any
         if shape is None:
             shape = retrieve_selected_object(
-                "Please, select a single region whose data to show.")
+                "Please, select a single region whose data to show."
+            )
         # Get the path to the region that corresponds to the given shape, if
         # any can be found
         path = find_region_path_in_tree(self.layers, shape)
@@ -1101,6 +1102,7 @@ class Fillable(Compound, Layout):
         # Update the GEOM compounds representing the different geometry
         # layout types
         self.geom_obj = make_rotation(self, axis, rot_angle)
+        self.o = make_rotation(self.o, axis, rot_angle)
         self.geometry_maps.update({
             geom_type: wrap_shape(make_rotation(layout, axis, rot_angle))
             for geom_type, layout in self.geometry_maps.items()
@@ -1302,8 +1304,6 @@ def follow_path_to_node(
     ------
     IndexError
         If a layer or element index is out of range.
-    TypeError
-        If the path attempts to descend into a non-``Fillable`` node.
     """
     # Set the root as the starting node
     node = root

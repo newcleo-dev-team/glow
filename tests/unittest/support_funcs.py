@@ -1,12 +1,14 @@
 """
 Module declaring functions to support the execution of the unit tests.
 """
+import io
 import hashlib
+import sys
 
 from dataclasses import dataclass, field
 from math import degrees, sqrt, atan2
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, Callable, List, Tuple
 
 from glow.geometry_layouts.cells import Cell, HexCell, CartesianCell
 from glow.geometry_layouts.geometries import Surface
@@ -585,6 +587,44 @@ def build_lattice_ref_vectors(lattice: Lattice) -> List[Any]:
             lattice.lattice_center,
             make_vertex_on_curve(e, 0.0)) for e in edges
     ]
+
+
+def capture_output(
+        func: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> str:
+    """
+    Function that captures and returns all standard output produced by a
+    given `Callable` object.
+
+    This function temporarily redirects `sys.stdout` to an in-memory
+    buffer, executes the provided callable with the given positional and
+    keyword arguments, restores the original stdout stream, and returns
+    the captured text.
+
+    Parameters
+    ----------
+    func : Callable[..., Any]
+        The function or callable object whose printed output should be
+        captured.
+    *args : Any
+        Positional arguments forwarded to `func`.
+    **kwargs : Any
+        Keyword arguments forwarded to `func`.
+
+    Returns
+    -------
+    str
+        A string containing everything written to standard output during
+        the execution of `func`.
+    """
+    old_stdout = sys.stdout
+    buffer = io.StringIO()
+    sys.stdout = buffer
+    try:
+        func(*args, **kwargs)
+    finally:
+        sys.stdout = old_stdout
+    return buffer.getvalue()
 
 
 def compute_hash(file_path: Path) -> str:
