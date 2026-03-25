@@ -398,9 +398,8 @@ class Cell(Fillable):
 
     def __repr__(self):
         """
-        Return a descriptive string of this instance containing a
-        descriptive string with the name and the coordinates of the
-        centre of the cell
+        Return a descriptive string of this instance containing the name
+        and the XYZ coordinates of the centre of the cell.
 
         Returns
         -------
@@ -842,7 +841,7 @@ class HexCell(Cell):
         Raises
         ------
         RuntimeError
-            If the indicated symmetry type is not supported for a generic
+            If the indicated symmetry type is not supported for a hexagonal
             layout.
 
         Notes

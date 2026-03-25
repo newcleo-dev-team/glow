@@ -30,7 +30,7 @@ class TestFillable(unittest.TestCase):
     subclasses.
 
     This test suite provides common setup and a set of tests common to all
-    the tests that ensure the correct behaviour of the sublclasses of
+    the tests that ensure the correct behaviour of the subclasses of
     `Fillable`.
 
     Parameters
@@ -56,6 +56,7 @@ class TestFillable(unittest.TestCase):
         """
         with self.assertRaises(TypeError):
             Fillable()
+
     def test_add_region_without_position(self) -> None:
         """
         Method that tests adding a `Region` to a `Fillable` without specifying
@@ -168,6 +169,7 @@ class TestFillable(unittest.TestCase):
         added_region = self.fillable.layers[0][0]
         self.assertIn(self.fillable.name, added_region.name)
         self.assertIn(original_name, added_region.name)
+
     def test_add_region_without_position(self) -> None:
         """
         Method that tests adding a `Region` to a `Fillable` without specifying
@@ -1057,6 +1059,11 @@ class TestFillable(unittest.TestCase):
         # Check the correct translation happened
         self.assertTrue(
             are_same_shapes(self.fillable.o, new_pos_vrtx, ShapeType.VERTEX)
+        )
+        self.assertTrue(
+            are_same_shapes(
+                self.fillable.shape.o, new_pos_vrtx, ShapeType.VERTEX
+            )
         )
         self.assertTrue(
             math.isclose(
