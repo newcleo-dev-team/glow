@@ -14,11 +14,10 @@ from glow.interface.geom_entities import Compound, Vertex
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     get_angle_between_shapes, get_basic_properties, get_id_from_object, \
     get_min_distance, get_object_from_id, get_shape_type, make_cdg, \
-    make_common, make_compound, make_cut, make_vector_from_points, \
-    make_vertex, make_vertex_on_curve
+    make_common, make_compound, make_cut, make_face, make_partition, \
+    make_vector_from_points, make_vertex, make_vertex_on_curve
 from glow.support.types import GeometryType, PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes, build_compound_borders
-from glow.interface.geom_entities import wrap_shape
 from glow.interface.geom_interface import make_circle
 from tests.unittest.support_funcs import capture_output
 
@@ -207,7 +206,7 @@ class TestFillable(unittest.TestCase):
         self.__skip_if_superclass()
         # Declare the 'Region' to add
         layout = Region(Circle(), properties={PropertyType.MATERIAL: "MAT"})
-        position = (1.0, 2.0, 0.0)
+        position = (1.0, 1.0, 0.0)
         initial_layers_no = len(self.fillable.layers)
         # Add the region with a specific position
         self.fillable.add(layout, position=position)
@@ -415,13 +414,17 @@ class TestFillable(unittest.TestCase):
         """
         # Skip the test if run from this class
         self.__skip_if_superclass()
+        # Get the fillable's shape
+        shape = make_face(build_compound_borders(self.fillable))
         # Ensure the fillable has exactly three regions (characteristic
         # surface + two circular regions)
         self.fillable.restore()
         layout1 = Region(
-            Circle(radius=2), properties={PropertyType.MATERIAL: "MAT1"}
+            Circle(radius=0.75), properties={PropertyType.MATERIAL: "MAT1"}
         )
-        layout2 = Region(Circle(), properties={PropertyType.MATERIAL: "MAT2"})
+        layout2 = Region(
+            Circle(radius=0.5), properties={PropertyType.MATERIAL: "MAT2"}
+        )
         self.fillable.add(layout1)
         self.fillable.add(layout2)
 
@@ -431,7 +434,7 @@ class TestFillable(unittest.TestCase):
         # Verify that all regions are returned
         self.assertEqual(len(regions), 3)
         self.assertTrue(
-            are_same_shapes(regions[0], self.fillable.shape, ShapeType.FACE)
+            are_same_shapes(regions[0], shape, ShapeType.FACE)
         )
         self.assertTrue(
             are_same_shapes(regions[1], layout1, ShapeType.FACE)
@@ -477,9 +480,8 @@ class TestFillable(unittest.TestCase):
 
         # Verify that the number of regions coincides with the number of
         # faces
-        common = (
-            wrap_shape(self.fillable.geom_obj)
-            * self.fillable.symmetry_map[symm_type]
+        common = make_common(
+            self.fillable.geom_obj, self.fillable.symmetry_map[symm_type]
         )
         no_faces = len(
             extract_sub_shapes(make_compound([common]), ShapeType.FACE)
@@ -520,20 +522,20 @@ class TestFillable(unittest.TestCase):
             self.fillable.print_region_info()
 
         # Declare a reference region and add it to the geometry layout
-        region = Region(
+        region_1 = Region(
             Circle(),
             "Region_1",
             {PropertyType.MACRO: "MAC001", PropertyType.MATERIAL: "MAT1"}
         )
-        self.fillable.add(region)
+        self.fillable.add(region_1)
         # Update the hierarchical structure to populate regions
         self.fillable.update_hierarchical_structure()
         # Verify output was printed
         captured = capture_output(
-            self.fillable.print_region_info, region.geom_obj
+            self.fillable.print_region_info, region_1.geom_obj
         )
         self.assertIn(
-            f"Properties of '{self.fillable.name}_{region.name}':", captured
+            f"Properties of '{self.fillable.name}_{region_1.name}':", captured
         )
         self.assertIn("   MATERIAL: MAT1\n", captured)
         self.assertIn("   MACRO: MAC001\n", captured)
@@ -543,10 +545,21 @@ class TestFillable(unittest.TestCase):
         self.fillable.layers[-1][-1].properties.clear()
         # Verify the output does not indicate any property
         captured = capture_output(
-            self.fillable.print_region_info, region.geom_obj
+            self.fillable.print_region_info, region_1.geom_obj
         )
         self.assertIn(
-            f"Properties of '{self.fillable.name}_{region.name}':", captured
+            f"Properties of '{self.fillable.name}_{region_1.name}':", captured
+        )
+        self.assertIn("   No associated properties.", captured)
+        # Set the properties to None as if the added region was declared
+        # without specifying them
+        self.fillable.layers[-1][-1].properties = None
+        # Verify the output does not indicate any property
+        captured = capture_output(
+            self.fillable.print_region_info, region_1.geom_obj
+        )
+        self.assertIn(
+            f"Properties of '{self.fillable.name}_{region_1.name}':", captured
         )
         self.assertIn("   No associated properties.", captured)
 
@@ -627,7 +640,7 @@ class TestFillable(unittest.TestCase):
             ) == ShapeType.FACE
         )
         # Get the fillable's shape
-        shape = self.fillable.shape
+        shape = make_face(build_compound_borders(self.fillable))
 
         # Restore the fillable's layout
         self.fillable.restore()
@@ -682,7 +695,6 @@ class TestFillable(unittest.TestCase):
         # Check no rotation happened if the rotation angle is zero
         self.fillable.rotate(0.0)
         self.assertAlmostEqual(self.fillable.rot_angle, rot_angle)
-
 
     def test_rotate_from_axis(self) -> None:
         """
@@ -1184,6 +1196,7 @@ class TestFillable(unittest.TestCase):
         layout2 = Region(
             Circle(radius=0.25), properties={PropertyType.MATERIAL: "MAT2"}
         )
+        no_layouts_0 = len(self.fillable.layers[0])
         # Add to different layers
         self.fillable.add(layout1)
         self.fillable.add(layout2)
@@ -1199,17 +1212,20 @@ class TestFillable(unittest.TestCase):
         # Verify the layers have been cut
         self.assertTrue(
             are_same_shapes(
-                make_compound(self.fillable.layers[-3]),
+                make_compound([
+                    make_partition(
+                        self.fillable.layers[0], [], ShapeType.FACE
+                    )
+                ]),
                 make_compound([make_cut(pre_geom_obj, layout1)]),
                 ShapeType.COMPOUND
             )
         )
         self.assertTrue(
             are_same_shapes(
-                self.fillable.layers[-2][0],
-                layout1 - layout2,
-                ShapeType.FACE
-            )
+                self.fillable.layers[1][0], layout1 - layout2, ShapeType.FACE
+            ),
+            f"{no_layouts_0}"
         )
 
         # Verify the GEOM object has been updated
@@ -1247,7 +1263,11 @@ class TestFillable(unittest.TestCase):
         # Verify the layers have been cut
         self.assertTrue(
             are_same_shapes(
-                make_compound(self.fillable.layers[-2]),
+                make_compound([
+                    make_partition(
+                        self.fillable.layers[0], [], ShapeType.FACE
+                    )
+                ]),
                 make_compound([make_cut(pre_geom_obj, nested_fillable)]),
                 ShapeType.COMPOUND
             )
@@ -1284,6 +1304,7 @@ class TestFillable(unittest.TestCase):
         layout3 = Region(
             Circle(radius=0.3), properties={PropertyType.MATERIAL: "MAT3"}
         )
+        no_layouts_0 = len(self.fillable.layers[0])
         self.fillable.add(layout1)
         self.fillable.add(layout2)
         self.fillable.add(layout3)
@@ -1301,21 +1322,29 @@ class TestFillable(unittest.TestCase):
         # Verify the layers have been cut
         self.assertTrue(
             are_same_shapes(
-                make_compound(self.fillable.layers[0][0]),
+                make_compound([
+                    make_partition(
+                        self.fillable.layers[0][0:no_layouts_0],
+                        [],
+                        ShapeType.FACE
+                    )
+                ]),
                 make_compound([make_cut(pre_geom_obj, layout1)]),
                 ShapeType.COMPOUND
             )
         )
         self.assertTrue(
             are_same_shapes(
-                self.fillable.layers[0][1],
+                self.fillable.layers[0][no_layouts_0],
                 (layout1 - layout2) - layout3,
                 ShapeType.FACE
             )
         )
         self.assertTrue(
             are_same_shapes(
-                self.fillable.layers[0][2], layout2 - layout3, ShapeType.FACE
+                self.fillable.layers[0][no_layouts_0+1],
+                layout2 - layout3,
+                ShapeType.FACE
             )
         )
 

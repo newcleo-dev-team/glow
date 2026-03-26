@@ -419,6 +419,7 @@ class Fillable(Compound, Layout):
         print(f"Properties of '{region.name}':")
         if not region.properties:
             print("   No associated properties.")
+            return
         for prop_type, value in region.properties.items():
             print(f"   {prop_type.name}: {value}\n")
 

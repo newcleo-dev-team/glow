@@ -13,7 +13,7 @@ from typing import Any, Callable, List, Tuple
 from glow.geometry_layouts.cells import Cell, HexCell, CartesianCell
 from glow.geometry_layouts.geometries import Surface
 from glow.geometry_layouts.lattices import CartesianLattice, Lattice
-from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
+from glow.interface.geom_interface import ShapeType, extract_sub_shapes, get_point_coordinates, \
     make_circle, make_edge, make_vector_from_points, make_vertex,\
     make_vertex_on_curve
 from glow.support.types import BoundaryType, LayoutType, LayoutGeometryType, \
@@ -685,23 +685,35 @@ def set_up_hex_cells(hex_cell: HexCell) -> List[HexCell]:
         A list of hexagonal cells with a central one surrounded by six
         cells.
     """
-    dx = hex_cell.apothem
-    dy = 3/2*hex_cell.edge_length
+    # Retrieve the cell's centre coordinates and calculate the X-Y shifts
+    o_x, o_y, _ = get_point_coordinates(hex_cell.o)
+    dx = hex_cell.dimensions[1]
+    dy = 3/2*hex_cell.dimensions[0]
     hex_cell.rotate(90.0)
-    return [
-        hex_cell,
-        hex_cell.translate((dx, dy, 0)),
-        hex_cell.translate((-dx, dy, 0)),
-        hex_cell.translate((-dx, -dy, 0)),
-        hex_cell.translate((dx, -dy, 0)),
-        hex_cell.translate((2*dx, 0, 0)),
-        hex_cell.translate((-2*dx, 0, 0))
+    # Build the list of positions of the cells
+    centres = [
+        (o_x + dx, o_y + dy, 0),
+        (o_x - dx, o_y + dy, 0),
+        (o_x - dx, o_y - dy, 0),
+        (o_x + dx, o_y - dy, 0),
+        (o_x + 2*dx, o_y, 0),
+        (o_x - 2*dx, o_y, 0)
     ]
+    # Populate the list of translated cells
+    cells = [hex_cell]
+    for centre in centres:
+        cell = hex_cell.clone()
+        cell.translate(centre)
+        cells.append(cell)
+    # Return the list of translated cells
+    return cells
 
-def set_up_rect_cells(rect_cell: CartesianCell,
-                      is_even: bool = False) -> List[CartesianCell]:
+
+def set_up_rect_cells(
+        rect_cell: CartesianCell, is_even: bool = False
+    ) -> List[CartesianCell]:
     """
-    Function that builds a list of cartesian cells. Depending on the
+    Function that builds a list of Cartesian cells. Depending on the
     boolean flag `is_even`, the resulting list is made by a central
     cell surrounded by eight other cells, if `False`, or by cells
     without any central one replicating a pattern with an even number
@@ -710,7 +722,7 @@ def set_up_rect_cells(rect_cell: CartesianCell,
     Parameters
     ----------
     rect_cell : CartesianCell
-        The `CartesianCell` object representing a cartesian cell.
+        The `CartesianCell` object representing a Cartesian cell.
     is_even : bool
         Boolean flag indicating the kind of pattern of cells (either with
         an odd or even number of cells).
@@ -718,41 +730,51 @@ def set_up_rect_cells(rect_cell: CartesianCell,
     Returns
     -------
     List[CartesianCell]
-        A list of cartesian cells with a specific pattern.
+        A list of Cartesian cells with a specific pattern.
     """
-    dx = rect_cell.width
-    dy = rect_cell.height
+    # Retrieve the cell's centre coordinates and calculate the X-Y shifts
+    o_x, o_y, _ = get_point_coordinates(rect_cell.o)
+    dx, dy = rect_cell.dimensions
+    cells = []
     if is_even:
         dx /= 2
         dy /= 2
-        return [
-            rect_cell.translate((dx, dy, 0)),
-            rect_cell.translate((-dx, dy, 0)),
-            rect_cell.translate((-dx, -dy, 0)),
-            rect_cell.translate((dx, -dy, 0)),
-            rect_cell.translate((2*dx, 0, 0)),
-            rect_cell.translate((2*dx, dy, 0)),
-            rect_cell.translate((2*dx, 2*dy, 0)),
-            rect_cell.translate((dx, 2*dy, 0)),
-            rect_cell.translate((-dx, 2*dy, 0)),
-            rect_cell.translate((-2*dx, 2*dy, 0)),
-            rect_cell.translate((-2*dx, dy, 0)),
-            rect_cell.translate((-2*dx, 0, 0)),
-            rect_cell.translate((-2*dx, -dy, 0)),
-            rect_cell.translate((-2*dx, -2*dy, 0)),
-            rect_cell.translate((-dx, -2*dy, 0)),
-            rect_cell.translate((dx, -2*dy, 0)),
-            rect_cell.translate((2*dx, -2*dy, 0)),
-            rect_cell.translate((2*dx, -dy, 0)),
+        # Build the list of positions of the cells
+        centres = [
+            (o_x + dx, o_y + dy, 0),
+            (o_x - dx, o_y + dy, 0),
+            (o_x - dx, o_y - dy, 0),
+            (o_x + dx, o_y - dy, 0),
+            (o_x + 3*dx, o_y + dy, 0),
+            (o_x + 3*dx, o_y + 3*dy, 0),
+            (o_x + dx, o_y + 3*dy, 0),
+            (o_x - dx, o_y + 3*dy, 0),
+            (o_x - 3*dx, o_y + 3*dy, 0),
+            (o_x - 3*dx, o_y + dy, 0),
+            (o_x - 3*dx, o_y - dy, 0),
+            (o_x - 3*dx, o_y - 3*dy, 0),
+            (o_x - dx, o_y - 3*dy, 0),
+            (o_x + dx, o_y - 3*dy, 0),
+            (o_x + 3*dx, o_y - 3*dy, 0),
+            (o_x + 3*dx, o_y - dy, 0)
         ]
-    return [
-        rect_cell,
-        rect_cell.translate((dx, 0, 0)),
-        rect_cell.translate((dx, dy, 0)),
-        rect_cell.translate((0, dy, 0)),
-        rect_cell.translate((-dx, dy, 0)),
-        rect_cell.translate((-dx, 0, 0)),
-        rect_cell.translate((-dx, -dy, 0)),
-        rect_cell.translate((0, -dy, 0)),
-        rect_cell.translate((dx, -dy, 0))
-    ]
+    else:
+        centres = [
+            (o_x + dx, o_y, 0),
+            (o_x + dx, o_y + dy, 0),
+            (o_x, dy, o_y),
+            (o_x - dx, o_y + dy, 0),
+            (o_x - dx, o_y, 0),
+            (o_x - dx, o_y - dy, 0),
+            (o_x, o_y - dy, 0),
+            (o_x + dx, o_y - dy, 0)
+        ]
+        cells.append(rect_cell)
+
+    # Populate the list of translated cells
+    for centre in centres:
+        cell = rect_cell.clone()
+        cell.translate(centre)
+        cells.append(cell)
+    # Return the list of translated cells
+    return cells

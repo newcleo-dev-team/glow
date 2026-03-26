@@ -117,6 +117,8 @@ class Lattice(Fillable):
             self.shape = Surface(face, get_point_coordinates(make_cdg(face)))
             # Update the characteristic dimensions of the layout
             self.dimensions = self.shape.dimensions
+            # Update the GEOM compound this instance refers to
+            self.update(wrap_shape(make_compound(self.regions)))
         # Set the vertex of the layout centre, if any is provided, otherwise
         # the XYZ origin is used
         if centre is not None:
@@ -619,7 +621,7 @@ class HexLattice(Lattice):
         ``Cell`` or of its subclasses. Considered if no ``setup`` is provided.
     centre : Tuple[float, float, float] | None = None
         The coordinates of the lattice centre, if any.
-    name : str = "Lattice"
+    name : str = "HexLattice"
         The name of the lattice when added to the current SALOME study.
 
     Attributes
@@ -669,7 +671,7 @@ class HexLattice(Lattice):
             self,
             cells: List[Cell] = [],
             centre : Tuple[float, float, float] | None = None,
-            name: str = "Lattice"
+            name: str = "HexLattice"
         ) -> None:
         # Initialise the superclass
         super().__init__(cells=cells, centre=centre, name=name)
@@ -875,7 +877,7 @@ class HexLattice(Lattice):
         hexagonal layout.
 
         Supported symmetries are:
-        
+
         - FULL: returns the characteristic shape of the layout.
         - HALF: builds a rectangle representing half of the layout.
         - QUARTER: builds a rectangle representing one quarter of the layout.
@@ -940,7 +942,8 @@ def compute_subdivision_points_on_borders(
     ) -> List[Tuple[float, float, float]]:
     """
     Function that loops through the borders of the given ``Surface`` object
-    and builds a list of evenly spaced vertices for each.
+    and builds a list of evenly spaced vertices for each. For each border,
+    the vertices start from the starting point of the edge, which is included.
 
     Parameters
     ----------
@@ -1021,14 +1024,11 @@ def get_cell_at_centres(
     """
     # Initialise the list of cells to return
     cells = []
-    # Clone and rotate the cell so that all the copies shares the same
-    # rotation
-    cell = cell.clone()
-    cell.rotate(rot_angle, rot_axis)
     for centre in centres:
-        # Clone, translate the cell in the given centre and append it
+        # Clone, translate in the given centre, rotate, and append the cell
         # to the list to return
-        cell = cell.clone()
-        cell.translate(centre)
-        cells.append(cell)
+        new_cell = cell.clone()
+        new_cell.translate(centre)
+        new_cell.rotate(rot_angle, rot_axis)
+        cells.append(new_cell)
     return cells

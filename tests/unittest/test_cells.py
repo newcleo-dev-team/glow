@@ -9,8 +9,8 @@ from glow.geometry_layouts.cells import CartesianCell, Cell, HexCell
 from glow.geometry_layouts.geometries import Circle, Hexagon, Rectangle
 from glow.geometry_layouts.lattices import Lattice
 from glow.geometry_layouts.layouts import Region
-from glow.interface.geom_entities import wrap_shape
-from glow.interface.geom_interface import ShapeType, extract_sub_shapes, get_kind_of_shape, get_shape_type, make_compound, make_edge, make_vertex
+from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
+    get_kind_of_shape, get_shape_type, make_compound, make_vertex
 from glow.support.types import GeometryType, PropertyType
 from glow.support.utility import are_same_shapes
 from tests.unittest.test_fillable_layouts import TestFillable
@@ -376,8 +376,7 @@ class TestHexCell(TestFillable):
     """
     def setUp(self):
         """
-        Method that sets up the test environment for the `HexCell`
-        class.
+        Method that sets up the test environment for the `HexCell` class.
         """
         super().setUp()
         self.fillable: HexCell = HexCell(
