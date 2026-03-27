@@ -3,11 +3,12 @@ Module containing unittest classes to assess that the functions of the
 `glow.support.utility` module have a valid implementation.
 """
 import math
-from typing import Sequence
 import unittest
 
+from typing import Sequence
+
 from glow.geometry_layouts.geometries import Circle, Rectangle, Surface
-from glow.interface.geom_entities import Face, GeomWrapper, wrap_shape
+from glow.interface.geom_entities import GeomWrapper, wrap_shape
 from glow.support.utility import *
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     get_min_distance, make_cdg, make_circle, make_compound, make_face, \
