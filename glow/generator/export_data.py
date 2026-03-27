@@ -11,9 +11,10 @@ from typing import Any, Dict, List, Tuple, Self
 from glow.geometry_layouts.cells import Region
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
     LayoutGeometryType, PropertyType
-from glow.support.utility import check_shape_expected_types, get_id_from_name, \
-    get_id_from_shape
-from glow.interface.geom_interface import ShapeType, extract_sorted_sub_shapes, \
+from glow.support.utility import check_shape_expected_types, \
+    get_angle_between_points, get_id_from_name, get_id_from_shape
+from glow.interface.geom_interface import ShapeType, \
+    extract_sorted_sub_shapes, extract_sub_shapes, \
     get_in_place, get_kind_of_shape, get_min_distance, get_point_coordinates, \
     get_shape_name, is_point_inside_shape, make_vertex, \
     make_vertex_inside_face, make_vertex_on_curve, set_shape_name
@@ -85,13 +86,14 @@ class FaceData():
                 )
             if not value:
                 raise RuntimeError(
-                    "No value for the '{p_type.name}' property type has been "
-                    f"defined for the region '{self.region.name}' of {self}."
+                    f"No value for the '{p_type.name}' property type has "
+                    f"been defined for the region '{self.region.name}' of "
+                    f"{self}."
                 )
         # Define the attribute for sorting instances of this class
         self.sort_index = self.no
         # Extract the edges and associate an ID to each
-        edges = extract_sorted_sub_shapes(self.region, ShapeType.EDGE)
+        edges = extract_sub_shapes(self.region, ShapeType.EDGE)
         for edge in edges:
             # Build the ID of the edge, based on its geometric characteristics
             self.edge_vs_id[edge] = build_edge_id(edge)
@@ -405,7 +407,7 @@ class BoundaryData:
             check_shape_expected_types(border, [ShapeType.EDGE])
         except RuntimeError as e:
             raise RuntimeError(
-                "Error while initializing the 'Border' instance."
+                "Error while initializing the 'BoundaryData' instance."
             ) from e
         # Initialize instance attributes
         self.type : BoundaryType
@@ -459,7 +461,8 @@ class BoundaryData:
                 # 'SEGMENT'
                 raise RuntimeError(
                     "Only edges of type 'SEGMENT' can be contained in a "
-                    f"layout border! (found {shape_type})")
+                    f"layout border! (found {shape_type})"
+                )
 
     def get_bc_type_number(self) -> int:
         """
@@ -504,13 +507,17 @@ class BoundaryData:
         dx = x2 - x1
         dy = y2 - y1
         # Calculate the angle of the border in degrees
-        self.angle = math.degrees(math.atan2(dy, dx))
+        self.angle = get_angle_between_points(
+            (x1, y1, 0.0), (x2, y2, 0.0), True
+        )
 
         # The border origin must be defined so that the angle between
         # the start-end points is positive. If not, the edge start point
         # is inverted.
         if self.angle < -EPSILON or math.isclose(self.angle, 180.0):
-            self.angle = math.degrees(math.atan2(-dy, -dx))
+            self.angle = get_angle_between_points(
+                (x2, y2, 0.0), (x1, y1, 0.0), True
+            )
             x1 = x2
             y1 = y2
         # If the angle is close to zero, it can happen that it is written
