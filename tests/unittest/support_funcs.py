@@ -520,7 +520,7 @@ def build_colorset(cell: Cell) -> CartesianLattice:
     lattice = CartesianLattice([cell])
     lattice.add_ring_of_cells(cell, 1, 0)
     assembly = CartesianCell(
-        width_height=tuple(xy + 0.25 for xy in lattice.dimensions),
+        width_height=tuple(xy + 0.2 for xy in lattice.dimensions),
         base_props={PropertyType.MATERIAL: "MAT1"}
     )
     assembly.add(lattice)

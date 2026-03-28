@@ -430,13 +430,21 @@ class LayoutDataExtractor():
         - a FACE, if the region was not partitioned;
         - a COMPOUND/SHELL of faces if it has been split.
         """
-        # Perform the partition between the regions and the edges of the
-        # refined geometry layout
-        part = make_partition_non_self_intersecting(
-            [r.geom_obj for r in self.regions],
-            [refined_cmpd],
-            ShapeType.FACE
-        )
+        # Perform a non-intersecting partition between the regions and the
+        # edges of the refined geometry layout; in case of an exception,
+        # fallback to the standard partition operation
+        try:
+            part = make_partition_non_self_intersecting(
+                [r.geom_obj for r in self.regions],
+                [refined_cmpd],
+                ShapeType.FACE
+            )
+        except RuntimeError:
+            part = make_partition(
+                [r.geom_obj for r in self.regions],
+                [refined_cmpd],
+                ShapeType.FACE
+            )
         # For each region, recover its image in the partition, i.e. the faces
         # in which it has been partitioned
         refined_regions = []

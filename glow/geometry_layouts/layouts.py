@@ -460,8 +460,7 @@ class Region(Face, Layout):
             A descriptive string containing information about the current
             ``Region`` instance.
         """
-        return f"{self.name}, {self.properties}, {self.color}, " + \
-            f"{wrap_shape(make_cdg(self.geom_obj))}"
+        return f"{self.name}, {self.properties}, {self.color}, {self.o}"
 
     def __sub__(self, other: Self) -> Self:
         """

@@ -789,6 +789,10 @@ def translate_wrt_reference(
     # Get the shape's CDG coordinates so that the relative distance from
     # the new reference point is kept the same
     shape_to_center = compute_point_by_reference(
-        cdg, old_ref_point, new_ref_coords)
+        cdg, old_ref_point, new_ref_coords
+    )
+    shape_to_center_vertex = make_vertex(shape_to_center)
+    if are_same_shapes(cdg, shape_to_center_vertex, ShapeType.VERTEX):
+        return shape
     return make_translation(
         shape, make_vector_from_points(cdg, make_vertex(shape_to_center)))

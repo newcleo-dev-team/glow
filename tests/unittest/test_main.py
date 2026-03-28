@@ -232,11 +232,11 @@ class TestMainFunction(unittest.TestCase):
         self.colorset.apply_symmetry(SymmetryType.QUARTER)
         # Call the function to test with a full colorset
         self.__assess_tdt_colorset(
-            '8b65ec028dca4d77f2e9a8dcaf3dc28a48d1641e5a232fa490d96e960a4dcaac'
+            'e0190dde26720444e283d35e07b7c0e08959baf70137070b2fd7e0463192b48b'
         )
         # Call the function to test with a portion of the colorset
         self.__assess_tdt_colorset(
-            'b5399dd3917c06c0a85a567f2da174b87e205e60ba925ba984829dbc490c89e7',
+            '8a7c648b7e68c1b91d5b36bf5ae9d40fab4c58820652ee5c899f48cf65cd3a48',
             self.colorset * Rectangle((3.2, 3.2, 0.0), 3.2, 3.2)
         )
 
