@@ -3,17 +3,15 @@ This module contains the classes that support the generation of the output
 TDT file containing the geometry representation for further analysis in
 DRAGON.
 """
-import math
-
 from dataclasses import dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
-from typing import Dict, List, Tuple
 from typing import Dict, List, Tuple
 
 from glow.generator.geom_extractor import BoundaryData, EdgeData, FaceData
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
     LayoutGeometryType, PropertyType, SymmetryType
+from glow.support.utility import get_angle_between_points
 
 
 # Precision in terms of number of digits after the decimal
@@ -315,12 +313,16 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R,
             #                           x1, y1, z1, x2, y2, z2'
             xc, yc, _, _, _, _, R, x1, y1, _, x2, y2, _ = edge.data[1:]
-            # Calculate the angles (in degree) of the vertices wrt the
-            # circle centre
-            angle_1 = math.atan2((y1-yc), (x1-xc)) * (180/math.pi) % 360
-            angle_2 = math.atan2((y2-yc), (x2-xc)) * (180/math.pi) % 360
-            # Since it is necessary to have positive value for the angles
-            # difference, the absolute value is considered
+            # Calculate the angles (in degrees) of the vertices wrt the
+            # circle centre in the [0, 360) range
+            angle_1 = get_angle_between_points(
+                (xc, yc, 0.0), (x1, y1, 0.0), True
+            ) % 360
+            angle_2 = get_angle_between_points(
+                (xc, yc, 0.0), (x2, y2, 0.0), True
+            ) % 360
+            # Calculate the positive angular difference ensuring it stays in
+            # the [0, 360) range
             delta_angle = (angle_2 - angle_1) % 360
             if abs(delta_angle) < 1e-7:
                 delta_angle = 0.0
