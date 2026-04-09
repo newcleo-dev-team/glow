@@ -514,7 +514,10 @@ class BoundaryData:
         # The border origin must be defined so that the angle between
         # the start-end points is positive. If not, the edge start point
         # is inverted.
-        if self.angle < -EPSILON or math.isclose(self.angle, 180.0):
+        if (
+            self.angle < -EPSILON
+            or math.isclose(self.angle, 180.0, abs_tol=EPSILON)
+        ):
             self.angle = get_angle_between_points(
                 (x2, y2, 0.0), (x1, y1, 0.0), True
             )
@@ -523,7 +526,7 @@ class BoundaryData:
         # If the angle is close to zero, it can happen that it is written
         # with a minus sign which is unnecessary; hence, it is set to 0.0
         # explicitly
-        if math.isclose(self.angle, 0.0, abs_tol=1e-6):
+        if math.isclose(abs(self.angle), 0.0, abs_tol=EPSILON):
             self.angle = 0.0
 
         # Initialize the border axes to the edge start point

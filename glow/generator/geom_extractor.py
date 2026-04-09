@@ -512,9 +512,11 @@ class LayoutDataExtractor():
             layout_cmpd = compound_to_analyse
         else:
             # Get the regions of the technological geometry of the layout
-            # according to indicated symmetry type
+            # according to indicated symmetry type, limiting the tolerances
+            # of the regions to avoid issues on the result of the common
+            # operations with the shape of the symmetry
             self.regions = self.geometry_layout.get_regions_with_symmetry(
-                tdt_setup.symmetry_type
+                tdt_setup.symmetry_type, True
             )
             # Get the GEOM compound identifying either the full layout of a
             # part of it

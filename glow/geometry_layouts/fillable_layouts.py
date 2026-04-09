@@ -19,11 +19,12 @@ from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
 from glow.interface.geom_interface import ShapeType, add_to_study, \
     add_to_study_in_father, clear_view, display_shape, extract_sub_shapes, \
     get_closed_free_boundary, get_min_distance, get_object_from_id, \
-    get_point_coordinates, get_shape_name, get_shape_type, \
-    is_point_inside_shape, make_cdg, make_common, make_compound, make_cut, \
-    make_face, make_partition, make_rotation, make_scale, make_translation, \
-    make_vector_from_points, make_vertex, make_vertex_inside_face, \
-    remove_from_study, set_color_face, update_salome_study
+    get_point_coordinates, get_shape_name, get_shape_type, get_tolerances, \
+    is_point_inside_shape, limit_tolerance, make_cdg, make_common, \
+    make_compound, make_cut, make_face, make_partition, make_rotation, \
+    make_scale, make_translation, make_vector_from_points, make_vertex, \
+    make_vertex_inside_face, remove_from_study, set_color_face, \
+    update_salome_study
 from glow.support.types import GeometryType, PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes, build_z_axis_from_vertex, \
     compute_point_by_reference, flatten_list, retrieve_selected_object
@@ -307,7 +308,7 @@ class Fillable(Compound, Layout):
         ]
 
     def get_regions_with_symmetry(
-            self, symmetry: SymmetryType
+            self, symmetry: SymmetryType, apply_tolerance_limit: bool = False
         ) -> List[Region]:
         """
         Method that collects and returns all the ``Region`` objects from the
@@ -318,12 +319,18 @@ class Fillable(Compound, Layout):
         the symmetry type are returned.
         If no shape is stored for the indicated symmetry type, an exception
         is raised.
+        If indicated, the tolerances of the geometric elements of the
+        ``Regions`` objects are limited to the 1e-6 value to avoid geometric
+        inconsistencies on the result of the common operation.
 
         Parameters
         ----------
         symmetry : SymmetryType
             The type of symmetry for which the corresponding ``Region``
             objects of the layout are returned.
+        apply_tolerance_limit : bool
+            If ``True``, the tolerances of the geometric elements of the
+            ``Regions`` objects are limited to the 1e-6 value.
 
         Returns
         ----------
@@ -352,6 +359,14 @@ class Fillable(Compound, Layout):
                 "desired symmetry type."
             )
         symm_shape = self.symmetry_map[symmetry]
+
+        # Limit the tolerance of the GEOM elements of the region to avoid
+        # geometric inconsistencies when applying the common operation
+        if apply_tolerance_limit:
+            for region in regions:
+                if max(get_tolerances(region)) < 1e-6:
+                    region.geom_obj = limit_tolerance(region)
+
         # Return the regions in common with the shape of the symmetry
         common_regions = []
         for region in regions:

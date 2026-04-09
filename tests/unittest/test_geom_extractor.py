@@ -18,15 +18,16 @@ from glow.geometry_layouts.geometries import Circle, Hexagon, Rectangle
 from glow.geometry_layouts.lattices import CartesianLattice, HexLattice, Lattice
 from glow.geometry_layouts.layouts import Region
 from glow.interface.geom_entities import Face, Vertex, wrap_shape
-from glow.interface.geom_interface import ShapeType, extract_sub_shapes, get_basic_properties, \
-    get_shape_name, make_arc_center, make_cdg, make_circle, make_common, make_compound, \
+from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
+    get_shape_name, limit_tolerance, make_circle, make_common, make_compound, \
     make_edge, make_face, make_partition, make_translation, make_vector, \
     make_vertex, set_shape_name
 from glow.main import TdtSetup
 from glow.support.types import GeometryType, LayoutGeometryType, LayoutType, \
     PropertyType, SymmetryType
-from glow.support.utility import are_same_shapes, build_contiguous_edges
-from tests.unittest.support_funcs import build_colorset, capture_output
+from glow.support.utility import are_same_shapes, build_compound_borders, \
+    build_contiguous_edges
+from tests.unittest.support_funcs import build_colorset
 
 
 class TestLayoutDataExtractor(unittest.TestCase):
@@ -562,7 +563,7 @@ class TestLayoutDataExtractor(unittest.TestCase):
         self.assertIn("0", output[3])
         self.assertIn("0", output[4])
 
-    def test_preprocess_cart_lattice(self) -> None:
+    def test_preprocess_cart_assembly(self) -> None:
         """
         Method that tests the implementation of the method `_preprocess` of
         the `LayoutDataExtractor` class.
@@ -695,7 +696,7 @@ class TestLayoutDataExtractor(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             lde._preprocess(tdt_setup, layout)
 
-    def test_preprocess_hex_lattice(self) -> None:
+    def test_preprocess_hex_assembly(self) -> None:
         """
         Method that tests the implementation of the method `_preprocess` of
         the `LayoutDataExtractor` class.
@@ -772,6 +773,77 @@ class TestLayoutDataExtractor(unittest.TestCase):
         )
         self.__assess_preprocess_hex_symm(assembly, lde, sec_geo)
 
+    def test_preprocess_hex_assembly_numerical_precision(self) -> None:
+        """
+        Method that tests the implementation of the method `_preprocess` of
+        the `LayoutDataExtractor` class.
+
+        An assembly made by a hexagonal lattice is used for testing purposes.
+        This test checks the `_preprocess` method against a specific layout
+        that caused issues in determining the correct borders and edges.
+        The problem was related to the tolerances applied to the sub-shapes
+        which resulted in the presence of edges with length equal to the
+        tolerance.
+
+        This test builds the same layout and checks that the implementation
+        processes the layout correctly for a one sixth and a third of the
+        full layout.
+        """
+        # Build the hexagonal assembly
+        cell = HexCell(side=0.7852193995)
+        cell.rotate(90)
+        cell.sectorize([6], [0])
+        lattice = HexLattice([cell])
+        lattice.add_rings_of_cells(cell, 6)
+        assembly = HexCell(side=lattice.dimensions[0] + 2*0.05*cos(pi/3))
+        assembly.add(
+            Region(
+                Hexagon(edge_length=lattice.dimensions[0] + 0.05*cos(pi/3))
+                - lattice.shape,
+                properties={PropertyType.MATERIAL: "CLADDING"}
+            )
+        )
+        assembly.add(lattice)
+        assembly.update_hierarchical_structure()
+
+        # Set the number of regions and the shape of the simmetries used for
+        # comparison purposes (no regions for the sectorised type)
+        self.hex_symm_vs_regions = {
+            SymmetryType.THIRD: {
+                GeometryType.TECHNOLOGICAL: 66, GeometryType.SECTORIZED: None
+            },
+            SymmetryType.SIXTH: {
+                GeometryType.TECHNOLOGICAL: 38, GeometryType.SECTORIZED: None
+            }
+        }
+        box_lx = lattice.dimensions[0] + 2*0.05*cos(pi/3)
+        box_ly = box_lx * sin(pi/3)
+        self.hex_symm_vs_shape: Dict[SymmetryType, Any] = {
+            SymmetryType.THIRD: make_face(build_contiguous_edges([
+                make_vertex((0.0, 0.0, 0.0)),
+                make_vertex((box_lx, 0.0, 0.0)),
+                make_vertex((3/2*box_lx, box_ly, 0.0)),
+                make_vertex((1/2*box_lx, box_ly, 0.0)),
+            ])),
+            SymmetryType.SIXTH: make_face(build_contiguous_edges([
+                make_vertex((0.0, 0.0, 0.0)),
+                make_vertex((box_lx, 0.0, 0.0)),
+                make_vertex((box_lx/2, box_ly, 0.0))
+            ]))
+        }
+
+        # Instantiate the 'LayoutDataExtractor' class without attributes
+        lde = LayoutDataExtractor.__new__(LayoutDataExtractor)
+        # Verify the preprocess activities are performed correctly with a
+        # sixth symmetry that must be translated so that its lower-left
+        # corner is in the XYZ origin
+        assembly.apply_symmetry(SymmetryType.SIXTH)
+        self.__assess_preprocess_hex_symm(assembly, lde)
+        # Verify the preprocess activities are performed correctly with a
+        # third symmetry (a translation is needed)
+        assembly.apply_symmetry(SymmetryType.THIRD)
+        self.__assess_preprocess_hex_symm(assembly, lde)
+
     def __assess_preprocess_colorset(
             self,
             portion: Any | None,
@@ -847,7 +919,9 @@ class TestLayoutDataExtractor(unittest.TestCase):
         cmpd = (
             assembly
             if symm_type == SymmetryType.FULL
-            else assembly * assembly.symmetry_map[symm_type]
+            else wrap_shape(
+                limit_tolerance(assembly)
+            ) * assembly.symmetry_map[symm_type]
         )
         # Get the compound + the refinment edges, if needed
         if geom_type == GeometryType.SECTORIZED:
@@ -935,6 +1009,9 @@ class TestLayoutDataExtractor(unittest.TestCase):
             with those stored during the preprocess activities.
         """
         self.assertEqual(len(lde.regions), no_regions)
+        self.assertEqual(
+            len(lde.borders), len(build_compound_borders(cmpr_shape))
+        )
         self.assertTrue(
             are_same_shapes(
                 make_face(lde.borders),
@@ -942,11 +1019,6 @@ class TestLayoutDataExtractor(unittest.TestCase):
                 ShapeType.FACE
             )
         )
-        p = make_partition(
-                    extract_sub_shapes(cmpd, ShapeType.EDGE),
-                    [],
-                    ShapeType.EDGE
-                )
         self.assertTrue(
             are_same_shapes(
                 make_compound(lde.layout_edges),
