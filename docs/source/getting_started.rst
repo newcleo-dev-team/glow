@@ -698,7 +698,10 @@ objects in the hierarchy.
 The method :py:meth:`get_regions_with_symmetry()<glow.geometry_layouts.fillable_layouts.Fillable.get_regions_with_symmetry>`
 similarly retrieves the *regions* of the technological geometry, with the
 difference that only those in common with the shape of the indicated symmetry
-type are returned.
+type are returned. The underlying *common* operation can introduce numerical
+floating-point precision errors. To limit the effect, this method includes a
+boolean flag to specify whether the tolerances of the geometric elements of the
+``Regions`` objects should be limited to the `1e-6` value.
 
 Printing regions information
 """"""""""""""""""""""""""""
