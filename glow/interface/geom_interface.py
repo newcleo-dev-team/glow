@@ -399,7 +399,7 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
 
     Notes
     -----
-    Values lesser than the tolerance of 1e-10 are substituted with ``0`` in
+    Values lesser than the tolerance of 1e-6 are substituted with ``0`` in
     the returned list.
 
     Parameters
@@ -415,10 +415,10 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
     # Extract the list of information about the given shape
     kind_of_shape = geompy.KindOfShape(shape)
     # Loop over all the retrieved values and substitute with '0' values
-    # lesser than the 1e-15 tolerance
+    # lesser than the 1e-6 tolerance
     for i, info in enumerate(kind_of_shape):
         if isinstance(info, float):
-            if abs(info) < 1e-10:
+            if abs(info) < 1e-6:
                 kind_of_shape[i] = 0
     return kind_of_shape
 
@@ -557,6 +557,28 @@ def get_subshape_id(shape: Any, subshape: Any) -> str:
     return geompy.GetSubShapeID(shape, subshape)
 
 
+def get_tolerances(shape: Any) -> List[float]:
+    """
+    Function that returns the min-max tolerances applied to the GEOM objects
+    the shape is constituted by.
+    In order, they are those for the faces, the edges, and the vertices of
+    the shape. If the shape is not composed of any of these sub-shapes, an
+    infinite number is returned instead.
+
+    Parameters
+    ----------
+    shape : Any
+        The GEOM object whose tolerances are returned.
+
+    Returns
+    -------
+    List[float]
+        In order, the min-max tolerances of the faces, the edges, the vertices
+        the shape is made of.
+    """
+    return geompy.Tolerance(shape)
+
+
 def is_point_inside_shape(point: Any, shape: Any) -> bool:
     """
     Function that checks if the given point object is within the boundaries
@@ -589,6 +611,27 @@ def is_gui_available() -> None:
         ``True`` if the SALOME GUI is available, ``False`` otherwise.
     """
     return salome.sg.hasDesktop()
+
+
+def limit_tolerance(shape: Any, max_tol: float = 1e-6) -> Any:
+    """
+    Function that tries to limit the tolerances applied to the GEOM objects
+    the given shape is made of.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape to process.
+    max_tol : float = 1e-6
+        The maximum required tolerance the shape should be limited to.
+
+    Returns
+    -------
+    Any
+        A new GEOM object from the given shape with tolerances limited to the
+        required value.
+    """
+    return geompy.LimitTolerance(shape, max_tol)
 
 
 def make_arc(point1: Any, point2: Any, point3: Any) -> Any:
