@@ -51,15 +51,15 @@ mac
 * type  number of elements
   2, 1
 *   elements
-2
-* tx, ty, angle
-  1.0000000E+00 0.0000000E+00 9.0000000E+01
-* type  number of elements
-  2, 1
-*   elements
 1
 * tx, ty, angle
   0.0000000E+00 1.0000000E+00 0.0000000E+00
+* type  number of elements
+  2, 1
+*   elements
+3
+* tx, ty, angle
+  -1.0000000E+00 0.0000000E+00 9.0000000E+01
 * type  number of elements
   2, 1
 *   elements
@@ -69,9 +69,9 @@ mac
 * type  number of elements
   2, 1
 *   elements
-3
+2
 * tx, ty, angle
-  -1.0000000E+00 0.0000000E+00 9.0000000E+01
+  1.0000000E+00 0.0000000E+00 9.0000000E+01
 #  1 - COOLANT
 #  2 - CLADDING
 #  3 - HOLLOW

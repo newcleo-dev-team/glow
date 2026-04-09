@@ -45,7 +45,7 @@ export_layout_to_tdt(
         os.path.dirname(sys.argv[0]), 'test_cartesian_assembly_eighth'
     ),
     TdtSetup(
-        type_geo=LayoutGeometryType.RECTANGLE_SYM,
-        symmetry_type=SymmetryType.QUARTER
+        type_geo=LayoutGeometryType.RECTANGLE_EIGHT,
+        symmetry_type=SymmetryType.EIGHTH
     )
 )
