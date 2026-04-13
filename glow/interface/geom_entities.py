@@ -2,8 +2,8 @@
 Module containing classes providing an interface towards the topological
 entities of the GEOM module of SALOME.
 """
-from abc import ABC
 import math
+
 from typing import Any, List, Self, Sequence, Type
 
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
@@ -12,9 +12,9 @@ from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
 from glow.support.utility import check_shape_expected_types
 
 
-class GeomWrapper(ABC):
+class GeomWrapper():
     """
-    Abstract class acting as a wrapper for low-level GEOM topological shape
+    Base class acting as a wrapper for low-level GEOM topological shape
     objects.
     It provides:
 

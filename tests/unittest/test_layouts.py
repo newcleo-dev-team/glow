@@ -44,7 +44,7 @@ class ConcreteLayout(Layout):
         pass
 
 # -------------------------------------------------------------------------- #
-#                               Test Suites
+#                               Test Suites                                  #
 # -------------------------------------------------------------------------- #
 
 class TestLayout(unittest.TestCase):

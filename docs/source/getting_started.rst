@@ -41,7 +41,7 @@ dedicated wrapper classes acting as an interface towards the topological entitie
 of the *GEOM* module that are used in |TOOL|.
 All the layouts that can be built in |TOOL| inherit from one of these wrapper
 classes, which all derive from the :py:class:`GeomWrapper<glow.interface.geom_entities.GeomWrapper>`
-abstract class.
+base class.
 This class has been implemented so that attribute access is delegated to the
 underlying wrapped *GEOM* object (identified as ``GEOM_Object``).
 This design choice allow for its subclasses to behave like the ``GEOM_Object``

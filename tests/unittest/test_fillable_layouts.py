@@ -1402,9 +1402,9 @@ class TestFillable(unittest.TestCase):
 
     def __skip_if_superclass(self) -> None:
         """
-        Method that checks whether the current test class is `TestSurface`
+        Method that checks whether the current test class is `TestFillable`
         and skips the test that runs this method if the class is
-        `TestSurface`.
+        `TestFillable`.
         """
         if self.__class__ is TestFillable:
             self.skipTest(

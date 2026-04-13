@@ -1,5 +1,6 @@
 from subprocess import CalledProcessError, CompletedProcess, run, PIPE
 
+
 command = [
     "python", "-m", "unittest", "discover", "-s", "tests/unittest/", "-v"]
 

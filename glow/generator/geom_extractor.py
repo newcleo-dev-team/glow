@@ -682,7 +682,7 @@ class LayoutDataExtractor():
         )
         # Update the regions, if a refined geometry type is adopted
         if tdt_setup.geom_type != GeometryType.TECHNOLOGICAL:
-            self._build_refined_regions(edges)
+            self._build_refined_regions(layout_cmpd)
             logging.info(
                 f"Re-extracted no. {len(self.regions)} regions from the "
                 f"compound of the layout {self.geometry_layout.name} that "
