@@ -11,9 +11,9 @@ class BoundaryType(Enum):
     Enumeration for defining the types of the boundary conditions applied to
     the borders of the geometry layout.
     """
-    VOID:int = 0
+    VOID: int = 0
     """Indicating a vacuum + albedo BC."""
-    REFL:int = 1
+    REFL: int = 1
     """Indicating a specular reflection BC."""
     TRANSLATION: int = 2
     """Indicating a translation BC."""
@@ -155,7 +155,7 @@ LAYOUT_VS_SYMM_VS_TYP_GEO : Dict[
             LayoutGeometryType.RECTANGLE_SYM],
         SymmetryType.DIAG: [
             LayoutGeometryType.SYMMETRIES_TWO,
-            LayoutGeometryType.RECTANGLE_SYM],
+            LayoutGeometryType.RECTANGLE_EIGHT],
         SymmetryType.QUARTER: [
             LayoutGeometryType.SYMMETRIES_TWO,
             LayoutGeometryType.RECTANGLE_SYM],

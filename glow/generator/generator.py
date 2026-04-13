@@ -83,10 +83,15 @@ class TdtData():
         """
         # Set the number of folds for the layout according to the type of
         # geometry and of symmetry. For geometries already counting a symmetry
-        # (i.e. type_geo > 2) this value is set to 0.
+        # (i.e. type_geo > 2) this value is set to 0. Special treatement is
+        # adopted for 'SymmetryType.DIAG' for which nbfold 3 is set.
         self.nb_folds = 0
         if self.type_geo.value <= LayoutGeometryType.ROTATION.value:
-            self.nb_folds = self.type_sym.value
+            self.nb_folds = (
+                self.type_sym.value
+                if self.type_sym != SymmetryType.DIAG
+                else 3
+            )
         # Set the albedo for the layout's BCs according to the type of
         # geometry, i.e. by default is 1.0 if ISOTROPIC, 0.0 for the other
         # types
