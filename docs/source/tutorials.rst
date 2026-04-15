@@ -729,15 +729,11 @@ The resulting assembly is shown in :numref:`hex-lattice-boxed`.
    Hexagonal lattice's technological geometry resulting by framing the lattice
    into a hexagonal cell.
 
-The geometry layout shown in :numref::`hex-lattice-boxed` can be exported to the
+The geometry layout shown in :numref:`hex-lattice-boxed` can be exported to the
 output *TDT* file by calling the function :py:func:`export_layout_to_tdt()<glow.main.export_layout_to_tdt>`.
-In this case, the layout is exported by indicating in the :py:class:`TdtSetup<glow.main.TdtSetup>`
-dataclass a value of ``type_geo`` that results in a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
+In this case, the layout is exported by indicating, in the :py:class:`TdtSetup<glow.main.TdtSetup>`
+dataclass, a value of ``type_geo`` that results in a :py:attr:`TRANSLATION<glow.support.types.BoundaryType.TRANSLATION>`
 BC type applied to the lattice's boundaries.
-
-
-allows for a *TSPC* type of tracking
-for a full geometry layout.
 No values for the :py:class:`GeometryType<glow.support.types.GeometryType>` and
 the :py:class:`SymmetryType<glow.support.types.SymmetryType>` are provided; this
 means that the default :py:attr:`TECHNOLOGICAL<glow.support.types.GeometryType.TECHNOLOGICAL>`

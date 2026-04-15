@@ -157,9 +157,10 @@ objects (i.e. cells and lattices) is described in terms of:
   - the **sectorised geometry**, which further subdivides the regions of the
     technological geometry into sectors and circular areas. This refined
     geometry is typically used to capture flux gradients arising from geometric
-    heterogeneities. The *GEOM* compound of edge objects resulting from the
-    refinement is stored in a dictionary associating the compound to the type
-    of geometry.
+    heterogeneities. An instance attribute in the *fillable* classes stores the
+    association between the *GEOM* compound of edges resulting from the
+    refinement with the type of geometry (i.e. the
+    :py:attr:`GeometryType.SECTORIZED<glow.support.types.GeometryType.SECTORIZED>`).
 
 :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>` objects
 can be displayed in the 3D viewer of *SALOME* in terms of one of the
@@ -185,7 +186,7 @@ types include:
   - :py:class:`MATERIAL<glow.support.types.PropertyType.MATERIAL>`, to indicate
     the name of the material.
   - :py:class:`MACRO<glow.support.types.PropertyType.MACRO>`, to indicate the
-    name of the macro. Adjacent *regions* can be grouped together in a *macro
+    name of the macro. *Regions* can be grouped together in a *macro
     region* to enable support for the *multicell surfacic approximation* in
     *DRAGON5*.
 
@@ -472,6 +473,8 @@ Public methods cover the following functionalities:
   - updating the ``GEOM_Object`` the instance refers to;
   - updating the hierarchical structure of the instance.
 
+.. _fillable-add:
+
 Adding a new layout
 """""""""""""""""""
 
@@ -483,13 +486,13 @@ the current *fillable*.
 Users can provide also the XYZ coordinates at which the object should be placed
 at, as well as the index of the *layer* in which the object is added.
 A translation is performed, if needed, to place the *layout* object so that its
-CDG coincides with the given coordinates. If no position is provided, the
-*layout* object is placed in the CDG of the current *fillable*.
+CoG coincides with the given coordinates. If no position is provided, the
+*layout* object is placed in the CoG of the current *fillable*.
 
 The given *layout* object is stored at the last position of the *layer*
-identified the given index, if any is provided. This means that the object is
-added as last element of the sublist of the :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`
-attribute the given index corresponds to.
+identified by the given index, if any is provided. This means that the object
+is added as the last element in the corresponding sublist of the
+:py:attr:`glow.geometry_layouts.fillable_layouts.Fillable.layers` attribute.
 If no index is provided, the *layout* object is added to a new sublist of
 :py:attr:`layers<glow.geometry_layouts.fillable_layouts.Fillable.layers>`.
 
@@ -512,7 +515,7 @@ to include:
     object, to model an assembly of cells. For the construction of a Cartesian
     lattice, see :ref:`lattice-def`.
 
-Results are shown in :numref:`fillable-add` for both a single cell and an
+Results are shown in :numref:`fillable-add-res` for both a single cell and an
 assembly.
 
 .. code-block:: python
@@ -536,7 +539,7 @@ assembly.
     # Add the lattice to the assembly cell
     assembly.add(lattice)
 
-.. _fillable-add:
+.. _fillable-add-res:
 .. figure:: images/fillable_add.png
    :alt: Applying add() method to fillable objects.
    :width: 600px
@@ -1045,12 +1048,8 @@ attribute.
 During this traversal, any *region* or *fillable* that is overlapped by a higher
 layer is either clipped (if partially overlapped) or removed entirely from the
 hierarchical tree (if fully covered).
-
 This operation is skipped and the method exits without changes if there is no
-need to update the layers of the *fillable*. This happens if the
-:py:attr:`is_update_needed<glow.geometry_layouts.layouts.LayoutState.is_update_needed>`
-value of the :py:attr:`state<glow.geometry_layouts.fillable_layouts.Fillable.state>`
-attribute is ``False``.
+need to update the layers of the *fillable*.
 
 The operation of assembling all the layers requires that each *node* in the
 hierarchical tree is up-to-date. This means that each :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
@@ -1346,7 +1345,7 @@ Adding cell(s)
 A lattice geometry layout can be modelled from a :py:class:`Lattice<glow.geometry_layouts.lattices.Lattice>`
 instance (or one of its subclasses) by providing a list of :py:class:`Cell<glow.geometry_layouts.cells.Cell>`
 objects when instantianting the lattice.
-In addition to this approach, it is often useful to contruct a lattice by adding
+In addition to this approach, it is often useful to construct a lattice by adding
 a single cell, one or more rings of cells. The method :py:meth:`add()<glow.geometry_layouts.fillable_layouts.Fillable.add>`
 can be used to include cells one-by-one by providing the XYZ coordinates at which
 they have to be positioned. For details about this method, please refer to :ref:`fillable-add`.
@@ -1466,7 +1465,7 @@ instance is provided to the :py:func:`export_layout_to_tdt()<glow.main.export_la
 function.
 The available settings are the following ones:
 
-  - the geometry type of the layout (either the technological or the refined
+  - the geometry type of the layout (either the technological or the sectorised
     geometry), as item of the enumeration :py:class:`GeometryType<glow.support.types.GeometryType>`.
     A value different from the one used to display the layout in the *SALOME*
     3D viewer can be specified.
@@ -1495,7 +1494,7 @@ The available settings are the following ones:
     method.
 
 The function :py:func:`export_layout_to_tdt()<glow.main.export_layout_to_tdt>`
-also support the possibility to export the surface geometry representation for
+also supports the possibility to export the surface geometry representation for
 a custom portion of the provided :py:class:`Fillable<glow.geometry_layouts.fillable_layouts.Fillable>`
 instance. This portion, which is *GEOM* compound, is provided as last argument
 to the export function.
@@ -1557,7 +1556,7 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
 
 .. only:: latex
 
-   The following tables provides the association between
+   The following tables provide the association between
    :py:class:`LayoutGeometryType<glow.support.types.LayoutGeometryType>` and
    :py:class:`BoundaryType<glow.support.types.BoundaryType>` for the hexagonal
    and Cartesian type of layouts identified by the corresponding cell and lattice
@@ -1599,6 +1598,8 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
       |            +--------------+---------------------+----------------------+---------------------+----------------------+
       |  RECT      | HALF         | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
       |            +--------------+---------------------+----------------------+---------------------+----------------------+
+      |            | DIAG         | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_EIGHTH    | AXIAL_SYMMETRY       |
+      |            +--------------+---------------------+----------------------+---------------------+----------------------+
       |            | QUARTER      | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_SYM       | AXIAL_SYMMETRY       |
       |            +--------------+---------------------+----------------------+---------------------+----------------------+
       |            | EIGHTH       | SYMMETRIES_TWO      | AXIAL_SYMMETRY       | RECTANGLE_EIGHTH    | AXIAL_SYMMETRY       |
@@ -1620,6 +1621,7 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
         HEX & TWELFTH & SYMMETRIES\_TWO & AXIAL\_SYMMETRY\\ \hline
         RECT & FULL & ISOTROPIC & N.D.\\ \hline
         RECT & HALF & SYMMETRIES\_TWO & AXIAL\_SYMMETRY\\ \hline
+        RECT & DIAG & SYMMETRIES\_TWO & AXIAL\_SYMMETRY\\ \hline
         RECT & QUARTER & SYMMETRIES\_TWO & AXIAL\_SYMMETRY\\ \hline
         RECT & EIGHTH & SYMMETRIES\_TWO & AXIAL\_SYMMETRY\\ \hline
       \end{tabularx}
@@ -1640,8 +1642,9 @@ applied :py:class:`SymmetryType<glow.support.types.SymmetryType>`.
         RECT & FULL & RECTANGLE\_TRAN & TRANSLATION\\ \hline
         RECT & FULL & RECTANGLE\_SYM & AXIAL\_SYMMETRY\\ \hline
         RECT & HALF & RECTANGLE\_SYM & AXIAL\_SYMMETRY\\ \hline
+        RECT & DIAG & RECTANGLE\_EIGHTH & AXIAL\_SYMMETRY\\ \hline
         RECT & QUARTER & RECTANGLE\_SYM & AXIAL\_SYMMETRY\\ \hline
-        RECT & EIGHTH & RECTANGLE\_SYM & AXIAL\_SYMMETRY\\ \hline
+        RECT & EIGHTH & RECTANGLE\_EIGHTH & AXIAL\_SYMMETRY\\ \hline
       \end{tabularx}
       \caption{Available combinations for \textit{TSPC} case}
       \end{table}
