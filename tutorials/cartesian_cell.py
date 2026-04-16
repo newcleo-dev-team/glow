@@ -1,37 +1,43 @@
 """
-Use case showing the construction of a cartesian cell and how to customize its
+Use case showing the construction of a cartesian cell and how to customise its
 geometry layout. The 'MATERIAL' property is assigned to each region of the
-cell technological geometry. A sectorization is applied to the cell and the
+cell technological geometry. A sectorisation is applied to the cell and the
 result graphically shown in the SALOME 3D viewer.
-In addition, the sectorized geometry is modified by means of the functions
-that wrap the ones of the *GEOM* module of *SALOME*. The result is a sectorized
+In addition, the sectorised geometry is modified by means of the functions
+that wrap the ones of the *GEOM* module of *SALOME*. The result is a sectorised
 geometry costituted by more circles between the regions of the technological
 geometry.
 """
-from glow.geometry_layouts.cells import RectCell
+from glow.geometry_layouts.cells import CartesianCell
+from glow.geometry_layouts.layouts import Region
+from glow.interface.geom_entities import wrap_shape
 from glow.support.types import GeometryType, PropertyType
 from glow.geometry_layouts.geometries import Circle
 from glow.interface.geom_interface import *
 
 
-# Build the cell's geometry layout by adding three circular regions
-cell = RectCell(name="Cartesian cell")
+# Intialise two lists, one storing the circular regions radii, the other the
+# names of the materials, sorted from the inner to the outer region
 radii = [0.2, 0.3, 0.4]
-for radius in radii:
-    cell.add_circle(radius)
-# Assign the materials to each zone in the cell
-cell.set_properties(
-      {PropertyType.MATERIAL: ["MAT_1", "MAT_2", "MAT_3", "MAT_4"]}
+materials = ["MAT_1", "MAT_2", "MAT_3"]
+# Build the cell's geometry layout by adding three circular regions from the
+# outer to the inner
+cell = CartesianCell(
+    name="Cartesian cell", base_props={PropertyType.MATERIAL: "MAT_4"}
 )
+for radius, mat in zip(radii[::-1], materials[::-1]):
+    cell.add(
+        Region(Circle(radius=radius), properties={PropertyType.MATERIAL: mat})
+    )
 
-# Build the cell's sectorized geometry with 'windimill' option enabled
+# Build the cell's sectorised geometry with 'windimill' option enabled
 cell.sectorize([1, 1, 4, 8], [0, 0, 0, 22.5], windmill=True)
-# Show the sectorized cell with regions colored according to the 'MATERIAL'
+# Show the sectorised cell with regions colored according to the 'MATERIAL'
 # property
 cell.show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
 
 # ---------------------------------------------------------------------
-# Update the cell's sectorized geometry with a face built with SALOME's
+# Update the cell's sectorised geometry with a face built with SALOME's
 # functions
 # ---------------------------------------------------------------------
 # Setup the XYZ coordinates of the centres of the circles
@@ -43,10 +49,13 @@ center_circles = [Circle(radius=r) for r in [0.32, 0.34, 0.36, 0.38]]
 # Update the list of 'Circle' objects
 circles += center_circles
 
-# Partition the original cell's technological geometry with all the circles
-updated_face = make_partition(
-    [cell.face], [c.face for c in circles], ShapeType.FACE)
-# Update the cell's sectorized geometry with the just built shape
-cell.update_geometry_from_face(GeometryType.SECTORIZED, updated_face)
+# Build a compound from the edges of the circles
+circles_cmpd = make_compound([c.borders[0] for c in circles])
+# Update the cell's sectorised geometry with the compound of edges
+cell.geometry_maps[GeometryType.SECTORIZED] = wrap_shape(
+    make_compound(
+        [cell.geometry_maps[GeometryType.SECTORIZED], circles_cmpd]
+    )
+)
 # Show the result in the 3D viewer
 cell.show(PropertyType.MATERIAL, GeometryType.SECTORIZED)

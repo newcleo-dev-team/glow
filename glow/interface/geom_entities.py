@@ -2,8 +2,8 @@
 Module containing classes providing an interface towards the topological
 entities of the GEOM module of SALOME.
 """
-from abc import ABC
 import math
+
 from typing import Any, List, Self, Sequence, Type
 
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
@@ -12,16 +12,17 @@ from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
 from glow.support.utility import check_shape_expected_types
 
 
-class GeomWrapper(ABC):
+class GeomWrapper():
     """
-    Abstract class acting as a wrapper for low-level GEOM topological shape
+    Base class acting as a wrapper for low-level GEOM topological shape
     objects.
     It provides:
-        - type validation of the provided GEOM object;
-        - attribute delegation, so that this class behaves like the provided
-          GEOM object when using any GEOM function;
-        - geometric operator overloads. Math operators are overloaded to
-          provide boolean operations between two ``GeomWrapper`` objects.
+
+    - type validation of the provided GEOM object;
+    - attribute delegation, so that this class behaves like the provided GEOM
+      object when using any GEOM function;
+    - geometric operator overloads. Arithmetic operators are overloaded to
+      provide Boolean operations between two ``GeomWrapper`` objects.
 
     Parameters
     ----------
@@ -31,13 +32,6 @@ class GeomWrapper(ABC):
     expected_types : List[ShapeType]
         List of allowed shape types to check the provided GEOM object against.
 
-    Attributes
-    ----------
-    geom_obj : Any | None
-        The wrapped GEOM object (or ``None``).
-    name : str
-        The name of the wrapped GEOM object.
-
     Notes
     -----
     - Attribute access is delegated to the underlying GEOM object via
@@ -45,14 +39,16 @@ class GeomWrapper(ABC):
       avoid recursion if the GEOM object has not yet been stored.
     - The wrapper implements a few binary operator overloads that produce
       new wrapped shapes:
-      - ``+`` (``__add__``) performs a fuse (union) of two shapes.
-      - ``-`` (``__sub__``) performs a cut (difference).
-      - ``*`` (``__mul__``) produces the common (intersection).
-      - ``/`` (``__truediv__``) perform a partition operation where the
-        GEOM object is subdivided in sub shapes by given shape objects.
-      - ``//`` (``__floordiv__``) perform a partition operation where the
-        resulting shape is the combination of all the shapes after being
-        partitioned.
+
+        - ``+`` (``__add__``) performs a fuse (union) of two shapes.
+        - ``-`` (``__sub__``) performs a cut (difference).
+        - ``*`` (``__mul__``) produces the common (intersection).
+        - ``/`` (``__truediv__``) perform a partition operation where the
+          GEOM object is subdivided in sub shapes by given shape objects.
+        - ``//`` (``__floordiv__``) perform a partition operation where the
+          resulting shape is the combination of all the shapes after being
+          partitioned.
+
       These operators call helper functions that interface with the
       corresponding GEOM ones, and then wrap the resulting GEOM_Object in an
       object of the subclasses of ``GeomWrapper``.

@@ -7,42 +7,45 @@ one-eighth of the complete cartesian lattice is considered.
 import os
 import sys
 
-from glow.geometry_layouts.cells import RectCell
+from glow.geometry_layouts.cells import CartesianCell
+from glow.geometry_layouts.geometries import Circle
+from glow.geometry_layouts.layouts import Region
 from glow.support.types import *
-from glow.geometry_layouts.lattices import Lattice
-from glow.main import analyse_and_generate_tdt
-from glow.interface.geom_interface import *
+from glow.geometry_layouts.lattices import CartesianLattice
+from glow.main import TdtSetup, export_layout_to_tdt
 
-# Build a cartesian cell
-rect_cell = RectCell(name="Cartesian cell")
-# Add three inner circles to the cell
-radii = [0.65/2, 0.3, 0.75/2]
-for r in radii:
-    rect_cell.add_circle(r)
 
-# Assign the materials to each zone in the cell
-rect_cell.set_properties(
-    {PropertyType.MATERIAL: ["FUEL",
-                             "HOLLOW",
-                             "CLADDING",
-                             "COOLANT"]}
+# Build a Cartesian cell filled with 'COOLANT' and with three circular regions
+rect_cell = CartesianCell(
+    name="Cartesian cell",
+    base_props={PropertyType.MATERIAL: "COOLANT"}
 )
+# Add three inner circles to the cell
+for r, mat in zip([0.375, 0.325, 0.3], ["CLADDING", "HOLLOW", "FUEL"]):
+    rect_cell.add(
+        Region(Circle(radius=r), properties={PropertyType.MATERIAL: mat})
+    )
 
-# Show the cell with regions colored according to the 'MATERIAL'
-# property
+# Display the cell's regions with the 'MATERIAL' property type colour map
 rect_cell.show(PropertyType.MATERIAL)
 
-# Build a lattice made of cartesian cells
-lattice = Lattice([], 'Cartesian Lattice')
-
+# Build a lattice made of 36 Cartesian cells on 3 rings without central cell
+lattice = CartesianLattice([], name='Cartesian Lattice')
 lattice.add_rings_of_cells(rect_cell, 3)
-
+# Apply a 1/8 symmetry
 lattice.apply_symmetry(SymmetryType.EIGHTH)
 
-# Perform the geometry analysis and export the TDT file of the surface
-# geometry
-analyse_and_generate_tdt(
-    [lattice],
+# Display the lattice's regions with the 'MATERIAL' property type colour map
+lattice.show(PropertyType.MATERIAL)
+
+# Generate the output TDT file from the lattice
+export_layout_to_tdt(
+    lattice,
     os.path.join(
-        os.path.dirname(sys.argv[0]), 'test_cartesian_assembly_eighth')
+        os.path.dirname(sys.argv[0]), 'test_cartesian_assembly_eighth'
+    ),
+    TdtSetup(
+        type_geo=LayoutGeometryType.RECTANGLE_EIGHT,
+        symmetry_type=SymmetryType.EIGHTH
+    )
 )

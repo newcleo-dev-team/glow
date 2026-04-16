@@ -1,26 +1,42 @@
+"""
+Module containing unittest classes to assess that the functions of the
+`glow.main` module have a valid implementation.
+"""
 import os
 import unittest
 
-from typing import Any, List, Tuple
 from pathlib import Path
+from typing import Any, List, Tuple
 
-from glow.geometry_layouts.cells import RectCell
+from glow.geometry_layouts.cells import CartesianCell
 from glow.geometry_layouts.geometries import Rectangle
-from glow.geometry_layouts.lattices import Lattice
-from glow.interface.geom_interface import ShapeType, add_to_study, extract_sub_shapes, get_bounding_box, get_kind_of_shape, make_common, make_compound, make_partition
-from glow.main import TdtSetup, analyse_and_generate_tdt
+from glow.geometry_layouts.lattices import CartesianLattice
+from glow.main import TdtSetup, export_layout_to_tdt
 from glow.support.types import EDGE_NAME_VS_TYPE, EdgeType, GeometryType, \
-    LatticeGeometryType, PropertyType, SymmetryType
-from support_funcs import build_colorset, compute_hash
+    LayoutGeometryType, PropertyType, SymmetryType
+from tests.unittest.support_funcs import build_colorset, compute_hash
 
 
 class TestTdtSetup(unittest.TestCase):
     """
     Test case for verifying the correct implementation of the `TdtSetup`
     dataclass. In particular, the logic that stores the value of the `albedo`
-    attribute is tested.
+    and the `property_types` attributes is tested.
     """
-    def test_init_valid_albedo(self):
+    def test_init_default_values(self) -> None:
+        """
+        Method that tests the correct assignment of the default values.
+        """
+        tdt_setup = TdtSetup()
+        self.assertEqual(tdt_setup.geom_type, GeometryType.TECHNOLOGICAL)
+        self.assertEqual(tdt_setup.property_types, [PropertyType.MATERIAL])
+        self.assertEqual(tdt_setup.albedo, None)
+        self.assertEqual(tdt_setup.type_geo, LayoutGeometryType.ISOTROPIC)
+        self.assertEqual(tdt_setup.symmetry_type, SymmetryType.FULL)
+        # Verify the 'layout_type' attribute is not present at initialisation
+        self.assertTrue(not hasattr(tdt_setup, "layout_type"))
+
+    def test_init_valid_albedo(self) -> None:
         """
         Method that tests that a valid value for the albedo is accepted.
         """
@@ -36,7 +52,7 @@ class TestTdtSetup(unittest.TestCase):
         self.assertEqual(TdtSetup(albedo=1e-12).albedo, 1e-12)
         self.assertEqual(TdtSetup(albedo=1.0 - 1e-12).albedo, 1.0 - 1e-12)
 
-    def test_init_invalid_albedo(self):
+    def test_init_invalid_albedo(self) -> None:
         """
         Method that tests that a invalid value for the albedo raises an
         exception.
@@ -46,51 +62,70 @@ class TestTdtSetup(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             TdtSetup(albedo=1.1)
 
+    def test_init_properties(self) -> None:
+        """
+        Method that tests the assignment of the `property_types` attribute.
+        """
+        # Test that properties are stored as a list
+        self.assertTrue(isinstance(TdtSetup().property_types, List))
+        # Test that the default value is 'PropertyType.MATERIAL'
+        self.assertEqual(TdtSetup().property_types, [PropertyType.MATERIAL])
+        # Test the assignment of one property type
+        self.assertEqual(
+            TdtSetup(property_types=PropertyType.MACRO).property_types,
+            [PropertyType.MACRO]
+        )
+        # Test the assignment of two property type
+        self.assertEqual(
+            TdtSetup(
+                property_types=[PropertyType.MACRO, PropertyType.MATERIAL]
+            ).property_types,
+            [PropertyType.MACRO, PropertyType.MATERIAL]
+        )
 
 class TestMainFunction(unittest.TestCase):
     """
     Test case for verifying the correct implementation of the function
-    `analyse_and_generate_tdt` declared in the `main.py` module.
+    `export_layout_to_tdt` declared in the `main.py` module.
     The test verifies that the characteristics of the geometry layout
-    are correctly extracted and the output TDT is generated.
+    are correctly extracted and the output TDT file is generated.
 
     Attributes
     ----------
-    lattice : Lattice
-        The `Lattice` instance whose geometric characteristics are
+    layout : CartesianCell
+        The `CartesianCell` instance whose geometric characteristics are
         exported to file.
     file_name : str
         The path name of the output TDT file.
     geom_type : GeometryType
-        The type of geometry for the lattice's cells, as element of the
-        `GeometryType` enumeration.
+        The type of geometry for the layout, as element of the `GeometryType`
+        enumeration.
     prop_type : PropertyType
-        The type of property assigned to the lattice's regions, as element
+        The type of property assigned to the layout's regions, as element
         of the `PropertyType` enumeration.
     format : str
         A string indicating the format with which the geometric data about
         the edges and the BCs is written to file.
-    colorset : List[Lattice]
-        A list of ``Lattice`` instances each positioned appropriately to
-        replicate a colorset.
+    colorset : Lattice
+        A `Lattice` instance made by assemblies each positioned appropriately
+        to replicate a colorset.
     """
-    def setUp(self):
+    def setUp(self) -> None:
         """
         Method that sets up the test environment for the function
-        `analyse_and_generate_tdt` of the 'main.py' module.
+        `export_layout_to_tdt` of the `main.py` module.
         It initializes the attributes common to all the tests.
         """
-        cell = RectCell()
-        cell.set_properties({PropertyType.MATERIAL: ['MAT']})
-        self.lattice: Lattice = Lattice([cell])
+        self.layout = CartesianCell(
+            base_props={PropertyType.MATERIAL: 'MAT'}
+        )
         self.file_name: str = str(Path(__file__).parent / 'tdt_layout.dat')
         self.geom_type: GeometryType = GeometryType.TECHNOLOGICAL
         self.prop_type: PropertyType = PropertyType.MATERIAL
-        self.lattice.build_regions(self.geom_type)
         self.format: str = f"{{:.{7}E}}"
-        self.colorset: List[Lattice] = build_colorset(self.lattice)
+        self.colorset: CartesianLattice = build_colorset(self.layout)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         """
         Method that is run after calling each of the tests. It removes the
         generated output TDT file, if exists.
@@ -99,18 +134,21 @@ class TestMainFunction(unittest.TestCase):
         if os.path.exists(self.file_name):
             os.remove(self.file_name)
 
-    def test_analyse_and_generate_tdt(self) -> None:
+    def test_export_layout_to_tdt_cell(self) -> None:
         """
-        Method that tests the implementation of the function
-        `analyse_and_generate_tdt` declared in the `main.py`
-        module.
+        Method that tests the implementation of the `export_layout_to_tdt`
+        function declared in the `main.py` module for a layout made by a
+        single Cartesian cell.
         """
         # Call the function to test
-        analyse_and_generate_tdt(
-            lattices=[self.lattice],
+        export_layout_to_tdt(
+            layout=self.layout,
             filename=self.file_name.split('.')[0],
-            tdt_config=TdtSetup(
-                self.geom_type, self.prop_type, 0.0
+            tdt_setup=TdtSetup(
+                self.geom_type,
+                self.prop_type,
+                0.0,
+                LayoutGeometryType.RECTANGLE_TRAN
             )
         )
 
@@ -138,14 +176,14 @@ class TestMainFunction(unittest.TestCase):
             (0.0, 1.0, 0.0, -1.0)
         ]
         # Number of regions in the lattice
-        no_regions = len(self.lattice.regions)
+        no_regions = len(self.layout.get_regions())
 
         # Verify the header section
         self.__assess_header_section(
             content,
             no_regions,
             len(edges),
-            LatticeGeometryType.RECTANGLE_TRAN
+            LayoutGeometryType.RECTANGLE_TRAN
         )
         # Verify the regions section
         self.__assess_regions_section(content, no_regions)
@@ -157,64 +195,98 @@ class TestMainFunction(unittest.TestCase):
         self.assertIn(f"# {1:2d} - {'MAT'}", content)
         self.assertIn(f"  {1}", content)
 
-    def test_analyse_and_generate_tdt_colorset(self) -> None:
+    def test_export_layout_to_tdt_colorset(self) -> None:
         """
-        Method that tests the implementation of the function
-        `analyse_and_generate_tdt` declared in the `main.py`
-        module when a colorset or its portion is provided.
+        Method that tests the implementation of the `export_layout_to_tdt`
+        function declared in the `main.py` module when a colorset or its
+        portion is provided.
         """
         # Test exceptions are raised
-        # 1) colorset with any lattice having a symmetry
-        self.colorset[0].apply_symmetry(SymmetryType.EIGHTH)
+        # 1) colorset with inconsistency between layout-symmetry types and the
+        #    'typgeo' value
         with self.assertRaises(RuntimeError):
-            analyse_and_generate_tdt(
-                lattices=self.colorset,
+            export_layout_to_tdt(
+                layout=self.colorset,
                 filename=self.file_name.split('.')[0],
-                tdt_config=TdtSetup(
-                    self.geom_type, self.prop_type, 0.0
+                tdt_setup=TdtSetup(
+                    self.geom_type,
+                    self.prop_type,
+                    0.0,
+                    LayoutGeometryType.R120
                 )
             )
-        # 2) colorset with any lattice having a symmetry and the analysis is
-        #    done on a portion
-        colorset_cmpd = make_partition(
-            [l.lattice_cmpd for l in self.colorset], [], ShapeType.COMPOUND)
-        colorset_portion = make_common(
-            colorset_cmpd, Rectangle((3.2, 3.2, 0.0), 3.2, 3.2).face)
+        # 2) export a compound which is not a portion of the colorset
+        portion = Rectangle((13.25, 3.25, 0.0), 3.25, 3.25)
         with self.assertRaises(RuntimeError):
-            analyse_and_generate_tdt(
-                lattices=self.colorset,
+            export_layout_to_tdt(
+                layout=self.colorset,
                 filename=self.file_name.split('.')[0],
-                tdt_config=TdtSetup(
+                tdt_setup=TdtSetup(
                     self.geom_type, self.prop_type, 0.0
                 ),
-                compound_to_export=colorset_portion
-            )
-        # 3) colorset with the analysis performed on a portion and
-        #    inconsistency of values in TdTSetup
-        with self.assertRaises(RuntimeError):
-            analyse_and_generate_tdt(
-                lattices=self.colorset,
-                filename=self.file_name.split('.')[0],
-                tdt_config=TdtSetup(
-                    type_geo=LatticeGeometryType.RECTANGLE_TRAN,
-                    symmetry_type=SymmetryType.QUARTER
-                ),
-                compound_to_export=colorset_portion
+                compound_to_export=portion
             )
 
-        # Reset the symmetry application and set the typegeo of the reference
-        # lattice (i.e. the first one in the list)
-        self.colorset[0].apply_symmetry(SymmetryType.FULL)
-        self.colorset[0].type_geo = LatticeGeometryType.RECTANGLE_TRAN
+        # Apply a QUARTER symmetry so that the export can be done on a known
+        # symmetry
+        self.colorset.apply_symmetry(SymmetryType.QUARTER)
         # Call the function to test with a full colorset
         self.__assess_tdt_colorset(
-            '8bade00c97b25eac47ad09c38fccfa7611d7bf269a425a36087e03f091053ce7'
+            'e0190dde26720444e283d35e07b7c0e08959baf70137070b2fd7e0463192b48b'
         )
         # Call the function to test with a portion of the colorset
         self.__assess_tdt_colorset(
-            '163caa507b2dc7429c4fa9c4ee9b933c598cb1859bb5058e74c8f3dfc47a3206',
-            colorset_portion
+            '8a7c648b7e68c1b91d5b36bf5ae9d40fab4c58820652ee5c899f48cf65cd3a48',
+            self.colorset * Rectangle((3.2, 3.2, 0.0), 3.2, 3.2)
         )
+
+    def test_export_layout_to_tdt_macros(self) -> None:
+        """
+        Method that tests the implementation of the `export_layout_to_tdt`
+        function declared in the `main.py` module when a layout with the
+        `PropertyType.MACRO` is provided.
+        """
+        # Build a lattice of the same cell and apply different values for the
+        # 'MACRO' to each cell
+        lattice = CartesianLattice([self.layout])
+        lattice.add_ring_of_cells(self.layout, 1)
+        macro_index = 0
+        for layer in lattice.layers:
+            for cell in layer:
+                # Increment the macro index for each cell
+                macro_index += 1
+                for cell_layer in cell.layers:
+                    for cell_region in cell_layer:
+                        cell_region.properties.update(
+                            {PropertyType.MACRO: "MAC_00" + str(macro_index)}
+                        )
+
+        # Verify the exception is raised if not including 'MATERIAL' among
+        # the properties to export
+        with self.assertRaises(RuntimeError):
+            export_layout_to_tdt(
+                layout=lattice,
+                filename=self.file_name.split('.')[0],
+                tdt_setup=TdtSetup(
+                    self.geom_type,
+                    PropertyType.MACRO,
+                )
+            )
+
+        # Export the lattice with both 'MATERIAL' and 'MACRO' properties
+        export_layout_to_tdt(
+            layout=lattice,
+            filename=self.file_name.split('.')[0],
+            tdt_setup=TdtSetup(
+                self.geom_type,
+                [PropertyType.MACRO, PropertyType.MATERIAL],
+            )
+        )
+        # Read the content of the TDT file
+        with open(self.file_name, "r") as f:
+            content = f.read()
+        # Verify the correctness of the macros section in the TDT file
+        self.__assess_macro_regions_section(content, 9, "MAC_00")
 
     def __assess_boundaries_section(
             self, content: str, boundaries: List[Tuple[float]]) -> None:
@@ -271,7 +343,7 @@ class TestMainFunction(unittest.TestCase):
             content: str,
             regions_nb: int,
             edges_nb: int,
-            type_geo: LatticeGeometryType) -> None:
+            type_geo: LayoutGeometryType) -> None:
         """
         Method that tests that the header section, contained in the
         input string, contains the expected data.
@@ -284,7 +356,7 @@ class TestMainFunction(unittest.TestCase):
             The number of regions.
         edges_nb : int
             The number of edges.
-        type_geo : LatticeGeometryType
+        type_geo : LayoutGeometryType
             The value of the `typgeo` parameter.
         """
         self.assertIn(
@@ -294,6 +366,41 @@ class TestMainFunction(unittest.TestCase):
         # Verify the values for impressions and precisions
         self.assertIn(f"{0:5d}  {0:6d}  1", content)
         self.assertIn(f"{1e-5:7E}   {1e-5:7E}", content)
+
+    def __assess_macro_regions_section(
+            self, content: str, no_regions: int, mac_name_prefix: str
+        ) -> None:
+        """
+        Method that tests that the macro regions section, contained in the
+        input string, contains the expected data.
+
+        Parameters
+        ----------
+        content : str
+            The content string to search for the expected data in.
+        no_regions : int
+            The number of regions in the layout.
+        """
+        # Verify the presence of the names of the macros
+        macro_names = ""
+        for i in range(0, no_regions, 4):
+            macro_names += " ".join(f"{mac_name_prefix}{j+1}"
+                for j in range(i, min(i+4, no_regions))) + "\n "
+        # Remove the last space
+        macro_names = "*   names of macros\n " + macro_names[:-1]
+        self.assertIn(macro_names, content)
+
+        # Verify the presence of the indices of the macros ordered per flux
+        # region
+        macro_indices = ""
+        for i in range(0, no_regions, 12):
+            macro_indices += ",".join(f"{(j+1):3d}"
+                for j in range(i, min(i+12, no_regions))) + ",\n"
+        # Remove the last comma
+        macro_indices = \
+            "*   macro order number per flux region\n" + \
+            macro_indices[0:-2] + "\n"
+        self.assertIn(macro_indices, content)
 
     def __assess_regions_section(self, content: str, no_regions: int) -> None:
         """
@@ -325,11 +432,11 @@ class TestMainFunction(unittest.TestCase):
         pre-calculated hash of the reference file.
         """
         # Run the analysis and TDT file generation
-        analyse_and_generate_tdt(
-            lattices=self.colorset,
+        export_layout_to_tdt(
+            layout=self.colorset,
             filename=self.file_name.split('.')[0],
-            tdt_config=TdtSetup(
-                type_geo=LatticeGeometryType.SYMMETRIES_TWO,
+            tdt_setup=TdtSetup(
+                type_geo=LayoutGeometryType.SYMMETRIES_TWO,
                 symmetry_type=SymmetryType.QUARTER
             ),
             compound_to_export=layout

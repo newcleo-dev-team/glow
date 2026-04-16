@@ -13,54 +13,58 @@ from typing import Any, Dict, List
 from glow.generator.generator import TdtData, _write_boundary_conditions, \
     _write_edges, _write_header, _write_properties, _write_regions, \
     write_tdt_file
-from glow.generator.geom_extractor import Boundary, Edge, Face
+from glow.generator.geom_extractor import BoundaryData, EdgeData, FaceData
 from glow.geometry_layouts.geometries import Rectangle
+from glow.geometry_layouts.layouts import Region
 from glow.interface.geom_interface import ShapeType, set_shape_name
 
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
-    LatticeGeometryType, SymmetryType
+    LayoutGeometryType, PropertyType, SymmetryType
 from glow.support.utility import are_same_shapes
 
 
 # Providing the 'Path' object for the parent folder of the unittests
-UNITTEST_FLDR = Path(__file__).parent
+UNITTEST_FOLDER = Path(__file__).parent
 
 
 class TestTdtData(unittest.TestCase):
     """
-    Test case for verifying the correct implementation of the class
-    `TdtData` that stores  the geometrical data of need from a `Lattice`
-    instance.
+    Test case for verifying the correct implementation of the class `TdtData`
+    that stores the geometric information of the layout, as well as the
+    properties, that are written to the output TDT file.
 
     Attributes
     ----------
     file_name : str
         The name of the TDT file to export.
-    type_geo : LatticeGeometryType
-        The type of geometry, as element of the `LatticeGeometryType`
+    type_geo : LayoutGeometryType
+        The type of geometry, as element of the `LayoutGeometryType`
         enumeration.
     symmetry_type : SymmetryType
         The type of symmetry, as element of the `SymmetryType` enumeration.
-    edges : List[Edge]
-        The list of `Edge` objects for each edge of the lattice.
-    boundaries : List[Boundary]
-        The list of `Boundary` objects for each border of the lattice.
+    edges : List[EdgeData]
+        The list of `EdgeData` objects for each edge of the layout.
+    boundaries : List[BoundaryData]
+        The list of `BoundaryData` objects for each border of the layout.
     """
     def setUp(self) -> None:
         """
         Method that sets up the test environment for the class `TdtData`.
-        It initializes the attributes common to all the tests.
+        It initialises the attributes common to all the tests.
         """
         # Declare the data used for comparison purposes
         self.file_name: str = "layout"
-        self.type_geo: LatticeGeometryType = \
-            LatticeGeometryType.RECTANGLE_TRAN
+        self.type_geo: LayoutGeometryType = \
+            LayoutGeometryType.RECTANGLE_TRAN
         self.symmetry_type: SymmetryType = SymmetryType.FULL
         ref_shape = Rectangle()
         borders = ref_shape.borders
-        set_shape_name(ref_shape.face, "FACE_1")
-        self.ref_face: Face = Face(ref_shape.face, 'MAT')
-        edge_names_vs_faces: Dict[str, List[Any | Face]]  = {
+        self.ref_face: FaceData = FaceData(
+            Region(ref_shape, "FACE_1", {PropertyType.MATERIAL: "MAT"}),
+            1,
+            [PropertyType.MATERIAL]
+        )
+        edge_names_vs_faces: Dict[str, List[Any | FaceData]]  = {
             'EDGE_1': [borders[0], self.ref_face],
             'EDGE_2': [borders[1], self.ref_face],
             'EDGE_3': [borders[2], self.ref_face],
@@ -68,19 +72,20 @@ class TestTdtData(unittest.TestCase):
         }
         for b, n in zip(ref_shape.borders, edge_names_vs_faces.keys()):
             set_shape_name(b, n)
-        self.edges: List[Edge] = [
-            Edge(edge_face[0], *edge_face[1:])
-                for edge_face in edge_names_vs_faces.values()
+        self.edges: List[EdgeData] = [
+            EdgeData(edge_face[0], *edge_face[1:])
+            for edge_face in edge_names_vs_faces.values()
         ]
-        self.boundaries: List[Boundary] = [
-            Boundary(border, self.type_geo, ref_shape.o, (1.0, 1.0))
-                for border in borders]
+        self.boundaries: List[BoundaryData] = [
+            BoundaryData(border, self.type_geo, ref_shape.o, (1.0, 1.0))
+            for border in borders
+        ]
 
     def test_init(self) -> None:
         """
-        Method that tests the initialization of the `TdtData` class.
+        Method that tests the initialisation of the `TdtData` class.
         """
-        # Instantiate the dataclass storing the needed lattice data
+        # Instantiate the dataclass storing the needed layout data
         tdt = TdtData(
             filename=self.file_name + ".dat",
             edges=self.edges,
@@ -107,9 +112,7 @@ class TestTdtData(unittest.TestCase):
                 tb.border, b.border, ShapeType.EDGE
             )
         for tf, f in zip(tdt.faces, [self.ref_face]):
-            are_same_shapes(
-                tf.face, f.face, ShapeType.FACE
-            )
+            self.assertEqual(tf, f)
 
         # Instantiate the dataclass with a geometry type used with a TISO
         # tracking type so to check that the 'nb_folds' attribute is
@@ -119,7 +122,7 @@ class TestTdtData(unittest.TestCase):
             edges=self.edges,
             faces=[self.ref_face],
             boundaries=self.boundaries,
-            type_geo=LatticeGeometryType.SYMMETRIES_TWO,
+            type_geo=LayoutGeometryType.SYMMETRIES_TWO,
             type_sym=SymmetryType.QUARTER,
             impressions=(1, 1),
             precisions=(1e-6, 1e-6)
@@ -128,9 +131,9 @@ class TestTdtData(unittest.TestCase):
 
     def test_init_with_albedo(self) -> None:
         """
-        Method that tests the initialization of the `TdtData` class with
+        Method that tests the initialisation of the `TdtData` class with
         different values of the `albedo` attribute and of the type of
-        geometry of the lattice.
+        geometry of the layout.
         """
         # Instantiate the dataclass with an albedo value not set (i.e. None)
         # and an ISOTROPIC type of geometry. The albedo is automatically set
@@ -140,7 +143,7 @@ class TestTdtData(unittest.TestCase):
             edges=self.edges,
             faces=[self.ref_face],
             boundaries=self.boundaries,
-            type_geo=LatticeGeometryType.ISOTROPIC,
+            type_geo=LayoutGeometryType.ISOTROPIC,
             type_sym=SymmetryType.FULL,
             impressions=(1, 1),
             precisions=(1e-6, 1e-6)
@@ -154,7 +157,7 @@ class TestTdtData(unittest.TestCase):
             edges=self.edges,
             faces=[self.ref_face],
             boundaries=self.boundaries,
-            type_geo=LatticeGeometryType.ISOTROPIC,
+            type_geo=LayoutGeometryType.ISOTROPIC,
             type_sym=SymmetryType.FULL,
             albedo=0.5,
             impressions=(1, 1),
@@ -170,7 +173,7 @@ class TestTdtData(unittest.TestCase):
                 edges=self.edges,
                 faces=[self.ref_face],
                 boundaries=self.boundaries,
-                type_geo=LatticeGeometryType.RECTANGLE_TRAN,
+                type_geo=LayoutGeometryType.RECTANGLE_TRAN,
                 type_sym=SymmetryType.FULL,
                 albedo=0.5,
                 impressions=(1, 1),
@@ -185,7 +188,7 @@ class TestTdtData(unittest.TestCase):
             edges=self.edges,
             faces=[self.ref_face],
             boundaries=self.boundaries,
-            type_geo=LatticeGeometryType.RECTANGLE_TRAN,
+            type_geo=LayoutGeometryType.RECTANGLE_TRAN,
             type_sym=SymmetryType.FULL,
             albedo=0.0,
             impressions=(1, 1),
@@ -197,7 +200,7 @@ class TestTdtData(unittest.TestCase):
             edges=self.edges,
             faces=[self.ref_face],
             boundaries=self.boundaries,
-            type_geo=LatticeGeometryType.RECTANGLE_TRAN,
+            type_geo=LayoutGeometryType.RECTANGLE_TRAN,
             type_sym=SymmetryType.FULL,
             impressions=(1, 1),
             precisions=(1e-6, 1e-6)
@@ -210,30 +213,49 @@ class TestTdtData(unittest.TestCase):
         `__build_properties_id` of the `TdtData` class.
         """
         # Instantiate the 'TdtData' class without attributes and only
-        # initialize the 'faces' one
+        # initialise the needed ones
         tdt = TdtData.__new__(TdtData)
         tdt.faces = []
-        # Build four 'Face' objects each with a different property name but
-        # the last one
+        tdt.properties = {}
+        tdt.property_ids = {}
+        # Build four 'FaceData' objects each with a different property name
+        # but the last one
         for i in range(4):
-            face = deepcopy(self.ref_face.face)
-            # Change the face's name
-            set_shape_name(face, f'FACE_{i+1}')
-            # Build and append a 'Face' object
-            if i == 3:
-                mat_name = "MAT_1"
-            else:
-                mat_name = f'MAT_{i+1}'
-            tdt.faces.append(Face(face, mat_name))
+            region = self.ref_face.region.clone()
+            # Change the regions's name and set the value for the 'MATERIAL'
+            # and 'MACRO' properties
+            region.name = f'FACE_{i+1}'
+            region.properties[PropertyType.MATERIAL] = (
+                "MAT_1" if i == 3 else f'MAT_{i+1}'
+            )
+            region.properties[PropertyType.MACRO] = (
+                "MAC_001" if i in [0, 2] else f'MAC_00{i+1}'
+            )
+            # Build and append a new 'FaceData' object
+            tdt.faces.append(
+                FaceData(
+                    region, i+1, [PropertyType.MATERIAL, PropertyType.MACRO]
+                )
+            )
 
         # Build the lists containing the names of the properties and the ID
         # of the property name associated to a face
         tdt._TdtData__build_properties_id()
-        # Verify the data is correctly generated
-        self.assertEqual(len(tdt.properties), 3)
-        self.assertEqual(tdt.properties, ['MAT_1', 'MAT_2', 'MAT_3'])
-        self.assertEqual(len(tdt.property_ids), 4)
-        self.assertEqual(tdt.property_ids, [1, 2, 3, 1])
+
+        # Verify the data is correctly generated for the 'MATERIAL' property
+        prop = PropertyType.MATERIAL
+        self.assertEqual(len(tdt.properties[prop]), 3)
+        self.assertEqual(tdt.properties[prop], ['MAT_1', 'MAT_2', 'MAT_3'])
+        self.assertEqual(len(tdt.property_ids[prop]), 4)
+        self.assertEqual(tdt.property_ids[prop], [1, 2, 3, 1], f"{tdt.faces}")
+        # Verify the data is correctly generated for the 'MACRO' property
+        prop = PropertyType.MACRO
+        self.assertEqual(len(tdt.properties[prop]), 3)
+        self.assertEqual(
+            tdt.properties[prop], ['MAC_001', 'MAC_002', 'MAC_004']
+        )
+        self.assertEqual(len(tdt.property_ids[prop]), 4)
+        self.assertEqual(tdt.property_ids[prop], [1, 2, 1, 3])
 
 
 class TestGeneratorFunctions(unittest.TestCase):
@@ -245,17 +267,17 @@ class TestGeneratorFunctions(unittest.TestCase):
     ----------
     file_name : str
         The path to the TDT output file.
-    type_geo : LatticeGeometryType
-        The type of geometry, as element of the `LatticeGeometryType`
+    type_geo : LayoutGeometryType
+        The type of geometry, as element of the `LayoutGeometryType`
         enumeration.
     symmetry_type : SymmetryType
         The type of symmetry, as element of the `SymmetryType` enumeration.
-    edges : List[Edge]
-        The list of `Edge` objects for each edge of the lattice.
-    boundaries : List[Boundary]
-        The list of `Boundary` objects for each border of the lattice.
-    face : Face
-        A `Face` object representing a region of the lattice.
+    edges : List[EdgeData]
+        The list of `EdgeData` objects for each edge of the layout.
+    boundaries : List[BoundaryData]
+        The list of `BoundaryData` objects for each border of the layout.
+    face : FaceData
+        A `FaceData` object representing a region of the layout.
     tdt : TdtData
         The `TdtData` object collecting all the characteristics of the
         geometry layout.
@@ -267,36 +289,44 @@ class TestGeneratorFunctions(unittest.TestCase):
         """
         Method that sets up the test environment for the functions of the
         `generator.py` module.
-        It initializes the attributes common to all the tests.
+        It initialises the attributes common to all the tests.
         """
         # Declare the data used for comparison purposes
-        self.file_name: str = str(UNITTEST_FLDR / "test_layout.dat")
-        self.type_geo: LatticeGeometryType = \
-            LatticeGeometryType.RECTANGLE_TRAN
+        self.file_name: str = str(UNITTEST_FOLDER / "test_layout.dat")
+        self.type_geo: LayoutGeometryType = \
+            LayoutGeometryType.RECTANGLE_TRAN
         self.symmetry_type: SymmetryType = SymmetryType.FULL
+
         ref_shape = Rectangle()
         borders = ref_shape.borders
-        set_shape_name(ref_shape.face, "FACE_1")
-        self.face: Face = Face(ref_shape.face, 'MAT')
-        edge_names_vs_faces: Dict[str, List[Any | Face]]  = {
-            'EDGE_1': [borders[0], self.face],
-            'EDGE_2': [borders[1], self.face],
-            'EDGE_3': [borders[2], self.face],
-            'EDGE_4': [borders[3], self.face]
+        ref_region = Region(
+            ref_shape,
+            "FACE_1",
+            {PropertyType.MATERIAL: "MAT", PropertyType.MACRO: "MAC"}
+        )
+        self.ref_face: FaceData = FaceData(
+            ref_region, 1, [PropertyType.MACRO, PropertyType.MATERIAL]
+        )
+        edge_names_vs_faces: Dict[str, List[Any | FaceData]]  = {
+            'EDGE_1': [borders[0], self.ref_face],
+            'EDGE_2': [borders[1], self.ref_face],
+            'EDGE_3': [borders[2], self.ref_face],
+            'EDGE_4': [borders[3], self.ref_face]
         }
         for b, n in zip(ref_shape.borders, edge_names_vs_faces.keys()):
             set_shape_name(b, n)
-        self.edges: List[Edge] = [
-            Edge(edge_face[0], *edge_face[1:])
-                for edge_face in edge_names_vs_faces.values()
+        self.edges: List[EdgeData] = [
+            EdgeData(edge_face[0], *edge_face[1:])
+            for edge_face in edge_names_vs_faces.values()
         ]
-        self.boundaries: List[Boundary] = [
-            Boundary(border, self.type_geo, ref_shape.o, (1.0, 1.0))
-                for border in borders]
+        self.boundaries: List[BoundaryData] = [
+            BoundaryData(border, self.type_geo, ref_shape.o, (1.0, 1.0))
+            for border in borders
+        ]
         self.tdt: TdtData = TdtData(
             filename=self.file_name,
             edges=self.edges,
-            faces=[self.face],
+            faces=[self.ref_face],
             boundaries=self.boundaries,
             type_geo=self.type_geo,
             type_sym=SymmetryType.FULL,
@@ -312,10 +342,10 @@ class TestGeneratorFunctions(unittest.TestCase):
         `_write_boundary_conditions` declared in the `generator.py`
         module.
         """
-        # Test function behavior for RECTANGLE_TRAN geometry
+        # Test function behaviour for 'RECTANGLE_TRAN' geometry
         tdt_tran = TdtData.__new__(TdtData)
         tdt_tran.boundaries = self.boundaries
-        tdt_tran.type_geo = LatticeGeometryType.RECTANGLE_TRAN
+        tdt_tran.type_geo = LayoutGeometryType.RECTANGLE_TRAN
         tdt_tran.albedo = 0.0
 
         # Declare a buffer where the text is written to
@@ -327,11 +357,11 @@ class TestGeneratorFunctions(unittest.TestCase):
         # type of geometry
         self.__assess_boundaries(tdt_tran, output)
 
-        # Test function behaviour for ISOTROPIC geometry: it should return
+        # Test function behaviour for 'ISOTROPIC' geometry: it should return
         # after writing the 'albedo' value
         tdt_iso = TdtData.__new__(TdtData)
         tdt_iso.boundaries = self.boundaries
-        tdt_iso.type_geo = LatticeGeometryType.ISOTROPIC
+        tdt_iso.type_geo = LayoutGeometryType.ISOTROPIC
         tdt_iso.albedo = 1.0
 
         buffer_iso = io.StringIO()
@@ -351,7 +381,7 @@ class TestGeneratorFunctions(unittest.TestCase):
         refl_boundary = self.boundaries[0]
         refl_boundary.type = BoundaryType.REFL
         tdt_refl.boundaries = [refl_boundary]
-        tdt_refl.type_geo = LatticeGeometryType.RECTANGLE_TRAN
+        tdt_refl.type_geo = LayoutGeometryType.RECTANGLE_TRAN
         tdt_refl.albedo = 0.0
 
         buffer_refl = io.StringIO()
@@ -364,19 +394,17 @@ class TestGeneratorFunctions(unittest.TestCase):
         declared in the `generator.py` module for `EdgeType.SEGMENT`-type
         edges.
         """
-        # Test the output data about edges having SEGMENT type
-        # ----------------------------------------------------
         # Instantiate 'TdtData' with only the needed 'edges' attribute
         tdt_data = TdtData.__new__(TdtData)
         tdt_data.edges = []
-        # Build the 'Edge' objects with only the needed attributes and
+        # Build the 'EdgeData' objects with only the needed attributes and
         # fixed values
         for i in range(4):
-            edge = Edge.__new__(Edge)
+            edge = EdgeData.__new__(EdgeData)
             edge.kind = EdgeType.SEGMENT
             edge.no = i + 1
             edge.data = ['SEGMENT', 1.0, 2.0, 0.0, 3.0, 4.0, 0.0]
-            edge.left = self.face
+            edge.left = self.ref_face
             edge.right = None
             tdt_data.edges.append(edge)
 
@@ -396,19 +424,17 @@ class TestGeneratorFunctions(unittest.TestCase):
         declared in the `generator.py` module for `EdgeType.CIRCLE`-type
         edges.
         """
-        # Test the output data about edges having CIRCLE type
-        # ---------------------------------------------------
         # Instantiate 'TdtData' with only the needed 'edges' attribute
         tdt_data = TdtData.__new__(TdtData)
         tdt_data.edges = []
-        # Build the 'Edge' objects with only the needed attributes and
+        # Build the 'EdgeData' objects with only the needed attributes and
         # fixed values
         for i in range(4):
-            edge = Edge.__new__(Edge)
+            edge = EdgeData.__new__(EdgeData)
             edge.kind = EdgeType.CIRCLE
             edge.no = i + 1
             edge.data = ['CIRCLE', 5.0, 6.0, 0.0, 0.0, 0.0, 1.0, 2.5]
-            edge.right = self.face
+            edge.right = self.ref_face
             edge.left = None
             tdt_data.edges.append(edge)
 
@@ -440,20 +466,20 @@ class TestGeneratorFunctions(unittest.TestCase):
         declared in the `generator.py` module for `EdgeType.ARC_CIRCLE`-type
         edges.
         """
-        # Test the output data about edges having ARC_CIRCLE type
-        # -------------------------------------------------------
         # Instantiate 'TdtData' with only the needed 'edges' attribute
         tdt_data = TdtData.__new__(TdtData)
         tdt_data.edges = []
-        # Build the 'Edge' objects with only the needed attributes and
+        # Build the 'EdgeData' objects with only the needed attributes and
         # fixed values
         for i in range(4):
-            edge = Edge.__new__(Edge)
+            edge = EdgeData.__new__(EdgeData)
             edge.kind = EdgeType.ARC_CIRCLE
             edge.no = i + 1
-            edge.data = ['ARC_CIRCLE', 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0,
-                         4.0, 1.0, 0.0, 1.0, 4.0, 0.0]
-            edge.right = self.face
+            edge.data = [
+                'ARC_CIRCLE', 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 3.0, 4.0, 1.0,
+                0.0, 1.0, 4.0, 0.0
+            ]
+            edge.right = self.ref_face
             edge.left = None
             tdt_data.edges.append(edge)
 
@@ -500,9 +526,12 @@ class TestGeneratorFunctions(unittest.TestCase):
         """
         # Instantiate 'TdtData' with only the needed attributes
         tdt_data = TdtData.__new__(TdtData)
-        tdt_data.properties = ['MAT_1', 'MAT_2', 'MAT_3']
-        tdt_data.property_ids = [1, 2, 3, 1, 2, 3, 1]
-
+        tdt_data.properties = {
+            PropertyType.MATERIAL: ['MAT_1', 'MAT_2', 'MAT_3']
+        }
+        tdt_data.property_ids = {
+            PropertyType.MATERIAL: [1, 2, 3, 1, 2, 3, 1]
+        }
         # Declare a buffer where the text is written to
         buffer = io.StringIO()
         # Call the function and retrieve the text from the buffer
@@ -512,19 +541,37 @@ class TestGeneratorFunctions(unittest.TestCase):
         # Verify the presence of the properties names and indices
         self.__assess_properties(tdt_data, output)
 
+        # Verify the exception is raised if no 'MATERIAL' property type is
+        # present
+        tdt_data = TdtData.__new__(TdtData)
+        tdt_data.properties = {}
+        with self.assertRaises(RuntimeError):
+            _write_properties(buffer, tdt_data)
+
     def test_write_regions(self) -> None:
         """
-        Method that tests the implementation of the function
-        `_write_regions` declared in the `generator.py` module.
+        Method that tests the implementation of the function `_write_regions`
+        declared in the `generator.py` module when no macro regions are
+        present.
         """
-        # Instantiate 'TdtData' with only the needed 'faces' attribute
+                # Instantiate 'TdtData' with only the needed attributes
         tdt_data = TdtData.__new__(TdtData)
         tdt_data.faces = []
-        # Build the 'Face' objects with only the 'no' attribute
+        tdt_data.properties = {}
+        tdt_data.property_ids = {}
+        # Build the 'FaceData' objects with the 'region' and 'no' attributes
         for i in range(16):
-            face = Face.__new__(Face)
-            face.no = i + 1
-            tdt_data.faces.append(face)
+            index = i + 1
+            tdt_data.faces.append(
+                FaceData(
+                    Region(
+                        Rectangle(),
+                        properties={PropertyType.MATERIAL: "MAT"}
+                    ),
+                    index,
+                    []
+                )
+            )
 
         # Declare a buffer where the text is written to
         buffer = io.StringIO()
@@ -532,7 +579,44 @@ class TestGeneratorFunctions(unittest.TestCase):
         _write_regions(buffer, tdt_data)
         output = buffer.getvalue()
 
-        # Verify the presence of the regions' indices
+        # Verify the presence of the regions' indices, and default section for
+        # the macros
+        self.__assess_regions(tdt_data, output)
+
+    def test_write_regions_macro(self) -> None:
+        """
+        Method that tests the implementation of the function `_write_regions`
+        declared in the `generator.py` module when information about the
+        macro regions are present.
+        """
+        # Instantiate 'TdtData' with only the needed attributes
+        tdt_data = TdtData.__new__(TdtData)
+        tdt_data.faces = []
+        tdt_data.properties = {}
+        tdt_data.property_ids = {}
+        # Build the 'FaceData' objects with the 'region' and 'no' attributes
+        for i in range(16):
+            index = i + 1
+            tdt_data.faces.append(
+                FaceData(
+                    Region(
+                        Rectangle(),
+                        properties={PropertyType.MACRO: f"MAC_{index:03d}"}
+                    ),
+                    index,
+                    [PropertyType.MACRO]
+                )
+            )
+        # Build the indices of the 'MACRO' properties
+        tdt_data._TdtData__build_properties_id()
+
+        # Declare a buffer where the text is written to
+        buffer = io.StringIO()
+        # Call the function and retrieve the text from the buffer
+        _write_regions(buffer, tdt_data)
+        output = buffer.getvalue()
+
+        # Verify the presence of the regions' indices, macro names and indices
         self.__assess_regions(tdt_data, output)
 
     def test_write_tdt_file(self) -> None:
@@ -563,7 +647,7 @@ class TestGeneratorFunctions(unittest.TestCase):
         """
         Method that tests that the boundaries section, provided by the input
         string, contains the expected data indicating the characteristics
-        of the boundaries of the geometry layout (FULL cartesian type).
+        of the boundaries of the geometry layout.
 
         Parameters
         ----------
@@ -636,8 +720,8 @@ class TestGeneratorFunctions(unittest.TestCase):
 
     def __assess_properties(self, tdt_data: TdtData, content: str) -> None:
         """
-        Method that verifies that the names and the indices of the
-        properties are correctly present in the given content.
+        Method that verifies that the names and the indices of the 'MATERIAL'
+        property are correctly present in the given content.
 
         Parameters
         ----------
@@ -648,15 +732,15 @@ class TestGeneratorFunctions(unittest.TestCase):
         """
         # Verify the name of the properties, as well as their index,
         # are present
-        for id, name in enumerate(tdt_data.properties):
+        for id, name in enumerate(tdt_data.properties[PropertyType.MATERIAL]):
             self.assertIn(f"# {id+1:2d} - {name}", content)
-        for id in tdt_data.property_ids:
+        for id in tdt_data.property_ids[PropertyType.MATERIAL]:
             self.assertIn(f"  {id}", content)
 
     def __assess_regions(self, tdt_data: TdtData, content: str) -> None:
         """
-        Method that verifies that the indices of the regions are correctly
-        present in the given content.
+        Method that verifies that the indices of the regions, as well as the
+        macro names and indices, are correctly present in the given content.
 
         Parameters
         ----------
@@ -666,14 +750,46 @@ class TestGeneratorFunctions(unittest.TestCase):
         content : str
             The content string to search for regions' indices in.
         """
+        # Verify the presence of the indices of the regions
         regions_indices = ""
         regions_no = [f.no for f in tdt_data.faces]
         for i in range(0, len(regions_no), 12):
-            regions_indices += ",".join(f"{n:4d}"
-                                        for n in regions_no[i:i+12]) + ",\n"
+            regions_indices += ",".join(
+                f"{n:4d}" for n in regions_no[i:i+12]
+            ) + ",\n"
         # Remove the last comma
         regions_indices = regions_indices[0:-2] + "\n"
-        self.assertIn(regions_indices, content)
+        regions_section = (
+            "*   flux region number per geometry region (mesh)\n"
+            + regions_indices
+        )
+        self.assertIn(regions_section, content)
+
+        # Verify the presence of the macro region names and indices
+        macro_names = "*   names of macros\n"
+        macro_indices = "*   macro order number per flux region\n"
+        if PropertyType.MACRO not in tdt_data.properties:
+            self.assertIn(macro_names + "mac\n", content)
+            self.assertIn(macro_indices + f"{len(regions_no)}*1\n", content)
+            return
+        macro_names += " "
+        for i in range(0, len(regions_no), 4):
+            macro_names += " ".join(
+                f"{n:7s}"
+                for n in tdt_data.properties[PropertyType.MACRO][i:i+4]
+            ) + "\n "
+        self.assertIn(macro_names[0:-1], content)
+
+        macro_indices += " "
+        for i in range(0, len(regions_no), 12):
+            macro_indices += ", ".join(
+                f"{n:2d}"
+                for n in tdt_data.property_ids[PropertyType.MACRO][i:i+12]
+            ) + ",\n "
+            if i % 12 == 0:
+                macro_indices = macro_indices[0:-1] + " "
+        self.assertIn(macro_indices[0:-3] + "\n", content)
+
 
     def __assess_segment_edges(self, tdt_data: TdtData, content: str) -> None:
         """

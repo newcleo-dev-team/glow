@@ -63,21 +63,9 @@ mac
 * type  number of elements
   2, 1
 *   elements
-6
+1
 * tx, ty, angle
-  1.1778285E+00 6.8002000E-01 1.2000000E+02
-* type  number of elements
-  2, 1
-*   elements
-5
-* tx, ty, angle
-  1.1778285E+00 -6.8002000E-01 6.0000000E+01
-* type  number of elements
-  2, 1
-*   elements
-4
-* tx, ty, angle
-  0.0000000E+00 1.3600400E+00 0.0000000E+00
+  -1.1778285E+00 -6.8002000E-01 1.2000000E+02
 * type  number of elements
   2, 1
 *   elements
@@ -87,15 +75,27 @@ mac
 * type  number of elements
   2, 1
 *   elements
-2
+5
 * tx, ty, angle
-  -1.1778285E+00 6.8002000E-01 6.0000000E+01
+  1.1778285E+00 -6.8002000E-01 6.0000000E+01
 * type  number of elements
   2, 1
 *   elements
-1
+6
 * tx, ty, angle
-  -1.1778285E+00 -6.8002000E-01 1.2000000E+02
+  1.1778285E+00 6.8002000E-01 1.2000000E+02
+* type  number of elements
+  2, 1
+*   elements
+4
+* tx, ty, angle
+  0.0000000E+00 1.3600400E+00 0.0000000E+00
+* type  number of elements
+  2, 1
+*   elements
+2
+* tx, ty, angle
+  -1.1778285E+00 6.8002000E-01 6.0000000E+01
 #  1 - LEAD
 #  2 - CLADDING
 #  3 - HOLLOW

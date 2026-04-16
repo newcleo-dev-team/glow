@@ -3,17 +3,15 @@ This module contains the classes that support the generation of the output
 TDT file containing the geometry representation for further analysis in
 DRAGON.
 """
-import math
-import os
-
 from dataclasses import dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from glow.generator.geom_extractor import Boundary, Edge, Face
+from glow.generator.geom_extractor import BoundaryData, EdgeData, FaceData
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
-    LatticeGeometryType, PropertyType, SymmetryType
+    LayoutGeometryType, PropertyType, SymmetryType
+from glow.support.utility import get_angle_between_points
 
 
 # Precision in terms of number of digits after the decimal
@@ -32,17 +30,15 @@ class TdtData():
     the type of geometry, of symmetry, and the properties associated to the
     regions of the geometry.
     """
-    filename: str = os.path.join(Path(__file__).resolve().parent.parent,
-                                       "tdt_lattice.dat")
-    """Name of the file in the TDT format to be generated (without the `.dat`
-        extension)."""
-    edges: List[Edge] = field(default_factory=list)
-    """List of the geometry layout edges, as ``Edge`` objects."""
-    faces: List[Face] = field(default_factory=list)
-    """List of the geometry layout regions, as ``Face`` objects."""
-    boundaries: List[Boundary] = field(default_factory=list)
-    """List of the geometry layout borders, as ``Boundary`` objects."""
-    type_geo: LatticeGeometryType = LatticeGeometryType.HEXAGON_TRAN
+    filename: str = Path(__file__).resolve().parent.parent /"tdt_layout.dat"
+    """Name of the TDT file to be generated (without the `.dat` extension)."""
+    edges: List[EdgeData] = field(default_factory=list)
+    """List of the geometry layout edges, as ``EdgeData`` objects."""
+    faces: List[FaceData] = field(default_factory=list)
+    """List of the geometry layout regions, as ``FaceData`` objects."""
+    boundaries: List[BoundaryData] = field(default_factory=list)
+    """List of the geometry layout borders, as ``BoundaryData`` objects."""
+    type_geo: LayoutGeometryType = LayoutGeometryType.HEXAGON_TRAN
     """
     The type of geometry applied to the geometry layout, as element of the
     ``LatticeGeometryType`` enumeration.
@@ -53,24 +49,28 @@ class TdtData():
     the ``SymmetryType`` enumeration.
     """
     albedo: float | None = None
-    """Identifying the value for the `albedo` applied to the lattice's BCs."""
+    """Identifying the value for the `albedo` applied to the layout's BCs."""
     impressions: Tuple[int, int] = (0, 0)
     """Options for printing the geometric data."""
     precisions: Tuple[float, float] = (1e-5, 1e-5)
     """Options for the geometric precision of the data."""
     properties: Dict[PropertyType, List[str]] = field(
-        init=False, default_factory=dict)
+        init=False, default_factory=dict
+    )
     """
+    Dictionary with keys the property types and values the list of names for
+    each property the regions of the geometry layout are associated with.
     Dictionary with keys the property types and values the list of names for
     each property the regions of the geometry layout are associated with.
     """
     property_ids: Dict[PropertyType, List[int]] = field(
-        init=False, default_factory=dict)
+        init=False, default_factory=dict
+    )
     """
     Dictionary with keys the property types and values the list of the IDs for
     each property the regions of the geometry layout are associated with.
     """
-    nb_folds: int = field(init=False)
+    nb_folds : int = field(init=False)
     """
     The number of times the geometry layout has to be unfolded to replicate
     the full geometry, if any symmetry is applied.
@@ -81,23 +81,28 @@ class TdtData():
         Method that is automatically run after the dataclass initialization
         for setting all the attributes that depends on others.
         """
-        # Set the number of folds for the lattice according to the type of
+        # Set the number of folds for the layout according to the type of
         # geometry and of symmetry. For geometries already counting a symmetry
-        # (i.e. type_geo > 2) this value is set to 0.
+        # (i.e. type_geo > 2) this value is set to 0. Special treatement is
+        # adopted for 'SymmetryType.DIAG' for which nbfold 3 is set.
         self.nb_folds = 0
-        if self.type_geo.value <= LatticeGeometryType.ROTATION.value:
-            self.nb_folds = self.type_sym.value
-        # Set the albedo for the lattice's BCs according to the type of
+        if self.type_geo.value <= LayoutGeometryType.ROTATION.value:
+            self.nb_folds = (
+                self.type_sym.value
+                if self.type_sym != SymmetryType.DIAG
+                else 3
+            )
+        # Set the albedo for the layout's BCs according to the type of
         # geometry, i.e. by default is 1.0 if ISOTROPIC, 0.0 for the other
         # types
-        if self.type_geo == LatticeGeometryType.ISOTROPIC:
+        if self.type_geo == LayoutGeometryType.ISOTROPIC:
             self.albedo = 1.0 if self.albedo is None else self.albedo
         else:
             if self.albedo is not None and self.albedo > 0.0:
                 raise RuntimeError(
                     f"A value of {self.albedo} for the albedo is not "
-                    f"compatible with the '{self.type_geo}' type of "
-                    "geometry.")
+                    f"compatible with the '{self.type_geo}' type of geometry."
+                )
             self.albedo = 0.0
 
         # Set the list of property names and IDs
@@ -106,15 +111,16 @@ class TdtData():
     def __build_properties_id(self) -> None:
         """
         Method that populates the two dictionaries for the properties
-        associated to the regions of the lattice: one associates the list of
+        associated to the regions of the layout: one associates the list of
         the names of the properties to the property type, the other associates
         the list containing the corresponding IDs, as integer indices, with
         the property types.
         """
-        # Loop through the 'Face' objects
+        # Loop through the 'FaceData' objects
         for face in self.faces:
             # Loop through the properties associated with the face
-            for p_type, value in face.properties.items():
+            for p_type in face.property_types:
+                value = face.region.properties[p_type]
                 # Add the property name to the corresponding dictionary, or
                 # create a new entry, if the property is not already present
                 if p_type not in self.properties:
@@ -149,7 +155,7 @@ def write_tdt_file(tdt_data: TdtData) -> None:
     ----------
     tdt_data  : TdtData
         The instance of the ``TdtData`` class storing the information of
-        the lattice geometry.
+        the layout geometry.
     """
     # Open the file for writing the geometry information in the TDT format
     print(tdt_data.filename)
@@ -163,7 +169,7 @@ def write_tdt_file(tdt_data: TdtData) -> None:
         # Write the list of boundaries in the TDT file
         _write_boundary_conditions(file, tdt_data)
         # Write the material information, in terms of IDs (associated
-        # to each face in the lattice) and names, to the TDT file
+        # to each face in the layout) and names, to the TDT file
         _write_properties(file, tdt_data)
         # Write the ending lines in the TDT file
         file.write("-" * 60 + "\n")
@@ -180,16 +186,16 @@ def _write_header(file: TextIOWrapper, tdt_data: TdtData) -> None:
         Handle for the opened file to write.
     tdt_data : TdtData
         The instance of the ``TdtData`` class storing the information of
-        the lattice geometry.
+        the layout geometry.
     """
     # Declare the number of nodes and regions as equal to the faces number
     nbnodes    = len(tdt_data.faces)
     nbregions  = len(tdt_data.faces)
     # Declare the number of elements to be equal to the number of edges
     nbelements = len(tdt_data.edges)
-    # Get the index for the geometry type of the lattice
+    # Get the index for the geometry type of the layout
     typegeom   = tdt_data.type_geo.value
-    # Get the number of folds of the lattice
+    # Get the number of folds of the layout
     nb_folds   = tdt_data.nb_folds
     # Get the number of macro regions, if any
     nb_macros = 1
@@ -221,7 +227,7 @@ def _write_regions(file: TextIOWrapper, tdt_data: TdtData) -> None:
         Handle for the opened file to write.
     tdt_data : TdtData
         The instance of the ``TdtData`` class storing the information of
-        the lattice geometry.
+        the layout geometry.
     """
     # Declare the number of regions to be equal to the number of faces
     nbregions = len(tdt_data.faces)
@@ -249,7 +255,7 @@ def _write_regions(file: TextIOWrapper, tdt_data: TdtData) -> None:
 
 def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
-    Function for writing to file the list of edges of the lattice. These
+    Function for writing to file the list of edges of the layout. These
     elements are sorted by their number.
 
     Parameters
@@ -258,7 +264,7 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
         Handle for the opened file to write.
     tdt_data : TdtData
         The instance of the ``TdtData`` class storing the information of
-        the lattice geometry.
+        the layout geometry.
     """
     # Write the header line for this section
     file.writelines([ "   elements\n" ])
@@ -293,37 +299,47 @@ def _write_edges(file: TextIOWrapper, tdt_data: TdtData) -> None:
                 dy = 0.0
             # Write the info about the X-Y coordinates of the first point
             # and the X-Y distances between the segment vertices
-            file.write(f"  {FORMAT.format(x1)}, {FORMAT.format(y1)}, " + \
-                       f"{FORMAT.format(dx)}, {FORMAT.format(dy)}\n")
+            file.write(
+                f"  {FORMAT.format(x1)}, {FORMAT.format(y1)}, " + \
+                f"{FORMAT.format(dx)}, {FORMAT.format(dy)}\n"
+            )
             continue
         if type_indx == EdgeType.CIRCLE:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R'
             xc, yc, _, _, _, _, R = edge.data[1:]
-            # Write the info about the X-Y coordinates of the circle center,
+            # Write the info about the X-Y coordinates of the circle centre,
             # the radius and a 4th data (value '0.0')
-            file.write(f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
-                       f"{FORMAT.format(R)}, {FORMAT.format(0.0)}\n")
+            file.write(
+                f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
+                f"{FORMAT.format(R)}, {FORMAT.format(0.0)}\n"
+            )
             continue
         if type_indx == EdgeType.ARC_CIRCLE:
             # Extract the edge data as 'xc, yc, zc, dx, dy, dz, R,
             #                           x1, y1, z1, x2, y2, z2'
             xc, yc, _, _, _, _, R, x1, y1, _, x2, y2, _ = edge.data[1:]
-            # Calculate the angles (in degree) of the vertices wrt the
-            # circle center
-            angle_1 = math.atan2((y1-yc), (x1-xc)) * (180/math.pi) % 360
-            angle_2 = math.atan2((y2-yc), (x2-xc)) * (180/math.pi) % 360
-            # Since it is necessary to have positive value for the angles
-            # difference, the absolute value is considered
+            # Calculate the angles (in degrees) of the vertices wrt the
+            # circle centre in the [0, 360) range
+            angle_1 = get_angle_between_points(
+                (xc, yc, 0.0), (x1, y1, 0.0), True
+            ) % 360
+            angle_2 = get_angle_between_points(
+                (xc, yc, 0.0), (x2, y2, 0.0), True
+            ) % 360
+            # Calculate the positive angular difference ensuring it stays in
+            # the [0, 360) range
             delta_angle = (angle_2 - angle_1) % 360
             if abs(delta_angle) < 1e-7:
                 delta_angle = 0.0
 
             # Write the info about the X-Y coordinates of the arc circle
-            # center, its radius, the angle of the first point of the arc
+            # centre, its radius, the angle of the first point of the arc
             # and the angle difference between the two arc points
-            file.write(f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
-                       f"{FORMAT.format(R)}, {FORMAT.format(angle_1)}, " + \
-                       f"{FORMAT.format(delta_angle)}\n")
+            file.write(
+                f"  {FORMAT.format(xc)}, {FORMAT.format(yc)}, " + \
+                f"{FORMAT.format(R)}, {FORMAT.format(angle_1)}, " + \
+                f"{FORMAT.format(delta_angle)}\n"
+            )
             continue
 
 
@@ -339,17 +355,17 @@ def _write_boundary_conditions(
         Handle for the opened file to write.
     tdt_data : TdtData
         The instance of the ``TdtData`` class storing the information of
-        the lattice geometry.
+        the layout geometry.
     """
     # Write the header line for this section
     file.write("* boundaries conditions: defaul nbbcda allsur\n")
     # Declare the default number of BCs (0) and the non-default one, equal to
-    # the size of the list of 'Boundary' objects identifying the lattice
+    # the size of the list of 'Boundary' objects identifying the layout
     # borders
     default_bc = 0
     non_default_bc_no = 0
     # Update the number of BCs only if a specific geometry type is set
-    if tdt_data.type_geo != LatticeGeometryType.ISOTROPIC:
+    if tdt_data.type_geo != LayoutGeometryType.ISOTROPIC:
         non_default_bc_no = len(tdt_data.boundaries)
 
     # Write the information about the number of BCs (both default and non) and
@@ -359,35 +375,41 @@ def _write_boundary_conditions(
     file.write(f"  {tdt_data.albedo:.1f}\n")
 
     # Nothing more to write if the geometry type is ISOTROPIC
-    if tdt_data.type_geo == LatticeGeometryType.ISOTROPIC:
+    if tdt_data.type_geo == LayoutGeometryType.ISOTROPIC:
         return
     # Loop through all the 'Boundary' objects
     for bc in tdt_data.boundaries:
-        # Write the BCs type (as an index) and number of lattice border edges
+        # Write the BCs type (as an index) and number of layout border edges
         file.write("* type  number of elements\n")
         file.write(f"  {bc.get_bc_type_number()}, {len(bc.edge_indxs)}\n")
         file.write("*   elements\n")
-        # Loop through all the indexes of the lattice border edges
+        # Loop through all the indexes of the layout border edges
         for edge_no in bc.edge_indxs:
-            # Write the index of the lattice border edge
+            # Write the index of the layout border edge
             file.write(f"{edge_no}\n")
         # Check if the BC type is allowed
-        if bc.type not in [BoundaryType.AXIAL_SYMMETRY,
-                           BoundaryType.ROTATION,
-                           BoundaryType.TRANSLATION]:
+        if bc.type not in [
+            BoundaryType.AXIAL_SYMMETRY,
+            BoundaryType.ROTATION,
+            BoundaryType.TRANSLATION
+        ]:
             raise RuntimeError(
                 f"The '{bc.type}' BC type cannot be treated by the SALT "
-                "module of DRAGON5.")
+                "module of DRAGON5."
+            )
         # Write the X-Y coordinates of the border axes
         file.write("* tx, ty, angle\n")
-        file.write(f"  {FORMAT.format(bc.tx)} {FORMAT.format(bc.ty)} " + \
-                   f"{FORMAT.format(bc.angle)}\n")
+        file.write(
+            f"  {FORMAT.format(bc.tx)} {FORMAT.format(bc.ty)} " + \
+            f"{FORMAT.format(bc.angle)}\n"
+        )
 
 
 def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
     """
-    Function for writing the indices of the properties associated with each
-    region of the lattice to the TDT-format file.
+    Function for writing the indices of the ``PropertyType.MATERIAL``
+    property, which is associated with each region of the layout, to the
+    TDT-format file.
 
     Parameters
     ----------
@@ -395,8 +417,7 @@ def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
         Handle for the opened file to write.
     tdt_data : TdtData
         The instance of the ``TdtData`` class storing the information of
-        the lattice geometry.
-
+        the layout geometry.
     Raise
     -----
     RuntimeError
@@ -409,7 +430,8 @@ def _write_properties(file: TextIOWrapper, tdt_data: TdtData) -> None:
         raise RuntimeError(
             "Error while writing the material indices of the layout's "
             "regions. No 'PropertyType.MATERIAL' has been defined for any "
-            "of the layout's regions.")
+            "of the layout's regions."
+        )
     # Write the names of the materials that are present in the layout on
     # separate lines. Each line starts with a '#' so to be ignored.
     mat_names = tdt_data.properties[PropertyType.MATERIAL]

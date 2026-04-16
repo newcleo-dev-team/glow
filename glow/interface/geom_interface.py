@@ -341,6 +341,30 @@ def get_in_place(shape1: Any, shape2: Any) -> Any:
     return geompy.GetInPlace(shape1, shape2)
 
 
+def get_in_place_by_hystory(shape1: Any, shape2: Any) -> Any:
+    """
+    Function that extracts the sub-shape(s) of first shape, which are
+    coincident with, or could be a part of, the second shape.
+    The implementation of the wrapped GEOM function is based on a saved
+    history of an operation (e.g., a partition), which produced the first
+    shape. The second shape must be among this operation's arguments.
+
+    Parameters
+    ----------
+    shape1  : Any
+        The shape to find sub-shapes of.
+    shape2  : Any
+        The shape specifying what to find in the first one.
+
+    Returns
+    -------
+    Any
+        A compound object including all the found sub-shapes in the first
+        given shape.
+    """
+    return geompy.GetInPlaceByHistory(shape1, shape2)
+
+
 def get_inertia_matrix(shape: Any) -> List[float]:
     """
     Function that returns the inertia matrix of the given shape.
@@ -375,7 +399,7 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
 
     Notes
     -----
-    Values lesser than the tolerance of 1e-10 are substituted with ``0`` in
+    Values lesser than the tolerance of 1e-6 are substituted with ``0`` in
     the returned list.
 
     Parameters
@@ -391,10 +415,10 @@ def get_kind_of_shape(shape: Any) -> List[Any]:
     # Extract the list of information about the given shape
     kind_of_shape = geompy.KindOfShape(shape)
     # Loop over all the retrieved values and substitute with '0' values
-    # lesser than the 1e-15 tolerance
+    # lesser than the 1e-6 tolerance
     for i, info in enumerate(kind_of_shape):
         if isinstance(info, float):
-            if abs(info) < 1e-10:
+            if abs(info) < 1e-6:
                 kind_of_shape[i] = 0
     return kind_of_shape
 
@@ -533,6 +557,28 @@ def get_subshape_id(shape: Any, subshape: Any) -> str:
     return geompy.GetSubShapeID(shape, subshape)
 
 
+def get_tolerances(shape: Any) -> List[float]:
+    """
+    Function that returns the min-max tolerances applied to the GEOM objects
+    the shape is constituted by.
+    In order, they are those for the faces, the edges, and the vertices of
+    the shape. If the shape is not composed of any of these sub-shapes, an
+    infinite number is returned instead.
+
+    Parameters
+    ----------
+    shape : Any
+        The GEOM object whose tolerances are returned.
+
+    Returns
+    -------
+    List[float]
+        In order, the min-max tolerances of the faces, the edges, the vertices
+        the shape is made of.
+    """
+    return geompy.Tolerance(shape)
+
+
 def is_point_inside_shape(point: Any, shape: Any) -> bool:
     """
     Function that checks if the given point object is within the boundaries
@@ -567,7 +613,28 @@ def is_gui_available() -> None:
     return salome.sg.hasDesktop()
 
 
-def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
+def limit_tolerance(shape: Any, max_tol: float = 1e-6) -> Any:
+    """
+    Function that tries to limit the tolerances applied to the GEOM objects
+    the given shape is made of.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape to process.
+    max_tol : float = 1e-6
+        The maximum required tolerance the shape should be limited to.
+
+    Returns
+    -------
+    Any
+        A new GEOM object from the given shape with tolerances limited to the
+        required value.
+    """
+    return geompy.LimitTolerance(shape, max_tol)
+
+
+def make_arc(point1: Any, point2: Any, point3: Any) -> Any:
     """
     Function that returns the arc edge object built from the given three
     vertex objects.
@@ -575,9 +642,9 @@ def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     Parameters
     ----------
     point1 : Any
-        The vertex object being the arc's center.
-    point2 : Any
         The vertex object being the arc's start point.
+    point2 : Any
+        The vertex object being the arc's middle point.
     point3 : Any
         The vertex object being the arc's end point.
 
@@ -586,7 +653,29 @@ def make_arc_edge(point1: Any, point2: Any, point3: Any) -> Any:
     Any
         The arc edge built from the given three construction points.
     """
-    return geompy.MakeArcCenter(point1, point2, point3, False)
+    return geompy.MakeArc(point1, point2, point3)
+
+
+def make_arc_center(center: Any, point1: Any, point2: Any) -> Any:
+    """
+    Function that returns the arc edge object built from the center, start
+    and end vertex objects.
+
+    Parameters
+    ----------
+    center : Any
+        The vertex object being the arc's center.
+    point1 : Any
+        The vertex object being the arc's start point.
+    point2 : Any
+        The vertex object being the arc's end point.
+
+    Returns
+    -------
+    Any
+        The arc edge built from the given three construction points.
+    """
+    return geompy.MakeArcCenter(center, point1, point2, False)
 
 
 def make_cdg(shape: Any) -> Any:
@@ -740,6 +829,26 @@ def make_fuse(shapes: List[Any]) -> Any:
     return geompy.MakeFuseList(shapes, True, True)
 
 
+def make_intersection(shape1: Any, shape2: Any) -> Any:
+    """
+    Function that performs the intersection boolean operation between the two
+    given shapes and returns the resulting GEOM object.
+
+    Parameters
+    ----------
+    shape1 : Any
+        The GEOM object being the first argument of the intersection.
+    shape2 : Any
+        The GEOM object being the second argument of the intersection.
+
+    Returns
+    -------
+    Any
+        The GEOM object resulting from the intersection of the two shapes.
+    """
+    return geompy.MakeSection(shape1, shape2)
+
+
 def make_line(point1: Any, point2: Any) -> Any:
     """
     Function that returns a line object (i.e. a straight edge), given
@@ -758,6 +867,33 @@ def make_line(point1: Any, point2: Any) -> Any:
         The line object built from the given start-end points.
     """
     return geompy.MakeLineTwoPnt(point1, point2)
+
+
+def make_multi_translation_1d(
+        shape: Any, direction: Any, step: float, no_transl: float
+    ) -> Any:
+    """
+    Function that performs a specified number of 1D translations of the given
+    shape along the given direction by the indicated distance.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape to be translated.
+    direction : Any
+        The vector along which the shape is translated.
+    step : float
+        The translation step, i.e. the distance between two shape copies.
+    no_transl : float
+        The number of times the original shape is translated.
+
+    Returns
+    -------
+    Any
+        A GEOM compound object collecting the original and all the translated
+        shapes.
+    """
+    return geompy.MakeMultiTranslation1D(shape, direction, step, no_transl)
 
 
 def make_partition(
@@ -783,9 +919,44 @@ def make_partition(
         A shape made by the intersection of all the provided ones with the
         type specified as input.
     """
-    return geompy.MakePartition(ListShapes=shapes,
-                                ListTools=tools,
-                                Limit=shape_type.value)
+    return geompy.MakePartition(
+        ListShapes=shapes,
+        ListTools=tools,
+        Limit=shape_type.value
+    )
+
+
+def make_partition_non_self_intersecting(
+        shapes: List[Any], tools: List[Any], shape_type: ShapeType) -> Any:
+    """
+    Function that performs a partition operation on the given list of shapes
+    by means of the tool shapes intersecting the first ones.
+    This function can be used to speed up the partition operation whenever the
+    shapes of the first argument list do not self-intersect. Only the
+    partition of the shapes with the tools is computed, which gives as result
+    a shape containing only the sub-shapes of the given type.
+
+    Parameters
+    ----------
+    shapes : List[Any]
+        The list of shapes to be intersected. They must not self-intersect.
+    tools : List[Any]
+        The list of shapes intersecting the shapes to partition.
+    shape_type : ShapeType
+        The type of the shape resulting from the partition operation.
+
+    Returns
+    -------
+    Any
+        A shape made by those of the given type resulting from the
+        intersection of the provided ones with the tools only.
+    """
+    return geompy.MakePartitionNonSelfIntersectedShape(
+        ListShapes=shapes,
+        ListTools=tools,
+        Limit=shape_type.value,
+        checkSelfInte=False
+    )
 
 
 def make_rotation(shape: Any, axis: Any, angle: float) -> Any:
@@ -981,6 +1152,27 @@ def make_wire(edges: List[Any]) -> Any:
         A wire object build from the given edges.
     """
     return geompy.MakeWire(edges)
+
+
+def remove_extra_edges(shape: Any, fuse_faces: bool = False) -> Any:
+    """
+    Function that removes all the seams and degenerated edges from the given
+    shape, thus returning a shape cleaned from any unnecessary edges.
+
+    Parameters
+    ----------
+    shape : Any
+        The shape to heal by removing extra edges.
+    fuse_faces : bool = False
+        Flag stating whether the faces, sharing a common surface, should be
+        united. It defaults to ``False``.
+
+    Returns
+    -------
+    Any
+        The given shape healed from the unnecessary extra edges.
+    """
+    return geompy.RemoveExtraEdges(shape, fuse_faces)
 
 
 def remove_from_study(entry_id: str) -> None:

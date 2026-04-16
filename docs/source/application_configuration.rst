@@ -3,14 +3,16 @@ Application configuration
 =========================
 
 To install the |TOOL| application, clone the repository at
-https://github.com/newcleo-dev-team/glow using the following command:
+https://github.com/newcleo-dev-team/glow with either HTTPS or SSH using the
+corresponding command:
 
   .. code-block:: bash
 
     git clone https://github.com/newcleo-dev-team/glow
+    git clone git@github.com:newcleo-dev-team/glow.git
 
 Now, from the root folder of |TOOL| the following command can be run to
-automatically install all the needed dependencies:
+automatically install |TOOL| and all the needed dependencies:
 
   .. code-block:: bash
 

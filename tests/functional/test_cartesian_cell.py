@@ -5,36 +5,31 @@ assigned to each region of the cell technological geometry.
 import os
 import sys
 
-from glow.geometry_layouts.cells import RectCell
-from glow.geometry_layouts.lattices import Lattice
-from glow.support.types import PropertyType
-from glow.main import analyse_and_generate_tdt
+from glow.geometry_layouts.cells import CartesianCell
+from glow.geometry_layouts.geometries import Circle
+from glow.geometry_layouts.layouts import Region
+from glow.support.types import LayoutGeometryType, PropertyType
+from glow.main import TdtSetup, export_layout_to_tdt
 
-# Build a cartesian cell
-rect_cell = RectCell(name="Cartesian cell")
+
+# Build a Cartesian cell filled with 'COOLANT' and with three circular regions
+rect_cell = CartesianCell(
+    name="Cartesian cell",
+    base_props={PropertyType.MATERIAL: "COOLANT"}
+)
 # Add three inner circles to the cell
 radii = [0.65/2, 0.3, 0.75/2]
-for r in radii:
-    rect_cell.add_circle(r)
+for r, mat in zip([0.375, 0.325, 0.3], ["CLADDING", "HOLLOW", "FUEL"]):
+    rect_cell.add(
+        Region(Circle(radius=r), properties={PropertyType.MATERIAL: mat})
+    )
 
-# Assign the materials to each zone in the cell
-rect_cell.set_properties(
-    {PropertyType.MATERIAL: ["FUEL",
-                             "HOLLOW",
-                             "CLADDING",
-                             "COOLANT"]}
-)
-
-# Show the sectorized cell with regions colored according to the 'MATERIAL'
-# property
+# Display the cell's regions with the 'MATERIAL' property type colour map
 rect_cell.show(PropertyType.MATERIAL)
-# Build a lattice made of a central cell
-lattice = Lattice([rect_cell], 'Cartesian Lattice')
 
-# Perform the lattice faces and edges analysis and generate the output
-# TDT file
-analyse_and_generate_tdt(
-    [lattice],
-    os.path.join(
-        os.path.dirname(sys.argv[0]), 'test_cartesian_cell')
+# Generate the output TDT file from the cell
+export_layout_to_tdt(
+    rect_cell,
+    os.path.join(os.path.dirname(sys.argv[0]), 'test_cartesian_cell'),
+    TdtSetup(type_geo=LayoutGeometryType.RECTANGLE_TRAN)
 )

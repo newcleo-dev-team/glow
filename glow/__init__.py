@@ -1,9 +1,11 @@
 """
-GLOW (Geometry Layout Oriented Workflow) is a Python is a Python package
-providing 2D unstructured geometries to the DRAGON5 lattice transport computer
-code.
+GLOW (Geometry Layout Oriented Workflow) is a Python package providing 2D
+unstructured geometries to the DRAGON5 lattice transport computer code.
 """
 from glow.interface.geom_interface import *
+from glow.interface.geom_entities import *
+from glow.geometry_layouts.layouts import *
+from glow.geometry_layouts.fillable_layouts import *
 from glow.geometry_layouts.geometries import *
 from glow.geometry_layouts.cells import *
 from glow.geometry_layouts.lattices import *

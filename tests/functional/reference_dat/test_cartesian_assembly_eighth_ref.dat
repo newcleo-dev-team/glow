@@ -270,6 +270,14 @@ mac
 * tx, ty, angle
   0.0000000E+00 0.0000000E+00 0.0000000E+00
 * type  number of elements
+  4, 3
+*   elements
+37
+42
+51
+* tx, ty, angle
+  3.0000000E+00 0.0000000E+00 9.0000000E+01
+* type  number of elements
   4, 21
 *   elements
 1
@@ -295,14 +303,6 @@ mac
 50
 * tx, ty, angle
   0.0000000E+00 0.0000000E+00 4.5000000E+01
-* type  number of elements
-  4, 3
-*   elements
-37
-42
-51
-* tx, ty, angle
-  3.0000000E+00 0.0000000E+00 9.0000000E+01
 #  1 - COOLANT
 #  2 - CLADDING
 #  3 - HOLLOW

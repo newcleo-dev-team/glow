@@ -1,36 +1,37 @@
 """
 Module declaring functions to support the execution of the unit tests.
 """
+import io
 import hashlib
+import sys
 
-from copy import deepcopy
 from dataclasses import dataclass, field
 from math import degrees, sqrt, atan2
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, Callable, List, Tuple
 
-from glow.geometry_layouts.cells import Cell, HexCell, RectCell
+from glow.geometry_layouts.cells import Cell, HexCell, CartesianCell
 from glow.geometry_layouts.geometries import Surface
-from glow.geometry_layouts.lattices import Lattice
+from glow.geometry_layouts.lattices import CartesianLattice, Lattice
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    make_circle, make_edge, make_vector_from_points, make_vertex,\
-    make_vertex_on_curve
-from glow.support.types import BoundaryType, CellType, LatticeGeometryType, \
+    get_point_coordinates,  make_circle, make_edge, make_vector_from_points, \
+    make_vertex, make_vertex_on_curve
+from glow.support.types import BoundaryType, LayoutType, LayoutGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import build_contiguous_edges
 
 
 @dataclass
-class BoundaryData():
+class BoundaryInfo():
     """
-    Dataclass storing geometric information about the boundaries of a lattice
-    in terms of vertices, contiguous edges, axes, angles and characteristic
-    dimensions of the lattice.
+    Dataclass storing geometric information about the boundaries of a
+    geometry layout in terms of vertices, contiguous edges, axes, angles
+    and characteristic dimensions of the layout.
 
     Attributes
     ----------
     vertices : List[Any]
-        List of vertex objects defining the lattice's borders.
+        List of vertex objects defining the layout's borders.
     edges : List[Any]
         List of edge objects automatically constructed from the vertices.
     axis : List[Tuple[float, float]]
@@ -38,9 +39,9 @@ class BoundaryData():
     angles : List[float]
         List of angles (in degrees) associated with each axis.
     dimensions : tuple of float
-        Characteristic dimensions of the lattice.
+        Characteristic dimensions of the layout.
     bd_type : List[BoundaryType]
-        Type associated to each lattice's border provided as element of the
+        Type associated to each layout's border provided as element of the
         `BoundaryType` enumeration.
     """
     vertices: List[Any]
@@ -58,11 +59,11 @@ class BoundaryData():
         self.edges = build_contiguous_edges(self.vertices)
 
 
-def build_bd_full_hex(lx: float, ly: float) -> BoundaryData:
+def build_bd_full_hex(lx: float, ly: float) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing a regular
+    Function that creates a `BoundaryInfo` object representing a regular
     hexagon centered at the origin. The information related to the borders,
-    that is contained in the `BoundaryData` object, derives from the
+    that is contained in the `BoundaryInfo` object, derives from the
     characteristic dimensions of the hexagon.
     The geometric data of the hexagon is provided in counter-clockwise order
     starting from its bottom left corner.
@@ -76,13 +77,13 @@ def build_bd_full_hex(lx: float, ly: float) -> BoundaryData:
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the six vertices of the full
+    BoundaryInfo
+        A `BoundaryInfo` object built from the six vertices of the full
         hexagon, the XY directions of the borders' axes and the corresponding
         angles (as needed by DRAGON), and the type of boundary, assigned as
         `TRANSLATION` for all the borders.
     """
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((-lx/2, -ly, 0.0)),
             make_vertex((lx/2, -ly, 0.0)),
@@ -106,16 +107,17 @@ def build_bd_full_hex(lx: float, ly: float) -> BoundaryData:
 
 
 def build_bd_sixth_hex(
-        lx: float, ly: float, type_geo: LatticeGeometryType) -> BoundaryData:
+        lx: float, ly: float, type_geo: LayoutGeometryType
+    ) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing a sixth
+    Function that creates a `BoundaryInfo` object representing a sixth
     symmetry of a regular hexagon. The information related to the borders of
     the triangular portion of the hexagon, that is contained in the
-    `BoundaryData` object, derives from the characteristic dimensions of the
+    `BoundaryInfo` object, derives from the characteristic dimensions of the
     full hexagon.
-    The geometric data of the triangular shape is provided in
-    counter-clockwise order starting from its bottom left corner that
-    coincides with the XYZ origin.
+    The geometric data of the triangular shape is provided in counterclockwise
+    order starting from its bottom left corner that coincides with the XYZ
+    origin.
     The type of boundary condition assigned to each edge depends on the
     `type_geo` parameter.
 
@@ -125,25 +127,27 @@ def build_bd_sixth_hex(
         Characteristic X-dimension of the hexagon (i.e. its edge length).
     ly : float
         Characteristic Y-dimension of the hexagon (i.e. its apothem length).
+    type_geo : LayoutGeometryType
+        The type of geometry of the layout, according to DRAGON5.
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the three vertices of a sixth of
+    BoundaryInfo
+        A `BoundaryInfo` object built from the three vertices of a sixth of
         a full hexagon, the XY directions of the borders' axes and the
         corresponding angles (as needed by DRAGON), and the type of boundary,
         assigned to each border depending on the `type_geo` parameter.
     """
-    if type_geo in [LatticeGeometryType.SA60,
-                    LatticeGeometryType.SYMMETRIES_TWO]:
+    if type_geo in [LayoutGeometryType.SA60,
+                    LayoutGeometryType.SYMMETRIES_TWO]:
         bd_type = [BoundaryType.AXIAL_SYMMETRY]*3
-    elif type_geo in [LatticeGeometryType.RA60, LatticeGeometryType.ROTATION]:
+    elif type_geo in [LayoutGeometryType.RA60, LayoutGeometryType.ROTATION]:
         bd_type = [
             BoundaryType.ROTATION,
             BoundaryType.TRANSLATION,
             BoundaryType.ROTATION
         ]
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((0.0, 0.0, 0.0)),
             make_vertex((lx, 0.0, 0.0)),
@@ -156,16 +160,16 @@ def build_bd_sixth_hex(
     )
 
 
-def build_bd_third_hex(lx: float, ly: float) -> BoundaryData:
+def build_bd_third_hex(lx: float, ly: float) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing a third
+    Function that creates a `BoundaryInfo` object representing a third
     symmetry of a regular hexagon. The information related to the borders of
     the quadrilateral portion of the hexagon, that is contained in the
-    `BoundaryData` object, derives from the characteristic dimensions of the
+    `BoundaryInfo` object, derives from the characteristic dimensions of the
     full hexagon.
     The geometric data of the quadrilateral shape is provided in
-    counter-clockwise order starting from its bottom left corner that
-    coincides with the XYZ origin.
+    counterclockwise order starting from its bottom left corner that coincides
+    with the XYZ origin.
 
     Parameters
     ----------
@@ -176,13 +180,13 @@ def build_bd_third_hex(lx: float, ly: float) -> BoundaryData:
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the four vertices of a third of
+    BoundaryInfo
+        A `BoundaryInfo` object built from the four vertices of a third of
         a full hexagon, the XY directions of the borders' axes and the
         corresponding angles (as needed by DRAGON), and the type of boundary,
         being either `TRANSLATION` or `ROTATION`.
     """
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((0.0, 0.0, 0.0)),
             make_vertex((lx, 0.0, 0.0)),
@@ -201,16 +205,16 @@ def build_bd_third_hex(lx: float, ly: float) -> BoundaryData:
     )
 
 
-def build_bd_twelfth_hex(lx: float, ly: float) -> BoundaryData:
+def build_bd_twelfth_hex(lx: float, ly: float) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing a twelfth
+    Function that creates a `BoundaryInfo` object representing a twelfth
     symmetry of a regular hexagon. The information related to the borders of
     the triangular portion of the hexagon, that is contained in the
-    `BoundaryData` object, derives from the characteristic dimensions of the
+    `BoundaryInfo` object, derives from the characteristic dimensions of the
     full hexagon.
-    The geometric data of the triangular shape is provided in
-    counter-clockwise order starting from its bottom left corner that
-    coincides with the XYZ origin.
+    The geometric data of the triangular shape is provided in counterclockwise
+    order starting from its bottom left corner that coincides with the XYZ
+    origin.
 
     Parameters
     ----------
@@ -221,13 +225,13 @@ def build_bd_twelfth_hex(lx: float, ly: float) -> BoundaryData:
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the three vertices of a twelfth of
+    BoundaryInfo
+        A `BoundaryInfo` object built from the three vertices of a twelfth of
         a full hexagon, the XY directions of the borders' axes and the
         corresponding angles (as needed by DRAGON), and the type of boundary,
         all being `AXIAL_SYMMETRY`.
     """
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((0.0, 0.0, 0.0)),
             make_vertex((lx, 0.0, 0.0)),
@@ -240,15 +244,15 @@ def build_bd_twelfth_hex(lx: float, ly: float) -> BoundaryData:
     )
 
 
-def build_bd_full_rect(lx: float, ly: float) -> BoundaryData:
+def build_bd_full_rect(lx: float, ly: float) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing a full
+    Function that creates a `BoundaryInfo` object representing a full
     rectangle placed so that its bottom left corner coincides with the
     XYZ space origin.
     The information related to the borders, that is contained in the
-    `BoundaryData` object, derives from the characteristic dimensions
+    `BoundaryInfo` object, derives from the characteristic dimensions
     of the rectangle.
-    The geometric data of the rectangle is provided in counter-clockwise
+    The geometric data of the rectangle is provided in counterclockwise
     order starting from its bottom left corner.
 
     Parameters
@@ -260,13 +264,13 @@ def build_bd_full_rect(lx: float, ly: float) -> BoundaryData:
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the four vertices of the rectangle,
+    BoundaryInfo
+        A `BoundaryInfo` object built from the four vertices of the rectangle,
         the XY directions of the borders' axes and the corresponding angles
         (as needed by DRAGON), and the type of boundary, assigned as
         `TRANSLATION` for all the borders.
     """
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((0.0, 0.0, 0.0)),
             make_vertex((lx, 0.0, 0.0)),
@@ -280,16 +284,16 @@ def build_bd_full_rect(lx: float, ly: float) -> BoundaryData:
     )
 
 
-def build_bd_half_rect(lx: float, ly: float) -> BoundaryData:
+def build_bd_diag_rect(lx: float, ly: float) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing a half
-    symmetry of a rectangle. The vertices are defined so that the shape's
-    bottom left corner coincides with the XYZ space origin.
+    Function that creates a `BoundaryInfo` object representing a half
+    symmetry of a rectangle along its diagonal. The vertices are defined so
+    that the shape's bottom left corner coincides with the XYZ space origin.
     The information related to the borders, that is contained in the
-    `BoundaryData` object, derives from the characteristic dimensions of
+    `BoundaryInfo` object, derives from the characteristic dimensions of
     the rectangle.
-    The geometric data of the rectangular shape is provided in
-    counter-clockwise order starting from its bottom left corner.
+    The geometric data of the triangular shape is provided in counterclockwise
+    order starting from its bottom left corner.
 
     Parameters
     ----------
@@ -300,13 +304,52 @@ def build_bd_half_rect(lx: float, ly: float) -> BoundaryData:
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the four vertices of a half of
+    BoundaryInfo
+        A `BoundaryInfo` object built from the three vertices of a half of
+        the rectangle along its diagonal, the XY directions of the borders'
+        axes and the corresponding angles (as needed by DRAGON), and the type
+        of boundary, assigned as `AXIAL_SYMMETRY` for all the borders.
+    """
+    return BoundaryInfo(
+        vertices=[
+            make_vertex((0.0, 0.0, 0.0)),
+            make_vertex((lx, 0.0, 0.0)),
+            make_vertex((lx, ly, 0.0))
+        ],
+        axis=[(0.0, 0.0), (lx, 0.0), (0.0, 0.0)],
+        angles=[0.0, 90.0, degrees(atan2(ly, lx))],
+        dimensions=(lx, ly),
+        bd_type=[BoundaryType.AXIAL_SYMMETRY]*3
+    )
+
+
+def build_bd_half_rect(lx: float, ly: float) -> BoundaryInfo:
+    """
+    Function that creates a `BoundaryInfo` object representing a half
+    symmetry of a rectangle. The vertices are defined so that the shape's
+    bottom left corner coincides with the XYZ space origin.
+    The information related to the borders, that is contained in the
+    `BoundaryInfo` object, derives from the characteristic dimensions of
+    the rectangle.
+    The geometric data of the rectangular shape is provided in
+    counterclockwise order starting from its bottom left corner.
+
+    Parameters
+    ----------
+    lx : float
+        Characteristic X-dimension of the rectangle (i.e. its width).
+    ly : float
+        Characteristic Y-dimension of the rectangle (i.e. its height).
+
+    Returns
+    -------
+    BoundaryInfo
+        A `BoundaryInfo` object built from the four vertices of a half of
         the rectangle, the XY directions of the borders' axes and the
         corresponding angles (as needed by DRAGON), and the type of boundary,
         assigned as `AXIAL_SYMMETRY` for all the borders.
     """
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((0.0, 0.0, 0.0)),
             make_vertex((lx/2, 0.0, 0.0)),
@@ -320,16 +363,16 @@ def build_bd_half_rect(lx: float, ly: float) -> BoundaryData:
     )
 
 
-def build_bd_quarter_rect(lx: float, ly: float) -> BoundaryData:
+def build_bd_quarter_rect(lx: float, ly: float) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing a quarter
+    Function that creates a `BoundaryInfo` object representing a quarter
     symmetry of a rectangle. The vertices are defined so that the shape's
     bottom left corner coincides with the XYZ space origin.
     The information related to the borders, that is contained in the
-    `BoundaryData` object, derives from the characteristic dimensions of
+    `BoundaryInfo` object, derives from the characteristic dimensions of
     the rectangle.
     The geometric data of the rectangular shape is provided in
-    counter-clockwise order starting from its bottom left corner.
+    counterclockwise order starting from its bottom left corner.
 
     Parameters
     ----------
@@ -340,13 +383,13 @@ def build_bd_quarter_rect(lx: float, ly: float) -> BoundaryData:
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the four vertices of a quarter of
+    BoundaryInfo
+        A `BoundaryInfo` object built from the four vertices of a quarter of
         the rectangle, the XY directions of the borders' axes and the
         corresponding angles (as needed by DRAGON), and the type of boundary,
         assigned as `AXIAL_SYMMETRY` for all the borders.
     """
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((0.0, 0.0, 0.0)),
             make_vertex((lx/2, 0.0, 0.0)),
@@ -360,16 +403,16 @@ def build_bd_quarter_rect(lx: float, ly: float) -> BoundaryData:
     )
 
 
-def build_bd_eighth_rect(lx: float, ly: float) -> BoundaryData:
+def build_bd_eighth_rect(lx: float, ly: float) -> BoundaryInfo:
     """
-    Function that creates a `BoundaryData` object representing an eighth
+    Function that creates a `BoundaryInfo` object representing an eighth
     symmetry of a rectangle. The vertices are defined so that the shape's
     bottom left corner coincides with the XYZ space origin.
     The information related to the borders, that is contained in the
-    `BoundaryData` object, derives from the characteristic dimensions of
+    `BoundaryInfo` object, derives from the characteristic dimensions of
     the rectangle.
-    The geometric data of the triangular shape is provided in
-    counter-clockwise order starting from its bottom left corner.
+    The geometric data of the triangular shape is provided in counterclockwise
+    order starting from its bottom left corner.
 
     Parameters
     ----------
@@ -380,13 +423,13 @@ def build_bd_eighth_rect(lx: float, ly: float) -> BoundaryData:
 
     Returns
     -------
-    BoundaryData
-        A `BoundaryData` object built from the three vertices of an eighth of
+    BoundaryInfo
+        A `BoundaryInfo` object built from the three vertices of an eighth of
         the rectangle, the XY directions of the borders' axes and the
         corresponding angles (as needed by DRAGON), and the type of boundary,
         assigned as `AXIAL_SYMMETRY` for all the borders.
     """
-    return BoundaryData(
+    return BoundaryInfo(
         vertices=[
             make_vertex((0.0, 0.0, 0.0)),
             make_vertex((lx/2, 0.0, 0.0)),
@@ -399,38 +442,38 @@ def build_bd_eighth_rect(lx: float, ly: float) -> BoundaryData:
     )
 
 
-def build_boundary_data(
+def build_boundary_info(
         dimensions: Tuple[float, float],
-        cell_type: CellType,
+        layout_type: LayoutType,
         symm_type: SymmetryType,
-        type_geo: LatticeGeometryType) -> BoundaryData:
+        type_geo: LayoutGeometryType
+    ) -> BoundaryInfo:
     """
-    Function that constructs a `BoundaryData` object providing the boundary
+    Function that constructs a `BoundaryInfo` object providing the boundary
     characteristics to use as a reference for test purposes.
-    The instance is built depending on the type of cells, the applied symmetry
-    and the corresponding lattice type of geometry.
-
+    The instance is built depending on the type of layout, the applied
+    symmetry and the corresponding type of geometry.
 
     Parameters
     ----------
     dimensions : Tuple[float, float]
-        The lattice X-Y characteristic dimensions.
-    cell_type : CellType
-        The type of cells in the lattice.
+        The layout X-Y characteristic dimensions.
+    layout_type : LayoutType
+        The type of layout, depending on its characteristic shape.
     symm_type : SymmetryType
-        The type of symmetry applied to the lattice; it drives the selection
-        of the builder function to generate the `BoundaryData` instance.
-    type_geo : LatticeGeometryType
-        The lattice geometry type, used to further specialize the
-        `BoundaryData` instance in the case of a sixth symmetry.
+        The type of symmetry applied to the layout; it drives the selection
+        of the builder function to generate the `BoundaryInfo` instance.
+    type_geo : LayoutGeometryType
+        The layout geometry type, used to further specialize the
+        `BoundaryInfo` instance in the case of a sixth symmetry.
 
     Returns
     -------
-    BoundaryData
+    BoundaryInfo
         A boundary representation including vertex positions, edges, axis
         directions, corresponding angles, and associated BC types.
     """
-    if cell_type == CellType.HEX:
+    if layout_type == LayoutType.HEX:
         match symm_type:
             case SymmetryType.FULL:
                 return build_bd_full_hex(*dimensions)
@@ -446,104 +489,50 @@ def build_boundary_data(
                 return build_bd_full_rect(*dimensions)
             case SymmetryType.HALF:
                 return build_bd_half_rect(*dimensions)
+            case SymmetryType.DIAG:
+                return build_bd_diag_rect(*dimensions)
             case SymmetryType.QUARTER:
                 return build_bd_quarter_rect(*dimensions)
             case SymmetryType.EIGHTH:
                 return build_bd_eighth_rect(*dimensions)
 
 
-def build_cell_ref_vectors(cell: Cell) -> List[Any]:
+def build_colorset(cell: Cell) -> CartesianLattice:
     """
-    Function that builds a list of vector objects on the first edge of
-    each of the face objects belonging to a `Cell` instance, i.e. the
-    whole cell's face and the faces stored in the dictionaries of
-    properties and sectorization options.
+    Function that facilitates the construction of a colorset as a
+    `CartesianLattice` instance made of the given `Cell` objects.
 
     Parameters
     ----------
     cell : Cell
-        The cell to build reference vectors for.
+        The reference cell.
 
     Returns
     -------
-    List[Any]
-        A list of vectors built of the first edge of the faces in the
-        cell.
+    CartesianLattice
+        A `CartesianLattice` instance where cells are positioned appropriately
+        to replicate a colorset.
     """
-    # List all the face objects comprising the cell's face and those
-    # stored in the cell's dictionaries
-    faces = [cell.face] + list(cell.tech_geom_props.keys())
-    if cell.sectorized_face:
-        faces += list(cell.tech_geom_sect_opts.keys())
-    # Store the edge '0' for each face
-    edges = [extract_sub_shapes(f, ShapeType.EDGE)[0] for f in faces]
-    # Append the edge '0' for the cell's 'Surface' and reference circle
-    edges.append(cell.figure.borders[0])
-    edges.append(cell.figure.out_circle)
-    # Build reference vectors for each edge
-    return [
-        make_vector_from_points(
-            cell.figure.o,
-            make_vertex_on_curve(e, 0.0)) for e in edges
-    ]
+    # Clone the given cell
+    cell = cell.clone()
+    # Build a lattice made by a ring of cells around the central one and
+    # include it in another cell to replicate an assembly
+    lattice = CartesianLattice([cell])
+    lattice.add_ring_of_cells(cell, 1, 0)
+    assembly = CartesianCell(
+        width_height=tuple(xy + 0.2 for xy in lattice.dimensions),
+        base_props={PropertyType.MATERIAL: "MAT1"}
+    )
+    assembly.add(lattice)
+
+    # Assemble the colorset as a lattice of assemblies
+    colorset = CartesianLattice([assembly])
+    colorset.add_ring_of_cells(assembly, 1)
+    colorset.update_hierarchical_structure()
+    return colorset
 
 
-def build_colorset(lattice: Lattice) -> List[Lattice]:
-    """
-    Function that facilitates the construction of a colorset as a list of
-    ``Lattice`` instances.
-
-    Parameters
-    ----------
-    lattice : Lattice
-        The reference lattice.
-
-    Returns
-    -------
-    List[Lattice]
-        A list of ``Lattice`` instances each positioned appropriately to
-        replicate a colorset.
-    """
-    # Deepcopy the given lattice
-    lattice = deepcopy(lattice)
-    # Build a ring of cells around the only cell present in the given
-    # lattice and add a box
-    lattice.add_ring_of_cells(lattice.lattice_cells[0], 1, 0)
-    lattice.build_lattice_box([0.1])
-    lattice.set_lattice_box_properties(
-        {PropertyType.MATERIAL: ["MAT1"]})
-    # Build the regions
-    lattice.build_regions()
-    # Build the positions of the lattices in the colorset
-    lattices: List[Lattice] = [lattice]
-    pos = [
-        (lattice.lattice_box.figure.lx, 0.0, 0.0),
-        (lattice.lattice_box.figure.lx,
-            lattice.lattice_box.figure.ly,
-            0.0),
-        (0.0, lattice.lattice_box.figure.ly, 0.0),
-        (-lattice.lattice_box.figure.lx,
-            lattice.lattice_box.figure.ly,
-            0.0),
-        (-lattice.lattice_box.figure.lx, 0.0, 0.0),
-        (-lattice.lattice_box.figure.lx,
-            -lattice.lattice_box.figure.ly,
-            0.0),
-        (0.0, -lattice.lattice_box.figure.ly, 0.0),
-        (lattice.lattice_box.figure.lx,
-            -lattice.lattice_box.figure.ly,
-            0.0)
-    ]
-    # Copy and translate the given lattice to the calculated positions
-    for xyz in pos:
-        l = deepcopy(lattice)
-        l.translate(xyz)
-        lattices.append(l)
-    return lattices
-
-
-def build_hex_geom_elements(
-        center: Any, edge_length: float) -> Tuple[List[Any], List[Any]]:
+def build_hex_geom_elements(center: Any, edge_length: float) -> List[Any]:
     """
     Function that, given the center and the length of the hexagon edge,
     builds the vertex and edge objects that represent a hexagon.
@@ -558,8 +547,8 @@ def build_hex_geom_elements(
 
     Returns
     -------
-    Tuple[List[Any], List[Any]]
-        A tuple with the list of vertices and edges of the hexagon.
+    List[Any]
+        The list of edges of the hexagon.
     """
     vertices = [
         make_vertex_on_curve(
@@ -568,44 +557,45 @@ def build_hex_geom_elements(
     edges = [
             make_edge(vertices[i], vertices[(i+1) % 6]) for i in range(6)
     ]
-    return vertices, edges
+    return edges
 
 
-def build_lattice_ref_vectors(lattice: Lattice) -> List[Any]:
+def capture_output(
+        func: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> str:
     """
-    Function that builds a list of vector objects on the first edge of
-    each of the face objects belonging to a `Lattice` instance, i.e. the
-    whole lattice compound and the one representing the symmetry. The same
-    goes for the cells in the lattice.
+    Function that captures and returns all standard output produced by a
+    given `Callable` object.
+
+    This function temporarily redirects `sys.stdout` to an in-memory
+    buffer, executes the provided callable with the given positional and
+    keyword arguments, restores the original stdout stream, and returns
+    the captured text.
 
     Parameters
     ----------
-    lattice : Lattice
-        The lattice to build reference vectors for.
+    func : Callable[..., Any]
+        The function or callable object whose printed output should be
+        captured.
+    *args : Any
+        Positional arguments forwarded to `func`.
+    **kwargs : Any
+        Keyword arguments forwarded to `func`.
 
     Returns
     -------
-    List[Any]
-        A list of vectors built of the first edge of the elements of the
-        lattice and its cells.
+    str
+        A string containing everything written to standard output during
+        the execution of `func`.
     """
-    # List all the face objects comprising the lattice's compound and its
-    # cells' faces
-    faces = [lattice.lattice_cmpd]
-    if lattice.lattice_box:
-        faces.append(lattice.lattice_box.face)
-    if lattice.lattice_symm:
-        faces.append(lattice.lattice_symm)
-    for cell in lattice.lattice_cells:
-        faces.append(cell.face)
-    # Store the edge '0' for each face
-    edges = [extract_sub_shapes(f, ShapeType.EDGE)[0] for f in faces]
-    # Build reference vectors for each edge
-    return [
-        make_vector_from_points(
-            lattice.lattice_center,
-            make_vertex_on_curve(e, 0.0)) for e in edges
-    ]
+    old_stdout = sys.stdout
+    buffer = io.StringIO()
+    sys.stdout = buffer
+    try:
+        func(*args, **kwargs)
+    finally:
+        sys.stdout = old_stdout
+    return buffer.getvalue()
 
 
 def compute_hash(file_path: Path) -> str:
@@ -629,29 +619,25 @@ def compute_hash(file_path: Path) -> str:
     return sha256.hexdigest()
 
 
-def make_ref_vectors(surf: Surface) -> Tuple[Any, Any]:
+def make_ref_vectors(surf: Surface) -> Any:
     """
-    Function that returns two vector objects built on the `Surface` first
-    border element and on its corresponding circle the surface is inscribed
-    into.
+    Function that returns a vector objects built on the `Surface` first
+    border element.
 
     Parameters
     ----------
     surf : Surface
-        The `Surface` object used to build the reference vectors.
+        The `Surface` object used to build the reference vector.
 
     Returns
     -------
-    Tuple[Any, Any]
-        Tuple providing two reference vector objects, the first built
-        on the surface border, the second on the circle the surface is
-        inscribed into.
+    Any
+        The reference vector object built on the surface border.
     """
     face_ref_vect = make_vector_from_points(
-        surf.o, make_vertex_on_curve(surf.borders[0], 0.0))
-    out_circle_ref_vect = make_vector_from_points(
-        surf.o, make_vertex_on_curve(surf.out_circle, 0.0))
-    return face_ref_vect, out_circle_ref_vect
+        surf.o, make_vertex_on_curve(surf.borders[0], 0.0)
+    )
+    return face_ref_vect
 
 
 def set_up_hex_cells(hex_cell: HexCell) -> List[HexCell]:
@@ -670,23 +656,35 @@ def set_up_hex_cells(hex_cell: HexCell) -> List[HexCell]:
         A list of hexagonal cells with a central one surrounded by six
         cells.
     """
-    dx = hex_cell.apothem
-    dy = 3/2*hex_cell.edge_length
+    # Retrieve the cell's centre coordinates and calculate the X-Y shifts
+    o_x, o_y, _ = get_point_coordinates(hex_cell.o)
+    dx = hex_cell.dimensions[1]
+    dy = 3/2*hex_cell.dimensions[0]
     hex_cell.rotate(90.0)
-    return [
-        hex_cell,
-        hex_cell.translate((dx, dy, 0)),
-        hex_cell.translate((-dx, dy, 0)),
-        hex_cell.translate((-dx, -dy, 0)),
-        hex_cell.translate((dx, -dy, 0)),
-        hex_cell.translate((2*dx, 0, 0)),
-        hex_cell.translate((-2*dx, 0, 0))
+    # Build the list of positions of the cells
+    centres = [
+        (o_x + dx, o_y + dy, 0),
+        (o_x - dx, o_y + dy, 0),
+        (o_x - dx, o_y - dy, 0),
+        (o_x + dx, o_y - dy, 0),
+        (o_x + 2*dx, o_y, 0),
+        (o_x - 2*dx, o_y, 0)
     ]
+    # Populate the list of translated cells
+    cells = [hex_cell]
+    for centre in centres:
+        cell = hex_cell.clone()
+        cell.translate(centre)
+        cells.append(cell)
+    # Return the list of translated cells
+    return cells
 
-def set_up_rect_cells(rect_cell: RectCell,
-                      is_even: bool = False) -> List[RectCell]:
+
+def set_up_rect_cells(
+        rect_cell: CartesianCell, is_even: bool = False
+    ) -> List[CartesianCell]:
     """
-    Function that builds a list of cartesian cells. Depending on the
+    Function that builds a list of Cartesian cells. Depending on the
     boolean flag `is_even`, the resulting list is made by a central
     cell surrounded by eight other cells, if `False`, or by cells
     without any central one replicating a pattern with an even number
@@ -694,50 +692,60 @@ def set_up_rect_cells(rect_cell: RectCell,
 
     Parameters
     ----------
-    rect_cell : RectCell
-        The `RectCell` object representing a cartesian cell.
+    rect_cell : CartesianCell
+        The `CartesianCell` object representing a Cartesian cell.
     is_even : bool
         Boolean flag indicating the kind of pattern of cells (either with
         an odd or even number of cells).
 
     Returns
     -------
-    List[RectCell]
-        A list of cartesian cells with a specific pattern.
+    List[CartesianCell]
+        A list of Cartesian cells with a specific pattern.
     """
-    dx = rect_cell.width
-    dy = rect_cell.height
+    # Retrieve the cell's centre coordinates and calculate the X-Y shifts
+    o_x, o_y, _ = get_point_coordinates(rect_cell.o)
+    dx, dy = rect_cell.dimensions
+    cells = []
     if is_even:
         dx /= 2
         dy /= 2
-        return [
-            rect_cell.translate((dx, dy, 0)),
-            rect_cell.translate((-dx, dy, 0)),
-            rect_cell.translate((-dx, -dy, 0)),
-            rect_cell.translate((dx, -dy, 0)),
-            rect_cell.translate((2*dx, 0, 0)),
-            rect_cell.translate((2*dx, dy, 0)),
-            rect_cell.translate((2*dx, 2*dy, 0)),
-            rect_cell.translate((dx, 2*dy, 0)),
-            rect_cell.translate((-dx, 2*dy, 0)),
-            rect_cell.translate((-2*dx, 2*dy, 0)),
-            rect_cell.translate((-2*dx, dy, 0)),
-            rect_cell.translate((-2*dx, 0, 0)),
-            rect_cell.translate((-2*dx, -dy, 0)),
-            rect_cell.translate((-2*dx, -2*dy, 0)),
-            rect_cell.translate((-dx, -2*dy, 0)),
-            rect_cell.translate((dx, -2*dy, 0)),
-            rect_cell.translate((2*dx, -2*dy, 0)),
-            rect_cell.translate((2*dx, -dy, 0)),
+        # Build the list of positions of the cells
+        centres = [
+            (o_x + dx, o_y + dy, 0),
+            (o_x - dx, o_y + dy, 0),
+            (o_x - dx, o_y - dy, 0),
+            (o_x + dx, o_y - dy, 0),
+            (o_x + 3*dx, o_y + dy, 0),
+            (o_x + 3*dx, o_y + 3*dy, 0),
+            (o_x + dx, o_y + 3*dy, 0),
+            (o_x - dx, o_y + 3*dy, 0),
+            (o_x - 3*dx, o_y + 3*dy, 0),
+            (o_x - 3*dx, o_y + dy, 0),
+            (o_x - 3*dx, o_y - dy, 0),
+            (o_x - 3*dx, o_y - 3*dy, 0),
+            (o_x - dx, o_y - 3*dy, 0),
+            (o_x + dx, o_y - 3*dy, 0),
+            (o_x + 3*dx, o_y - 3*dy, 0),
+            (o_x + 3*dx, o_y - dy, 0)
         ]
-    return [
-        rect_cell,
-        rect_cell.translate((dx, 0, 0)),
-        rect_cell.translate((dx, dy, 0)),
-        rect_cell.translate((0, dy, 0)),
-        rect_cell.translate((-dx, dy, 0)),
-        rect_cell.translate((-dx, 0, 0)),
-        rect_cell.translate((-dx, -dy, 0)),
-        rect_cell.translate((0, -dy, 0)),
-        rect_cell.translate((dx, -dy, 0))
-    ]
+    else:
+        centres = [
+            (o_x + dx, o_y, 0),
+            (o_x + dx, o_y + dy, 0),
+            (o_x, dy, o_y),
+            (o_x - dx, o_y + dy, 0),
+            (o_x - dx, o_y, 0),
+            (o_x - dx, o_y - dy, 0),
+            (o_x, o_y - dy, 0),
+            (o_x + dx, o_y - dy, 0)
+        ]
+        cells.append(rect_cell)
+
+    # Populate the list of translated cells
+    for centre in centres:
+        cell = rect_cell.clone()
+        cell.translate(centre)
+        cells.append(cell)
+    # Return the list of translated cells
+    return cells

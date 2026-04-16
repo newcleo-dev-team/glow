@@ -4,2655 +4,1031 @@ cells types in SALOME.
 """
 import math
 
-from copy import deepcopy
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import List, Tuple
 
-from glow.geometry_layouts.cells import Cell, HexCell, RectCell, Region, \
-    check_cell_circle_are_cut, get_region_info
-from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface, \
-    build_hexagon
-from glow.support.utility import build_compound_borders, \
-    compute_point_by_reference, generate_unique_random_colors, \
-    retrieve_selected_object, translate_wrt_reference
-from glow.interface.geom_interface import ShapeType, add_to_study, \
-    add_to_study_in_father, clear_view, display_shape, \
-    extract_sorted_sub_shapes, extract_sub_shapes, get_basic_properties, \
-    get_bounding_box, get_min_distance, get_object_from_id, \
-    get_point_coordinates, is_point_inside_shape, make_cdg, make_common, \
-    make_compound, make_cut, make_edge, make_face, make_partition, \
-    make_rotation, make_translation, make_vector_from_points, \
-    make_vertex, make_vertex_inside_face, make_vertex_on_curve, \
-    remove_from_study, set_color_face, update_salome_study
-from glow.support.types import CELL_VS_SYMM_VS_TYP_GEO, GeometryType, \
-    LatticeGeometryType, PropertyType, SymmetryType, CellType
+from glow.geometry_layouts.cells import Cell
+from glow.geometry_layouts.fillable_layouts import Fillable
+from glow.geometry_layouts.geometries import Hexagon, Rectangle, Surface
+from glow.geometry_layouts.layouts import Region
+from glow.geometry_layouts.symmetry_management import SymmetryDomain, \
+    build_cartesian_symmetry_shape, build_hex_symmetry_shape, \
+    use_symmetry_logic
+from glow.interface.geom_entities import Edge, wrap_shape
+from glow.interface.geom_interface import ShapeType, get_bounding_box, \
+    get_point_coordinates, make_cdg, make_compound, make_face, make_vertex
+from glow.support.types import SymmetryType
+from glow.support.utility import are_same_shapes, build_compound_borders, \
+    build_subdvision_vertices_on_edge, build_z_axis_from_vertex
 
 
-class Lattice():
+class Lattice(Fillable):
     """
-    Class that represents a lattice made by a group of cells, either cartesian
-    or hexagonal.
-    Transformation operations (i.e. rotation and translation) are supported;
-    different types of symmetry can be applied depending on the type of
-    the lattice's cells.
-    Visualization of the geometry layout in the SALOME 3D viewer is available.
+    Class for representing any lattice characterised in terms of its geometry
+    layout made of cells that do not follow a specific pattern.
+    This class can be used to model a portion of a generic lattice assembled
+    by simply positioning the cells one by one. In this sense, it could be
+    useful to represent a portion of a colorset without the need to build all
+    the assemblies around the central one.
+    This class does not support the placement of one or several rings of the
+    same cell as it serves to describe a generic pattern.
+    Subclasses of ``Lattice`` provide specialised methods to address this need
+    according to the type of pattern, i.e. either Cartesian or hexagonal.
 
     Parameters
     ----------
     cells : List[Cell] = []
-        The list of cells that constitute the lattice, as objects of the
-        ``Cell`` subclasses.
+        The list of cells that constitute the lattice, as objects of the class
+        ``Cell`` or of its subclasses.
+    centre : Tuple[float, float, float] | None = None
+        The coordinates of the lattice centre, if any.
+    shape : Surface | None = None
+        The ``Surface`` object representing the characteristic shape of the
+        lattice.
+    base_props : Dict[PropertyType, str] | None = None
+        The mapping from ``PropertyType`` items to values associated to the
+        characteristic shape of the lattice.
     name : str = "Lattice"
-        The lattice name in the current SALOME study.
-    center : Tuple[float, float, float] | None, optional
-        The coordinates of the lattice center, if any.
-    boxes_thick : List[float] = []
-        Thicknesses of the box layers surrounding the lattice.
+        The name of the lattice when added to the current SALOME study.
 
     Attributes
     ----------
-    lattice_center : Any
-        The geometric center of the lattice.
-    cells_type : CellType | None
-        The type of cells in the lattice.
-    lattice_cells : List[Cell]
-        The list of cells that constitute the lattice, as objects of the
-        ``Cell`` subclasses.
-    layers : List[List[Cell]]
-        List of layers that constitute the lattice, each containing a list
-        of cells.
-    name : str
-        The lattice name in the current SALOME study.
-    lattice_cmpd : Any
-        A compound object grouping all the faces of the cells in the lattice.
-    lattice_entry_id : Union[str, None]
-        An ID associated to the lattice surface in the current SALOME study.
-    rings_no : int
-        Index providing the total number of cells rings around the lattice
-        center.
-    distance : float
-        Distance from the lattice origin to the outmost cell CDG.
-    symmetry_type : SymmetryType
-        The type of symmetry currently applied to the lattice.
-    lx : float
-        Characteristic dimension of the lattice along the X-axis.
-    ly : float
-        Characteristic dimension of the lattice along the Y-axis.
-    box_layers : List[float]
-        Thicknesses of the box layers.
-    lattice_symm : Any | None
-        The compound object representing the lattice with applied symmetry.
+    dimensions : Tuple[float, float]
+        The X-Y characteristic dimensions of the shape of the lattice.
+    entry_id : str | None
+        The ID attributed by SALOME when the GEOM object is added to the
+        study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the layout this instance
+        refers to.
+    geometry_maps : Dict[GeometryType, Compound]
+        A mapping from ``GeometryType`` values to ``Compound`` objects.
+        Each entry provides a different representation for the geometry
+        layout this instance refers to. It is used to switch between
+        different visualisation types (e.g., technological, refined).
+    layers : List[List[Region | Self]]
+        A list of layers, each layer itself being a list of ``Region`` objects
+        or ``Fillable`` instances. Layers represent the hierarchical structure
+        of the geometry layout.
+    name : str | None = None
+        The name of the GEOM object identifying the layout this instance
+        refers to. It is used when the lattice is added to the current SALOME
+        study.
+    o : Vertex
+        The ``Vertex`` object being the centre of the GEOM object which
+        represents the geometry layout of the lattice.
     regions : List[Region]
-        List of the ``Region`` objects associated to each region of the
+        A flat list of ``Region`` objects obtained by collapsing all the
+        layers. Maintained in addition to the `layers` structure to allow
+        the visualization of the layout with a property colour map.
+    rot_angle : float
+        The rotation angle (in degrees) of the lattice's GEOM object wrt the
+        X-axis.
+    shape : Surface
+        The ``Surface`` object representing the characteristic shape of the
         lattice.
-    displayed_geom : GeometryType
-        The type of geometry of the lattice's cells currently displayed.
-    is_update_needed : bool
-        Flag indicating if the lattice geometry needs to be updated by
-        rebuilding the ``Region`` objects.
+    state : LayoutState
+        Providing the state of the layout in the SALOME study.
+    symmetry_map : Dict[SymmetryType, Face]
+        A mapping from ``SymmetryType`` values to ``Face`` objects. Each
+        entry provides the characteristic shape of the corresponding symmetry
+        type.
     """
-    def __init__(self,
-                 cells: List[Cell] = [],
-                 name: str = "Lattice",
-                 center: Union[Tuple[float, float, float], None] = None,
-                 boxes_thick: List[float] = []) -> None:
-        # -------------------------
-        # Attributes initialization
-        # -------------------------
-        self.lattice_center: Any = self.__evaluate_lattice_center(cells,
-                                                                  center)
-        self.cells_type: CellType | None = None
-        self.__cells_rot: float | None = None
-        self.lattice_cells: List[Cell] = deepcopy(cells)
-        self.layers: List[List[Cell]] = [deepcopy(self.lattice_cells)]
-        self.name: str = name
-        self.lattice_cmpd: Any | None = None
-        self.lattice_entry_id: Union[str, None] = None
-        self.rings_no: int = 0
-        self.distance: float = 0.0
-        self.__type_geo: LatticeGeometryType = LatticeGeometryType.ISOTROPIC
-        self.symmetry_type: SymmetryType = SymmetryType.FULL
-        self.lx: float = 0.0
-        self.ly: float = 0.0
-        self.box_layers: List[float] = boxes_thick
-        self.__lattice_box: Union[Cell, None] = None
-        self.lattice_symm: Union[Any, None] = None
-        self.regions: List[Region] = []
-        self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
-        self.is_update_needed: bool = False
-
-        # Update the instance attributes if any cells are provided
-        self.__update_attributes(cells)
-
-    @property
-    def cells_rot(self) -> float | None:
-        """
-        Get or set the common rotation angle, in degrees, of the cells
-        belonging to the main pattern of cells in the lattice.
-
-        Parameters
-        ----------
-        cells_rot : float
-            The rotation angle, in degrees, of the cells belonging to the
-            main pattern of cells in the lattice.
-
-        Returns
-        -------
-        float | None
-            The rotation angle, in degrees, of the cells belonging to the
-            main pattern of cells.
-        """
-        return self.__cells_rot
-
-    def __get_main_pattern_rotation(self, new_val: float | None) -> float:
-        """
-        Method that determines the rotation angle (in degrees) of the cells
-        representing the main pattern in the lattice, i.e. the most common
-        value among the cells.
-
-        Parameters
-        ----------
-        new_val : float
-            An additional value of rotation angle to update the collection
-            with.
-
-        Returns
-        -------
-        float
-            The rotation angle (in degrees) of the cells representing the
-            main pattern in the lattice.
-        """
-        # Associate to each different rotation angle its frequency
-        val_no: Dict[float, int] = {}
-        for cell in self.lattice_cells:
-            rot = math.degrees(cell.rotation)
-            if rot in val_no:
-                val_no[rot] += 1
-            else:
-                val_no[rot] = 1
-        # Eventually update the dictionary with the given value
-        if new_val != None and new_val in val_no:
-            val_no[new_val] += 1
-        elif new_val != None and new_val not in val_no:
-            val_no[new_val] = 1
-        # Return the rotation angle value of the main pattern of cells
-        return max(val_no, key=val_no.get)
-
-    @property
-    def type_geo(self) -> LatticeGeometryType | None:
-        """
-        Get or set the lattice type of geometry as item of the enumeration
-        ``LatticeGeometryType``.
-
-        Parameters
-        ----------
-        type_geo : LatticeGeometryType
-            Item of the enumeration ``LatticeGeometryType`` to set the lattice
-            type of geometry to.
-
-        Returns
-        -------
-        LatticeGeometryType | None
-            Item of the enumeration ``LatticeGeometryType`` if get,
-            ``None`` if set.
-
-        Raises
-        ------
-        RuntimeError
-            Invalid type of geometry for the current lattice geometry layout.
-        """
-        return self.__type_geo
-
-    @type_geo.setter
-    def type_geo(self, type_geo: LatticeGeometryType) -> None:
-        self.set_type_geo(type_geo)
-
-    @property
-    def lattice_box(self) -> Cell | None:
-        """
-        Get or set the ``Cell`` subclass object providing the lattice's box.
-
-        Parameters
-        ----------
-        cell : Cell | None
-            An instance of the ``Cell`` subclass to set the lattice's box. If
-            ``None``, the previous box, if present, is removed.
-
-        Returns
-        -------
-        Cell | None
-            Instance the ``Cell`` subclass for the lattice's box, or ``None``
-            if get, ``None`` if set.
-
-        Raises
-        ------
-        RuntimeError
-            If the given cell's center does not coincide with the lattice's
-            one.
-        """
-        return self.__lattice_box
-
-    @lattice_box.setter
-    def lattice_box(self, cell: Cell | None) -> None:
-        # Check whether the cell's center coincide with the lattice's one
-        if (cell is not None and
-            get_min_distance(cell.figure.o, self.lattice_center) > 1e-5):
-            raise RuntimeError(
-                "The cell's center having coordinates "
-                f"'{get_point_coordinates(cell.figure.o)}', "
-                "does not coincide with the lattice's one being "
-                f"'{get_point_coordinates(self.lattice_center)}'.")
-        # Shape to update the lattice's characteristic dimensions with
-        if cell is None:
-            shape = make_compound([cell.face for cell in self.lattice_cells])
-            # Set the lattice's box to None and clear any stored thicknesses
-            # of the box's layers
-            self.__lattice_box = None
-            self.box_layers.clear()
-        else:
-            # Set the lattice's box
-            self.__lattice_box = cell
-            shape = cell.face
-            # Update the lattice compounds with the box
-            self.__update_lattice_compounds_with_box()
-
-        # Update the characteristic dimensions of the lattice
-        self.__update_lattice_dimensions(shape)
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-
-    def __update_lattice_dimensions(self, shape: Any) -> None:
-        """
-        Method that updates the lattice's XY characteristic dimensions
-        from the given shape for which its min-max extension is calculated.
-
-        Parameters
-        ----------
-        shape : Any
-            The reference shape for calculating the lattice's characteristic
-            dimensions.
-        """
-        # Get the min-max extension for the given shape
-        x_min, x_max, y_min, y_max = get_bounding_box(shape)
-        # Factor to evaluate the lattice's characteristic dimensions depending
-        # on the cells' type
-        n_type = 1
-        if self.cells_type == CellType.HEX:
-            n_type = 2
-        self.lx = (x_max - x_min) / n_type
-        self.ly = (y_max - y_min) / n_type
-
-    def __evaluate_cells_rotation(self, cells: List[Cell]) -> float:
-        """
-        Method that checks if the rotation angle of the given cells is the
-        same for all the given ones; if not, an exception is raised.
-        A check on the validity of the cell rotation according to the admitted
-        values is also present; an exception is raised if the value is not
-        valid.
-        The method returs the rotation angle of the cells, if all checks pass.
-
-        Parameters
-        ----------
-        cells : List[Cell]
-            The list of ``Cell`` subclasses, representing the cells whose
-            rotation angle must be checked.
-
-        Returns
-        -------
-        float
-            The value of the rotation angle (in degrees) shared by all the
-            cells.
-
-        Raises
-        ------
-        RuntimeError
-            If given cells do not share the same rotation angle or it is not
-            among the admitted ones according to the cell's type.
-        """
-        # Get the rotation angle of the first cell in the list
-        cell_rot = round(math.degrees(cells[0].rotation), 6)
-        # If any of the cells has a different angle, an exception is raised
-        if not all(
-            [math.isclose(math.degrees(cell.rotation), cell_rot)
-                for cell in cells]):
-            raise RuntimeError("The given cells do not share the same "
-                               "rotation angle.")
-        # Check if the rotation angle of the cells is valid
-        self.__check_cell_rotation_validity(cell_rot)
-        # Return the rotation angle of all the cells
-        return cell_rot
-
-    def __check_cell_rotation_validity(self, cell_rot: float) -> None:
-        """
-        Method that checks if the provided cell rotation angle is valid
-        according to the cell's type.
-
-        Parameters
-        ----------
-        cell_rot : float
-            The rotation angle of the cell to validate.
-
-        Raises
-        ------
-        RuntimeError
-            If the provided cell rotation angle is not among the valid ones.
-        """
-        # Admitted values for the rotation angle (in degrees) of the cells in
-        # the lattice depends on the type of the cells of the main pattern
-        if self.cells_type == CellType.RECT:
-            valid_cells_angle = [i for i in range(0, 450, 90)]
-        else:
-            valid_cells_angle = [i for i in range(0, 390, 30)]
-        if abs(cell_rot) not in valid_cells_angle:
-            raise RuntimeError(
-                f"Cells can only have any of the {valid_cells_angle}° "
-                f"rotation angles. Current value is {cell_rot}.")
-
-    def __evaluate_lattice_center(
+    def __init__(
             self,
-            cells: Union[List[Cell], None],
-            center: Union[Tuple[float, float, float], None]) -> Any:
-        """
-        Method that evaluates the lattice center during the initialization:
-        if no center is provided, the XYZ origin is returned. Otherwise, a
-        check is performed to identify if there is a cell whose center
-        coincides with the specified one.
-        In case none is found or the center lays within any of the cells'
-        faces, an exception is raised.
+            cells: List[Cell] = [],
+            centre: Tuple[float, float, float] | None = None,
+            name: str = "Lattice"
+        ) -> None:
+        super().__init__()
+        # Set the name of this instance and of the corresponding GEOM object
+        # by appending the ID of this instance to the provided name
+        self.name = f"{name}_{id(self)}"
+        # Initialize the list of layers by putting the given cells at the
+        # bottom layer, if any are provided. Regions are extracted from each
+        # cell
+        if cells:
+            self.layers = [[c.clone() for c in cells]]
+            self.regions = self.get_regions()
+            # Set the shape and the GEOM compound of the layout from the
+            # compound of the regions
+            face = make_face(
+                build_compound_borders(make_compound(self.regions))
+            )
+            self.shape = Surface(face, get_point_coordinates(make_cdg(face)))
+            # Update the characteristic dimensions of the layout
+            self.dimensions = self.shape.dimensions
+            # Update the GEOM compound this instance refers to
+            self.update(wrap_shape(make_compound(self.regions)))
+        # Set the vertex of the layout centre, if any is provided, otherwise
+        # the XYZ origin is used
+        if centre is not None:
+            self.o = make_vertex(centre if centre else (0.0, 0.0, 0.0))
+        # Update the state of the lattice
+        self.state.is_update_needed = True
 
-        Parameters
-        ----------
-        cells : List[Cell] | None
-            A list of ``Cell`` objects constituting the lattice
-        center : Tuple[float, float, float]
-            The indicated X-Y-Z coordinates of the lattice center
-
-        Returns
-        -------
-        Any
-            The vertex object identifying the lattice center.
-
-        Raises
-        ------
-        RuntimeError
-            In case the specified center lays inside any of the cells.
-        """
-        if center:
-            # Vertex object for the center's coordinates
-            center_vrtx = make_vertex(center)
-            if not cells:
-                return center_vrtx
-            # Check if the given lattice center corresponds to any of the
-            # given cells centers
-            for cell in cells:
-                if get_min_distance(cell.figure.o, center_vrtx) < 1e-7:
-                    return center_vrtx
-                # Raise an exception if the center is within the cell
-                if is_point_inside_shape(center_vrtx, cell.face) and not (
-                   is_point_inside_shape(center_vrtx,
-                                         make_compound(cell.figure.borders))):
-                    raise RuntimeError(
-                        f"The specified center {center} lays inside one "
-                        "of the provided cells without coinciding with its "
-                        "center or its borders.")
-            else:
-                return center_vrtx
-        else:
-            # No center has been specified: return the XYZ origin
-            return make_vertex((0, 0, 0))
-
-    def __build_lattice(
-            self, geo_type: GeometryType = GeometryType.TECHNOLOGICAL
+    def add(self,
+            layout: Region | Fillable,
+            position: Tuple[float, float, float] | None = None,
+            layer_index: int | None = None
         ) -> None:
         """
-        Method that builds the lattice from its cells according to the given
-        type of geometry, i.e. the technological or the sectorized one.
-        According to this, we have:
-        - the GEOM compound object storing either the cells faces or those
-          resulting from the face sectorization;
-        - the GEOM compound object storing only the unique edges of all the
-          cells comprising the lattice;
+        Method that adds a generic layout, i.e. either a ``Region`` or a
+        `Fillable` object, to the technological geometry layout of this
+        instance at the indicated layer.
 
-        In addition, if the lattice has a box, this container is rebuilt by
-        means of the thicknesses of each layer stored as an instance
-        attribute.
-        """
-        # Build the compound object out of the cells faces according to the
-        # given type (either from the technological geometry or from the
-        # sectorization)
-        self.lattice_cmpd = get_compound_from_geometry(geo_type,
-                                                       self.lattice_cells)
-        # Handle the construction of the lattice container, if any is required
-        self.__assemble_box(geo_type)
-
-    def __assemble_box_with_lattice(
-            self,
-            inner_box: Any,
-            lattice_cmpd: Any,
-            geo_type: GeometryType) -> Any:
-        """
-        Method that assembles the lattice, in terms of its compound, with the
-        container.
-        Given the face built on the box inner borders, a common operation
-        with the lattice compound is performed to take into account also for
-        boxes being slighlty lesser than the lattice itself.
-        The result is a lattice cut in correspondence of the intersection
-        points.
-        A partition operation between the lattice compound and the whole box
-        face follows to assemble both objects into a whole new compound.
+        The given layout object is first translated, if needed, so that the
+        coordinates of its CDG match the indicated position. If no position
+        is provided, the layout object is placed in the CDG of this instance.
+        The given layout is stored at the end of the sublist of the ``layers``
+        attribute that is specified by the value of the indicated parameter
+        ``layer_index``, if any. Otherwise, a new sublist (i.e. a new layer)
+        is created with the given layout.
+        If the layer index value is not valid, an exception is raised.
+        Please note that, when providing layouts on the same layer, they must
+        not overlap.
 
         Parameters
         ----------
-        inner_box : Any
-            The face object representing the inner part of the lattice box.
-        lattice_cmpd : Any
-            The compound object representing the lattice the box should be
-            assembled with.
-        geo_type : GeometryType
-            The type of geometry indicating the layout to use for the box
-            cell.
+        layout : Region | Self
+            The generic layout object to add.
+        position : Tuple[float, float, float] | None
+            The XYZ coordinates of the layout's centre, if any. It defaults
+            to ``None``, meaning that the layout is added at the current
+            instance centre.
+        layer_index : int | None
+            The index identifying the layer at which the given layout should
+            be added. It defaults to ``None``, meaning that the layout is
+            stored in a new layer.
 
-        Returns
-        -------
-        Any
-            The lattice compound assembled with its box.
-        """
-        # Extract the common part between the lattice compound and the inner
-        # box.
-        lattice_cmpd = make_common(inner_box, lattice_cmpd)
-        # Update the lattice compound by partitioning it with the box face
-        # and return it
-        return make_partition(
-            [lattice_cmpd] + extract_sub_shapes(
-                get_compound_from_geometry(geo_type, [self.__lattice_box]),
-                ShapeType.FACE),
-            [],
-            ShapeType.FACE)
-
-    def build_lattice_box(self, box_thick: List[float] = []) -> None:
-        """
-        Method that builds the box the lattice is inserted into, given the
-        thickness of each layer.
-        On the basis of the cells type (i.e. cartesian or hexagonal), a proper
-        box is built and used to update the compound of the lattice.
-        Since the method builds a new box for the lattice, any property
-        associated to the regions of a previuosly set box are lost.
+        Raises
+        ------
+        ValueError
+            If the indicated layer index is not valid.
 
         Notes
         -----
-        The method accepts that the first value of layers thicknesses
-        could be negative, meaning that the box cuts the outmost ring of cells
-        of the lattice. The other thicknesses values must be positive.
+        This method simply updates the list of layers of the technological
+        geometry layout with the given layout without collapsing the layers
+        and updating the entire GEOM compound object this instance refers to.
+        To collapse the layers and update all the contained layouts of this
+        instance without displaying the geometry in the 3D viewer of SALOME,
+        call the method ``update_hierarchical_structure``.
+        To update the and display the geometry layout with all the regions of
+        the technological geometry, call the method ``show``.
+        """
+        # Call the 'add()' method of the 'Fillable' superclass
+        super().add(layout, position, layer_index)
+        # Update the lattice characteristic shape and dimensions
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+
+    def _compute_layer_index(self, layer_index: int | None) -> int:
+        """
+        Method that returns the layer index to which cells have to be added.
+        Depending on the value of ``layer_index``, different actions are
+        taken:
+
+        - If ``None`` or equal to ``len(self.layers)``, a new empty layer is
+          created and appended to the ``self.layers`` attribute.
+        - If in ``[0, len(self.layers) - 1]``, the given index is returned.
 
         Parameters
         ----------
-        box_thick : List[float]
-            List storing the thickness of each layer of the lattice box.
-        """
-        # Return immediately if the method is called without specifying the
-        # thicknesses of the box layers
-        if not box_thick:
-            print("WARNING! Method 'build_lattice_box' called without "
-                  "specifying the thicknesses of the box layers")
-            return
-        if box_thick[0] < 0 and len(box_thick) > 1:
-            for t in box_thick[1:-1]:
-                if t < 0.0:
-                    raise AssertionError("Only the first value of the box "
-                                         "layers thicknesses can be negative.")
-
-        # Store the thicknesses of the box layers: if the first is positive,
-        # a zero value is put at posizion 0 in the list
-        self.box_layers = list(box_thick)
-        if box_thick[0] > 0:
-            self.box_layers.insert(0, 0.0)
-
-        # Build the lattice container according to the cells geometry
-        self.__build_lattice_box_type()
-        # Update the lattice compounds with the box
-        self.__update_lattice_compounds_with_box()
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-
-    def __update_lattice_compounds_with_box(self) -> None:
-        """
-        Method that updates the lattice's compound object by assembling the
-        cells with the inner area of the box so to take into account for
-        boxes that cut the last ring of cells.
-        In addition, if a symmetry has already been applied, the operation
-        is performed again so to update the compound specific for the
-        symmetry.
-        """
-        # Update the lattice compound from the cells' faces and the inner box
-        self.lattice_cmpd = self.__assemble_box_with_lattice(
-            self.__extract_inner_box(),
-            make_compound([cell.face for cell in self.lattice_cells]),
-            GeometryType.TECHNOLOGICAL)
-        # Re-apply the symmetry operation if any has already been performed
-        if self.symmetry_type != SymmetryType.FULL:
-            self.apply_symmetry(self.symmetry_type)
-
-    def __extract_inner_box(self) -> Any:
-        """
-        Method that extracts the inmost face object of the cell representing
-        the lattice container.
-        The box faces are extracted and then the one closest to the lattice
-        center is returned.
+        layer_index : int | None
+            The index of the layer to check and return.
 
         Returns
         -------
-        Any
-            The face object for the area of the lattice box closest to the
-            lattice center.
-        """
-        # Extract the lattice box faces
-        box_faces = extract_sub_shapes(self.__lattice_box.face,
-                                       ShapeType.FACE)
-        if not box_faces:
-            box_faces = [self.__lattice_box.face]
-        # Get the inner box face by sorting the faces according to the
-        # distance from the lattice center
-        return sorted(
-            box_faces,
-            key=lambda item: get_min_distance(self.lattice_center, item))[0]
-
-    def __build_lattice_box_type(self) -> None:
-        """
-        Method that builds the lattice box as an instance of the ``Cell``
-        class.
-        The container geometry is built accordingly with the type of geometry
-        of the cells in the lattice.
-        Either a rectangle or a hexagon is built for each layer of the box and
-        a partition with all the figures that make up the box is performed.
-        The lattice box is instantiated either as a ``RectCell`` or a
-        ``HexCell`` object and its face updated with the figure built herein.
-        """
-        # Declare a list storing the geometrical figures that constitute
-        # the box
-        box_surfaces: List[Surface] = []
-        center = get_point_coordinates(self.lattice_center)
-        # Get the bounding box of the lattice
-        x_min, x_max, y_min, y_max = get_bounding_box(
-            make_compound([cell.face for cell in self.lattice_cells]))
-        # Build the container for the lattice according to the cells geometry
-        # type
-        match self.cells_type:
-            case CellType.RECT:
-                # Declare the starting dimensions of the box
-                height = y_max - y_min
-                width = x_max - x_min
-                # Build a rectangle for each layer
-                for thick in self.box_layers:
-                    height += 2*thick
-                    width += 2*thick
-                    box_surfaces.append(Rectangle(center, height, width))
-                # Perform a 'partition' operation to assemble the lattice box
-                box_face = make_partition(
-                    [rect.face for rect in box_surfaces], [], ShapeType.FACE)
-                # Declare a 'Rectangle' instace from the built face
-                self.__lattice_box = RectCell(center, (height, width))
-            case CellType.HEX:
-                # Calculate the apothem of the hexagon enclosing the lattice
-                # according to the valid rotation angles of the cells (0° or
-                # 90°)
-                if math.isclose(self.__cells_rot, 0.0):
-                    box_apothem = 0.5 * (x_max - x_min)
-                else:
-                    box_apothem = 0.5 * (y_max - y_min)
-                # Build a hexagon for each layer
-                for thick in self.box_layers:
-                    box_apothem += thick
-                    box_surfaces.append(
-                        build_hexagon(box_apothem, center))
-                # Perform a 'partition' operation to assemble the lattice box
-                box_face = make_partition(
-                    [hex.face for hex in box_surfaces], [], ShapeType.FACE)
-                # Declare a 'Hexagon' instace from the built face
-                self.__lattice_box = HexCell(center,
-                                             box_apothem/math.sin(math.pi/3))
-            case _:
-                raise RuntimeError("Unhandled cell geometry type.")
-        self.__lattice_box.update_geometry_from_face(
-            GeometryType.TECHNOLOGICAL, box_face)
-        # Rotate the box so to enclose the lattice (hexagonal lattice only)
-        if self.__cells_rot == 0.0 and self.cells_type == CellType.HEX:
-            self.__lattice_box.rotate(90)
-        # Update the characteristic dimensions of the lattice
-        self.__update_lattice_dimensions(self.__lattice_box.face)
-
-    def __configure_lattice_type(
-            self, cells_type: CellType, no_cells: int = 1) -> None:
-        """
-        Method configures the type of geometry of the lattice, as item of
-        the ``LatticeGeometryType`` enumeration, according to the type of
-        the cells in the lattice and the number of cells that are present.
-        The following convention is adopted, according to what required by
-        the SALT module of DRAGON5:
-
-        - lattice made of rectangular cells:
-            - only one cell - the type is ``RECTANGLE_TRAN``.
-            - more than one cell - the type is ``ISOTROPIC``.
-        - lattice made of hexagonal cells:
-            - only one cell - the type is ``HEXAGON_TRAN``.
-            - more than one cell - the type is ``ISOTROPIC``.
-
-        Parameters
-        ----------
-        cells_type : CellType
-            The value of the ``CellType`` enumeration identifying the type
-            of cells in the lattice.
-        no_cells : int
-            The number of cells in the lattice.
-        """
-        print("The type of cells is", cells_type)
-        match cells_type:
-            case CellType.RECT:
-                if no_cells > 1:
-                    # Case of a lattice made of cartesian cells: this case is
-                    # characterised by an isotropic geometry type with VOID
-                    # BCs.
-                    self.__type_geo = LatticeGeometryType.ISOTROPIC
-                else:
-                    # Only one cartesian cell is present: this case is
-                    # characterised by an cartesian geometry type with
-                    # translation on all sides
-                    self.__type_geo = LatticeGeometryType.RECTANGLE_TRAN
-            case CellType.HEX:
-                if no_cells > 1:
-                    # Case of a lattice made of hexagonal cells: this case is
-                    # characterised by an isotropic geometry type with VOID
-                    # BCs.
-                    self.__type_geo = LatticeGeometryType.ISOTROPIC
-                else:
-                    # Only one hexagonal cell is present: this case is
-                    # characterised by an hexagonal geometry type with
-                    # translation on all sides
-                    self.__type_geo = LatticeGeometryType.HEXAGON_TRAN
-
-    def add_cell(
-            self, cell: Cell, position: Tuple[float, float, float]) -> None:
-        """
-        Method that allows to add a new cell to the lattice at the specified
-        position. The cell is added to a new layer.
-
-        Parameters
-        ----------
-        cell : Cell
-            A cell to add to the current lattice, as object of the ``Cell``
-            subclasses.
-        position : Tuple[float, float, float]
-            The X-Y-Z coordinates of the position where the cell should be
-            added, i.e. the cell center should be placed at those coordinates.
-            If the tuple is empty, the cell is placed at the position
-            indicated by its center.
+        int
+            The validated layer index.
 
         Raises
         ------
-        RuntimeError
-            If the cell to add has a ``CellType`` which differs from the one
-            of the cells in the lattice.
-        RuntimeError
-            If the cell to add has an invalid rotation angle.
+        ValueError
+            If ``layer_index`` is not ``None`` and does not fall within the
+            valid range of existing layers.
         """
-        try:
-            # Check that the cell to add has the same type of the ones already
-            # present
-            self.__check_cell_type(cell.cell_type)
-            # Check the validity of the cell's rotation angle and update the
-            # value representative of the main pattern of cells
-            self.__set_main_rotation_angle(math.degrees(cell.rotation))
-        except RuntimeError as e:
-            raise RuntimeError(f"Error when adding a cells: {e}")
-        # Initialize a new sub list identifying a new layer of cells
-        self.layers.append([])
-        # Add the cell to the newly created layer
-        self.__add_cell_to_layer(cell, position, len(self.layers)-1)
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
+        if layer_index is None or layer_index == len(self.layers):
+            # Initialise an empty sublist and return the previous length of
+            # the layers list
+            self.layers.append([])
+            return len(self.layers) - 1
+        elif 0 <= layer_index < len(self.layers):
+            # The indicated layer index already exists
+            return layer_index
+        else:
+            raise ValueError(f"Invalid layer index {layer_index}.")
 
-    def __set_main_rotation_angle(self, cell_rot: float) -> None:
-        """
-        Method that sets the rotation angle of the main pattern of cells
-        in the lattice based on the provided cell rotation.
-        The rotation angle of the given cell is assessed first and the
-        rotation angle of the main pattern of cells re-evaluated by taking
-        into account also for the given value.
-
-        Parameters
-        ----------
-        cell_rot : float
-            The rotation angle, in degrees, to assign.
-        """
-        # Check the validity of the cell's rotation angle
-        self.__check_cell_rotation_validity(cell_rot)
-        # Update the rotation angle of the main pattern of cells
-        self.__cells_rot = self.__get_main_pattern_rotation(cell_rot)
-
-    def __add_cell_to_layer(
-            self, cell: Cell, position: Tuple[float], layer_indx: int
+    def _translate_layout_specific_elems(
+            self, new_cntr: Tuple[float, float, float]
         ) -> None:
         """
-        Method that adds a given cell, as subclass of the ``Cell`` class, to
-        the lattice. The cell is added to the layer whose index is provided
-        as input.
+        Method for translating the shape of the cell, considering the centre
+        of the translated layout is positioned at the given XYZ coordinates.
 
         Parameters
         ----------
-        cell : Cell
-            A cell to add to the current lattice, as object of the ``Cell``
-            subclasses.
-        position : Tuple[float, float, float]
-            The X-Y-Z coordinates of the position where the cell should be
-            added, i.e. the cell center should be placed at those coordinates.
-            If the tuple is empty, the cell is placed at the position
-            indicated by its center.
-        layer_indx : int
-            The index of the layer the cell needs to be added to.
+        new_cntr : Tuple[float, float, float]
+            The XYZ coordinates of the centre of the translated layout.
         """
-        # Move the cell in the given position, if necessary and re-evaluate
-        # the number of cells rings in the lattice
-        print("Adding the cell to position", position)
-        if position and not all(math.isclose(x, 0.0) for x in position):
-            cell = cell.translate(position)
-            self.__evaluate_no_rings(position)
+        if self.shape is not None:
+            self.shape.translate(new_cntr)
 
-        # Set the cell's name by appending a global index
-        cell.name = f"Cell_{len(self.lattice_cells)+1}"
-        # Add the cell to the given layer
-        self.layers[layer_indx].append(deepcopy(cell))
-        # Add the cell to the list of lattice cells
-        self.lattice_cells.append(deepcopy(cell))
-        # Re-evaluate the types of the geometry and BCs
-        self.__configure_lattice_type(self.cells_type,
-                                      len(self.lattice_cells))
-        # Log
-        print("Number of lattice cells is", len(self.lattice_cells))
-        print("Number of lattice rings is", self.rings_no)
-
-    def __evaluate_no_rings(
-            self, position: Tuple[float, float, float]) -> None:
+    def _update_shape(self) -> None:
         """
-        Method that evaluates the number of rings of cells in the lattice,
-        given the position of a cell, as the X-Y-Z coordinates of its center.
-
-        If the distance of the cell from the lattice center is greater than
-        the one stored in the corresponding attribute, the value is updated.
-        The number of cells rings is updated as well only if this distance is
-        greater than the one for the current number of rings: this value
-        depends on the cells rotation.
-
-        Parameters
-        ----------
-        position : Tuple[float, float, float]
-            The X-Y-Z coordinates of the center of the cell used for
-            evaluating if the number of rings should be updated.
+        Method that updates the ``Surface`` object representing the shape
+        that encloses the lattice.
         """
-        origin_distance = math.dist(get_point_coordinates(self.lattice_center),
-                                    position)
-        if origin_distance - self.distance > 1e-7: # TODO assign a constant EPSILON
-            # Update the distance to the outmost cell
-            self.distance = origin_distance
-            # Update the number of rings in the lattice only if the new
-            # distance is greater than the maximum one for the current ring
-            # number; this distance depends on the cells rotation.
-            if math.isclose(self.__cells_rot, 0.0):
-                # The distance is calculated using the cells characteristic
-                # dimension along the X-axis
-                ring_dist = 2*self.lx * self.rings_no
-            elif math.isclose(self.__cells_rot, 90.0):
-                # The distance is calculated using the cells characteristic
-                # dimension along the Y-axis
-                ring_dist = 2*self.ly * self.rings_no
-            # Check if the rings number should be updated
-            if self.distance > ring_dist + 1e-7: # TODO assign a constant EPSILON
-                self.rings_no += 1
+        # Re-instantiate the shape from the face builds from the borders of
+        # the compound of the layout's regions, rotating the shape, if needed
+        face = make_face(
+                build_compound_borders(make_compound(self.get_regions()))
+            )
+        self.shape = Surface(face, get_point_coordinates(make_cdg(face)))
+        self.shape.rotate(self.rot_angle)
 
-    def apply_symmetry(self, symmetry: SymmetryType) -> None:
-        """
-        Method that modifies the lattice in order to apply the given symmetry
-        type. The symmetry types provided by the ``SymmetryType`` enumeration
-        are handled.
-        According to the type, geometry transformations (i.e. cuts) by means
-        of the SALOME GEOM module operations are performed on the lattice's
-        face.
 
-        Parameters
-        ----------
-        symmetry : SymmetryType
-            The type of symmetry to handle.
+class CartesianLattice(Lattice):
+    """
+    Class for representing a Cartesian lattice characterised in terms of its
+    geometry layout made of cells arranged according to a rectangular grid.
+    This class can be used to model a full Cartesian lattice assembled either
+    by providing its cells directly or successively calling the methods for
+    adding one or more cells to the layout.
 
-        Raises
-        ------
-        RuntimeError
-            If the type of cells is neither cartesian nor hexagonal.
-        """
-        # Restore the whole lattice if the 'FULL' symmetry type is provided
-        if symmetry == SymmetryType.FULL:
-            self.symmetry_type = SymmetryType.FULL
-            # Re-evaluate the BC type according to the lattice
-            self.__configure_lattice_type(self.cells_type,
-                                          len(self.lattice_cells))
-            # Update the lattice in the current SALOME study
-            self.show()
-            self.lattice_symm = self.lattice_cmpd
-            return
+    Parameters
+    ----------
+    cells : List[Cell] = []
+        The list of cells that constitute the lattice, as objects of the class
+        ``Cell`` or of its subclasses.
+    centre : Tuple[float, float, float] | None = None
+        The coordinates of the lattice centre, if any.
+    name : str = "CartesianLattice"
+        The name of the lattice when added to the current SALOME study.
 
-        # Assemble all the lattice layers to build the lattice compounds
-        self.__update_lattice_compounds(self.__assemble_layers())
-        # Handle the symmetry operation according to the type of cells of
-        # the lattice
-        match self.cells_type:
-            case CellType.RECT:
-                self.__apply_rect_symmetry(symmetry)
-            case CellType.HEX:
-                self.__apply_hex_symmetry(symmetry)
-            case _:
-                raise RuntimeError(
-                    f"Unrecognized type '{self.cells_type}' for the lattice "
-                    "cells.")
-        # Update the lattice symmetry type
-        self.symmetry_type = symmetry
-
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-        # Update the lattice in the current SALOME study
-        self.show()
-
-    def __apply_rect_symmetry(self, symmetry: SymmetryType) -> None:
-        """
-        Method that modifies the lattice, made of cartesian cells, to apply
-        the given symmetry type. Only the symmetry types, provided by the
-        ``SymmetryType`` enumeration, valid for rectangular shapes are
-        handled.
-
-        Parameters
-        ----------
-        symmetry : SymmetryType
-            The type of symmetry to handle.
-
-        Raises
-        ------
-        RuntimeError
-            If the given symmetry type is not valid for a cartesian lattice.
-        """
-        # Get the lattice bounding box
-        b_box = get_bounding_box(self.lattice_cmpd)
-        # Handle the construction of the face object from which to derive the
-        # lattice symmetry
-        match symmetry:
-            case SymmetryType.HALF:
-                # ------------------
-                # HALF symmetry case
-                # ------------------
-                # Build the face object for extracting the lattice symmetry
-                face = self.__handle_rect_symmetry(b_box, 0)
-                 # Update the lattice type of geometry
-                self.__type_geo = LatticeGeometryType.RECTANGLE_SYM
-            case SymmetryType.QUARTER:
-                # ---------------------
-                # QUARTER symmetry case
-                # ---------------------
-                # Build the face object for extracting the lattice symmetry
-                face = self.__handle_rect_symmetry(b_box, 1)
-                # Update the lattice type of geometry
-                self.__type_geo = LatticeGeometryType.RECTANGLE_SYM
-            case SymmetryType.EIGHTH:
-                # --------------------
-                # EIGHTH symmetry case
-                # --------------------
-                # Build the face object of the triangle representing the
-                # symmetry case
-                face = self.__build_face_from_vertices([
-                    self.lattice_center,
-                    make_vertex((
-                        b_box[1],
-                        get_point_coordinates(self.lattice_center)[1],
-                        0.0)),
-                    make_vertex((b_box[1], b_box[3], 0.0))])
-                # Update the lattice type of geometry
-                self.__type_geo = LatticeGeometryType.RECTANGLE_EIGHT
-            case _:
-                raise RuntimeError(
-                    f"The provided '{symmetry}' symmetry type is not "
-                    "admitted for lattices with cartesian cells.")
-
-        # Perform the 'common' operation on the lattice compound with the
-        # face that identifies the symmetry to exctract the lattice portion
-        # corresponding to the symmetry
-        self.lattice_symm = make_common(self.lattice_cmpd, face)
-
-    def __apply_hex_symmetry(self, symmetry: SymmetryType) -> None:
-        """
-        Method that modifies the lattice, made of hexagonal cells, to apply
-        the given symmetry type. Only the symmetry types, provided by the
-        ``SymmetryType`` enumeration, valid for hexagonal shapes are handled.
-
-        Parameters
-        ----------
-        symmetry : SymmetryType
-            The type of symmetry to handle.
-
-        Raises
-        ------
-        RuntimeError
-            If the hexagonal lattice is not included in a box.
-        RuntimeError
-            If the given symmetry type is not valid for a hexagonal lattice.
-        """
-        # Raise an exception if the lattice is not included within a box
-        if not self.__lattice_box:
-            raise RuntimeError(
-                "The hexagonal lattice is not included within a box: the "
-                f"requested '{symmetry}' symmetry operation cannot be "
-                "applied.")
-        match symmetry:
-            case SymmetryType.THIRD:
-                # ------------------
-                # R120 symmetry case
-                # ------------------
-                # Build the shape identifying the symmetry
-                face = self.__handle_third_symmetry()
-                # Update the lattice type of geometry
-                self.__type_geo = LatticeGeometryType.R120
-            case SymmetryType.SIXTH:
-                # ------------------
-                # SA60 symmetry case
-                # ------------------
-                # Build the shape identifying the symmetry
-                face = self.__handle_sixth_symmetry()
-                # Update the lattice type of geometry
-                self.__type_geo = LatticeGeometryType.SA60
-            case SymmetryType.TWELFTH:
-                # -----------------
-                # S30 symmetry case
-                # -----------------
-                # Build the shape identifying the symmetry
-                face = self.__build_triangle_on_lattice(0.0, 1/12)
-                # Update the lattice type of geometry
-                self.__type_geo = LatticeGeometryType.S30
-            case _:
-                raise RuntimeError(
-                    f"The provided '{symmetry}' symmetry type is not "
-                    "admitted for lattices with hexagonal cells.")
-        # Perform the 'common' operation to extract the symmetry type
-        # on the lattice and update the stored compound object
-        self.lattice_symm = make_common(self.lattice_cmpd, face)
-
-    def __build_vertices(self, u_params: List[float]) -> List[Any]:
-        """
-        Method that builds a list of vertices on the construction circle of
-        the lattice box, with the first element being the lattice center.
-        The position of the points along the curve is expressed in terms of
-        a parameter in the [0-1] range, whose values are given as input.
-
-        Parameters
-        ----------
-        u_params : List[float]
-            List of parameters in the [0-1] range identifying the positions
-            of the points.
-
-        Returns
-        -------
-        List[Any]
-            A list of vertex objects built on the lattice box construction
-            circle.
-        """
-        # Initialize the list with the lattice center
-        points = [self.lattice_center]
-        points += [
-            make_vertex_on_curve(self.__lattice_box.figure.out_circle, u)
-            for u in u_params]
-        # Return the built list of vertex objects
-        return points
-
-    def __handle_sixth_symmetry(self) -> Any:
-        """
-        Method that handles the construction of the shape surface that
-        identifies a sixth symmetry for lattices with hexagonal cells.
-        The shape vertices are built depending on the rotation angle of
-        the cells, allowing to handle both 0° and 90° cases.
-        A face object is then built from the identified points.
-
-        Returns
-        -------
-        Any
-            A face object representing the sixth symmetry shape.
-
-        Raises
-        ------
-        RuntimeError
-            If the rotation angle of the main pattern of cells is neither
-            ``0.0`` nor ``90.0`` degrees.
-        """
-        if self.__cells_rot == 0.0:
-            # Build the triangle identifying the symmetry type
-            return self.__build_triangle_on_lattice(1/12, 1 - 1/12)
-        elif self.__cells_rot == 90.0:
-            # Build the triangle identifying the symmetry type
-            return self.__build_triangle_on_lattice(2/3, 5/6)
-        else:
-            raise RuntimeError(f"The cells rotation of {self.__cells_rot}° "
-                               "is not admitted.")
-
-    def __handle_rect_symmetry(
-            self, b_box: List[float], param: float) -> Any:
-        """
-        Method that handles the symmetry application for cartesian cells
-        lattices. Given the X-Y min/max values of the bounding box of the
-        lattice and a parameter that identifies either the ``HALF`` or
-        ``QUARTER`` symmetry cases, a rectangular face is built and returned.
-
-        Parameters
-        ----------
-        b_box : List[float]
-            List providing the X-Y min/max values of the bounding box of the
-            lattice.
-        param : float
-            Parameter for identifying either the ``HALF`` or ``QUARTER``
-            symmetry cases.
-
-        Returns
-        -------
-        Any
-            A face object representing the rectangle that identifies either
-            the ``HALF`` or ``QUARTER`` symmetry cases.
-        """
-        # Get the X-Y coordinates of the lattice center
-        o_x, o_y, _ = get_point_coordinates(self.lattice_center)
-        # Get the symmetry rectangle center, depending on the symmetry case
-        symm_center = (
-            (b_box[1] - o_x) / 2 + o_x,
-            param * ((b_box[3] - o_y) / 2) + o_y,
-            0)
-        # Build a 'Rectangle' object identifying the symmetry case
-        rect = Rectangle(
-            symm_center,
-            (b_box[3] - b_box[2]) / (2 - (1 - param)/(1 + param)),
-            (b_box[1] - b_box[0]) / 2)
-        # Return the face
-        return rect.face
-
-    def __handle_third_symmetry(self) -> Any:
-        """
-        Method that handles the construction of the shape surface that
-        identifies a third symmetry for lattices with hexagonal cells.
-        The shape vertices are built depending on the rotation angle of
-        the cells, allowing to handle both 0° and 90° cases.
-        A face object is then built from the identified points.
-
-        Returns
-        -------
-        Any
-            A face object representing the third symmetry shape.
-
-        Raises
-        ------
-        RuntimeError
-            If the rotation angle of the main pattern of cells is neither
-            ``0.0`` nor ``90.0`` degrees.
-        """
-        if self.__cells_rot == 0.0:
-            points = self.__build_vertices([1/4, 7/12, 2/3])
-        elif self.__cells_rot == 90.0:
-            points = self.__build_vertices([0, 1-1/6, 1-1/3])
-        else:
-            raise RuntimeError(
-                f"The cells rotation of {self.__cells_rot}° is not admitted.")
-        # Return a face built from the vertices
-        return self.__build_face_from_vertices(points)
-
-    def __build_triangle_on_lattice(
-            self, vert2_u: float, vert3_u: float) -> Any:
-        """
-        Method that builds a triangle with a vertex in the lattice center.
-        The other two vertices are positioned on the circle the lattice is
-        inscribed into; their positions are determined by their U-parameters
-        provided as parameters.
-        Given the vertices, the edges and the corresponding face are built.
-
-        Parameters
-        ----------
-        vert2_u : float
-            U-parameter for identifying the second triangle vertex.
-        vert3_u : float
-            U-parameter for identifying the third triangle vertex.
-
-        Returns
-        -------
-        Any
-            The GEOM face object identifying the triangle.
-        """
-        # Build the three vertices of the triangle
-        points = self.__build_vertices([vert2_u, vert3_u])
-        # Return the face object built on the vertices
-        return self.__build_face_from_vertices(points)
-
-    def __build_face_from_vertices(self, vertices: List[Any]) -> Any:
-        """
-        Method that, given the vertex objects, builds and returns a face
-        object.
-
-        Parameters
-        ----------
-        vertices: List[Any]
-            List of the vertices of the edges being the face borders.
-
-        Returns
-        -------
-        Any
-            A face object built on the edges described by the given vertices.
-        """
-        # Build the list of edges from the given vertices
-        edges = [make_edge(vertices[i],
-                           vertices[(i+1) % len(vertices)])
-                           for i in range(len(vertices))]
-        # Return the face object built on the edges
-        return make_face(edges)
-
-    def __assemble_layers(self) -> List[Cell]:
-        """
-        Method that assembles all the lattice layers made by list of cells
-        in a single layer of cells. Each layer will cut all the layers below
-        itself, if any overlapping occurs.
-        The method populate and returns a list of ``Cell`` objects
-        representing the cells currently present in the lattice after removal
-        and cut operations due to layers overlapping.
-
-        Returns
-        -------
-        List[Cell]
-            A list of ``Cell`` objects for all the cells currently present
-            in the lattice.
-        """
-        # Store a copy of the layers in reverse order
-        layers = self.layers[::-1]
-        # Loop through all the layers to cut those that are overlapped
-        for i, layer in enumerate(layers):
-            # Extract a slice of the list of layers starting from the next
-            # one, i.e. the layer below the current one and all the subsequent
-            # ones
-            sub_layers = layers[i + 1:]
-            # Loop through all the layers below to cut the cells if the
-            # current layer overlaps any inferior layer. Modifications to
-            # the layers (cells cut) are kept as operating on shallow copies
-            # of the two lists lists.
-            for sub_layer in sub_layers:
-                self.__overlap_layer_to(layer, sub_layer)
-        # Return the flattened list of list of cells
-        return [cell for layer in layers for cell in layer]
-
-    def __update_lattice_compounds(
+    Attributes
+    ----------
+    dimensions : Tuple[float, float]
+        The X-Y characteristic dimensions of the shape of the lattice.
+    entry_id : str | None
+        The ID attributed by SALOME when the GEOM object is added to the
+        study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the layout this instance
+        refers to.
+    geometry_maps : Dict[GeometryType, Compound]
+        A mapping from ``GeometryType`` values to ``Compound`` objects.
+        Each entry provides a different representation for the geometry
+        layout this instance refers to. It is used to switch between
+        different visualisation types (e.g., technological, refined).
+    layers : List[List[Region | Self]]
+        A list of layers, each layer itself being a list of ``Region`` objects
+        or ``Fillable`` instances. Layers represent the hierarchical structure
+        of the geometry layout.
+    name : str | None = None
+        The name of the GEOM object identifying the layout this instance
+        refers to. It is used when the lattice is added to the current SALOME
+        study.
+    o : Vertex
+        The ``Vertex`` object being the centre of the GEOM object which
+        represents the geometry layout of the lattice.
+    regions : List[Region]
+        A flat list of ``Region`` objects obtained by collapsing all the
+        layers. Maintained in addition to the `layers` structure to allow
+        the visualization of the layout with a property colour map.
+    rot_angle : float
+        The rotation angle (in degrees) of the lattice's GEOM object wrt the
+        X-axis.
+    shape : Surface
+        The ``Surface`` object representing the characteristic shape of the
+        lattice.
+    state : LayoutState
+        Providing the state of the layout in the SALOME study.
+    symmetry_map : Dict[SymmetryType, Face]
+        A mapping from ``SymmetryType`` values to ``Face`` objects. Each
+        entry provides the characteristic shape of the corresponding symmetry
+        type.
+    """
+    def __init__(
             self,
-            cells: List[Cell],
-            geo_type: GeometryType = GeometryType.TECHNOLOGICAL) -> None:
-        """
-        Method that rebuilds the compound objects of the lattice grouping
-        the given cells. According to the indicated geometry type, either
-        the technological or the sectorized geometry layout of the cells
-        is used.
-        If any box is declared, the cells are assembled with it.
-
-        Parameters
-        ----------
-        cells : List[Cell]
-            List of ``Cell`` objects to build a compound object from.
-        geo_type : GeometryType = GeometryType.TECHNOLOGICAL
-            The type of geometry indicating the cells' layout to use.
-        """
-        self.lattice_cmpd = get_compound_from_geometry(geo_type, cells)
-
-        # Handle the construction of the lattice container, if any
-        self.__assemble_box(geo_type)
-
-        # Update the compound object storing the applied symmetry
-        if self.symmetry_type != SymmetryType.FULL:
-            # Extract the shape of the symmetry by extracting its
-            # borders and building a face object
-            shape = make_face(build_compound_borders(self.lattice_symm))
-            self.lattice_symm = make_common(self.lattice_cmpd, shape)
-
-    def __assemble_box(self, geo_type: GeometryType) -> None:
-        """
-        Method that builds the lattice box, if it was not built yet, from the
-        stored layers thicknesses. The container geometry depends on the
-        type of geometry of the cells (i.e. rectangular or hexagonal).
-        The box is then assembled with the lattice, eventually cutting the
-        cells that are overlapped by it.
-
-        Parameters
-        ----------
-        geo_type : GeometryType
-            The type of geometry indicating the layout to use for the box
-            cell.
-        """
-        if not self.box_layers and not self.__lattice_box:
-            return
-        # If no lattice box has still been build, do it now
-        if not self.__lattice_box:
-            self.build_lattice_box(self.box_layers)
-        else:
-            # Assemble the lattice with the box subface closest to the lattice
-            # center
-            self.lattice_cmpd = self.__assemble_box_with_lattice(
-                self.__extract_inner_box(), self.lattice_cmpd, geo_type)
-
-    def __overlap_layer_to(
-            self, layer: List[Cell], sub_layer: List[Cell]) -> None:
-        """
-        Method that overlaps a layer to an inferior one, both defined as
-        lists of ``Cell`` objects.
-        If the two layers do not share a common part or their distance is
-        greater than zero, the method returns without cutting any cell of the
-        inferior layer. On the contrary, the common part is removed from the
-        inferior layer by cutting its cells appropriately.
-        In particular, cells that are completely overlapped are removed from
-        their layer, whereas, for those partially overlapped, their geometry
-        layout is updated with the corresponding cut version.
-
-        Parameters
-        ----------
-        layer : List[Cell]
-            The superior layer in terms of a list of ``Cell`` objects.
-        sub_layer : List[Cell]
-            The inferior layer in terms of a list of ``Cell`` objects.
-        """
-        # Return if any of the two layers do not have cells
-        if len(layer) < 1 or len(sub_layer) < 1:
-            return
-        # Build a compound for each layer
-        layer_cmpd = make_compound([cell.face for cell in layer])
-        sub_layer_cmpd = make_compound([cell.face for cell in sub_layer])
-        # Return immediately if the two layers do not overlap
-        if get_min_distance(layer_cmpd, sub_layer_cmpd) > 0.0 or \
-            not extract_sub_shapes(
-                make_compound([make_common(layer_cmpd, sub_layer_cmpd)]),
-                ShapeType.FACE):
-            return
-        print(f"The current layer overlaps the inferior one.")
-
-        # List storing the indices of the cells to remove, as completely
-        # overlapped
-        indices: List[int] = []
-        for i, cell in enumerate(sub_layer):
-            # Continue with the next cell if the common operation between
-            # the cell's face and the superior layer does not return any
-            # face, meaning there is no overlapping
-            if not extract_sub_shapes(
-                make_compound([make_common(cell.face, layer_cmpd)]),
-                ShapeType.FACE):
-                continue
-            # Cut the cell face with the layer and check if the result has
-            # any face; if not, it means the cell is completely overlapped,
-            # hence its index is stored to remove the corresponding cell
-            cut_cell = make_cut(cell.face, layer_cmpd)
-            if not extract_sub_shapes(make_compound([cut_cell]),
-                                      ShapeType.FACE):
-                indices.append(i)
-                continue
-            # Update the lattice cell face with the result of the cut
-            # operation between the inferior layer cell face and the
-            # superior layer
-            print(f"Updating cell #{i} face ...")
-            sub_layer[i].update_geometry_from_face(GeometryType.TECHNOLOGICAL,
-                                                   cut_cell)
-            # Update also the sectorized face, if any
-            if cell.sectorized_face:
-                sub_layer[i].update_geometry_from_face(
-                    GeometryType.SECTORIZED,
-                    make_cut(cell.sectorized_face, layer_cmpd))
-        # Remove the cells completely overlapped by the superior layer
-        for index in sorted(indices, reverse=True):
-            sub_layer.pop(index)
-
-    def show(self,
-             property_type_to_show: Union[PropertyType, None] = None,
-             geometry_type_to_show: GeometryType = GeometryType.TECHNOLOGICAL
-             ) -> None:
-        """
-        Method that allows to show the lattice and its cells' regions into
-        the current SALOME study.
-        If the whole lattice compound was already present in the study, it is
-        fist removed, to keep only one entry at a time.
-        It is then added to the study together with all the lattice regions,
-        each colored according to the value of the property type provided as
-        input to this method.
-        If no property is selected, the regions are displayed without any
-        colouring.
-
-        Parameters
-        ----------
-        property_type_to_show : Union[PropertyType, None] = None
-            Either a value of the ``PropertyType`` enumeration, indicating
-            the property by which the regions are coloured, or ``None``.
-        geometry_type_to_show : GeometryType = GeometryType.TECHNOLOGICAL
-            The type of geometry to show: regions are shown accordingly
-            with the selected type.
-        """
-        # Erase all objects from the current view
-        clear_view()
-        # If already present in the current SALOME study, remove the compound
-        # object
-        if self.lattice_entry_id and get_object_from_id(self.lattice_entry_id):
-            remove_from_study(self.lattice_entry_id)
-
-        # Build regions and color them, if needed. If an exception is raised,
-        # is caught and re-raised
-        try:
-            # Build the cell regions, as 'Region' objects, according to the
-            # indicated geometry type. It also updates the lattice compound.
-            self.build_regions(geometry_type_to_show)
-            # Add the lattice compound to the current SALOME study as
-            # representing the parent item for regions in the Object Browser
-            self.lattice_entry_id = add_to_study(self.lattice_cmpd, self.name)
-            # Assign the same color to all the regions having the same property
-            # value, if any has been specified to show
-            self.__associate_colors_to_regions(property_type_to_show)
-            # Add all the lattice regions to the study, each with an assigned
-            # color
-            for region in self.regions:
-                # Set the region color in the viewer
-                set_color_face(region.face, region.color)
-                # Add the lattice region to the study
-                region.face_entry_id = add_to_study_in_father(
-                    self.lattice_cmpd, region.face, region.name)
-                if not region.face_entry_id:
-                    raise RuntimeError(
-                        f"Problem arose when adding the region {region.name}"
-                        "to the SALOME study")
-                # Display the region in the current view
-                display_shape(region.face_entry_id)
-        except:
-            # Show only the whole lattice before raising the caught exception
-            display_shape(self.lattice_entry_id)
-            raise
-        finally:
-          # Show everything on the SALOME application
-          update_salome_study()
-          # Update the geometry type
-          self.displayed_geom = geometry_type_to_show
-
-    def __associate_colors_to_regions(
-            self, property_type: Union[PropertyType, None]) -> None:
-        """
-        Method that assigns the same color to all the regions having the same
-        value for the given property type.
-
-        Parameters
-        ----------
-        property_type : Union[PropertyType, None]
-            The type of property for which colors must be assigned to regions
-            having the same property type value. If ``None``, the regions
-            color is reset to its default value.
-        """
-        # If no colorset to display, reset the region colors
-        if not property_type:
-            for region in self.regions:
-                # Set the region color to its default value
-                region.reset_color_to_default()
-            return
-        # Extract the unique values of the given property type associated to
-        # each region
-        values = self.__get_unique_values_for_property(property_type)
-        # Generate a specific amount of colors as the number of different
-        # values for the same given property type
-        colors = generate_unique_random_colors(len(values))
-        # Build a dictionary of values for the given property type VS color
-        property_vs_color = dict(zip(list(values), colors))
-        # Loop through all the regions and assign a color corresponding to
-        # the value of the given property type
-        for region in self.regions:
-            # Get the value of the given property type associated to the
-            # region
-            value = region.properties[property_type]
-            # Set the region color
-            region.set_property_color(property_vs_color[value])
-
-    def __get_unique_values_for_property(
-            self, property_type: PropertyType) -> Set[str]:
-        """
-        Method that gets the unique values of the given property type for the
-        lattice regions. If any ``Region`` object does not have any property
-        or the given property type is missing, a reference point for the
-        region is stored for logging purposes.
-        An exception showing the coordinates of the points of the problematic
-        regions is raised.
-
-        Parameters
-        ----------
-        property_type : PropertyType
-            The type of property whose unique values to collect.
-
-        Raises
-        ------
-        RuntimeError
-            Showing the coordinates of the points of the regions having any
-            issue.
-
-        Returns
-        -------
-        Set[str]
-            A set of the unique names for the given property type that have
-            been associated to the lattice's regions.
-        """
-        values = set()
-        missing_regions_points = []
-        for region in self.regions:
-            if not region.properties or property_type not in region.properties:
-                missing_regions_points.append(
-                    get_point_coordinates(
-                        make_vertex_inside_face(region.face)))
-                continue
-            values.add(region.properties[property_type])
-        # Raise an exception if there are regions with missing property
-        if missing_regions_points:
-            message = (
-                f"No {property_type.name} property type has been found "
-                "for the regions identified by the inner points with "
-                f"coordinates: ")
-            for point in missing_regions_points[:-1]:
-                message += f"'{point}', "
-            message += (f"'{missing_regions_points[-1]}'. Please, call the "
-                + "'show()' method to show the regions, select the one with "
-                + "a missing property and call the 'set_region_property()' "
-                + "method to assign the property to.")
-            raise RuntimeError(message)
-        return values
-
-    def translate(self, new_pos: Tuple[float, float, float]) -> None:
-        """
-        Method that translates the lattice's geometric elements, i.e. its
-        compound objects representing its full and partial (if any symmetry
-        is applied) geometry layout, the contained cells, including the box,
-        if present, and all the regions.
-
-        Parameters
-        ----------
-        new_pos : Tuple[float, float, float]
-            The X-Y-Z coordinates of the new center of the lattice.
-        """
-        # Store previous lattice center
-        pre_center = self.lattice_center
-        # Build a vector from the current center to the new one
-        transl_vect = make_vector_from_points(pre_center,
-                                              make_vertex(new_pos))
-        # Update the lattice center
-        self.lattice_center = make_vertex(new_pos)
-        # Translate each cell of each layer in the lattice
-        translated_layers: List[List[Cell]] = []
-        # Loop through all the layers to translate the cells
-        for layer in self.layers:
-            translated_layers.append(
-                self.__translate_cells(layer, new_pos, pre_center))
-        # Update the data structure holding the translated cells for each layer
-        self.layers = [
-            [cell for cell in layer] for layer in translated_layers]
-        # Update the list of lattice cells
-        self.lattice_cells = [cell for layer in self.layers for cell in layer]
-
-        # Translate the lattice compound
-        self.lattice_cmpd = make_translation(self.lattice_cmpd, transl_vect)
-        # Translate the lattice box, if any
-        if self.__lattice_box:
-            self.__lattice_box = self.__lattice_box.translate(new_pos)
-        # Translate the lattice compound on which a symmetry operation has
-        # been applied, if any
-        if self.symmetry_type != SymmetryType.FULL:
-            # Update the compound position relative to the shifted lattice
-            # center and apply translation
-            self.lattice_symm = translate_wrt_reference(
-                self.lattice_symm, pre_center, new_pos)
-
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-        # Show the new lattice compound in the current SALOME study
-        self.show()
-
-    def __translate_cells(self,
-                          cells: List[Cell],
-                          ref_coords: Tuple[float, float, float],
-                          original_ref_point: Any) -> List[Cell]:
-        """
-        Method that applies the translation operation to all the cells of the
-        given list of ``Cell`` objects.
-        The new position of each cell relative to the given coordinates is
-        calculated. The translation is then applied.
-
-        Parameters
-        ----------
-        cells : List[Cell]
-            List of ``Cell`` objects to translate so to keep the relative
-            position wrt to the given lattice center
-        ref_coords : Tuple[float, float, float]
-            XYZ coordinates of the point for which the relative distance of
-            each cell must be kept
-        original_ref_point : Any
-            The vertex object each cell was relative to
-
-        Returns
-        -------
-        List[Cell]
-            The list of translated cells so that the relative distance from
-            the new reference point is kept.
-        """
-        translated_cells = []
-        for cell in cells:
-            # Update the cell position relative to the shifted lattice center
-            # and apply translation
-            cell_to_center = compute_point_by_reference(
-                cell.figure.o, original_ref_point, ref_coords)
-            translated_cells.append(cell.translate(cell_to_center))
-        return translated_cells
-
-    def build_regions(
-            self, geo_type: GeometryType = GeometryType.TECHNOLOGICAL
+            cells: List[Cell] = [],
+            centre: Tuple[float, float, float] | None = None,
+            name: str = "CartesianLattice"
         ) -> None:
-        """
-        Method that extracts all the subfaces from the lattice compound
-        object corresponding to the given type of geometry and builds a
-        ``Region`` object for each one.
-        In case any symmetry operation has been applied, this method acts
-        on that result (i.e. the symmetry compound object).
-
-        Each lattice's face object position is compared to the regions of
-        each cell: if any match is found, the cell's region properties are
-        assigned to the ``Region`` object being built for the lattice.
-
-        Parameters
-        ----------
-        geo_type : GeometryType
-            The type of geometry identifying which lattice compound to
-            use for building the lattice regions.
-        """
-        # Get the cells by assembling all the lattice layers
-        self.lattice_cells = self.__assemble_layers()
-        self.__update_lattice_compounds(self.lattice_cells, geo_type)
-        # Get the lattice compound object, given the geometry type and the
-        # current applied symmetry
-        cmpd = self.__get_compound_from_type(geo_type, self.lattice_cells)
-        # Extract the lattice subfaces
-        subfaces = extract_sub_shapes(cmpd, ShapeType.FACE)
-
-        # Re-initialize the lattice regions
-        self.regions.clear()
-        # Extract the 'Region' objects for the lattice cells only
-        self.regions.extend(
-            self.__build_regions_for_subfaces(0, subfaces, self.lattice_cells))
-        print("No. cell regions in lattice:", len(self.regions))
-        # Handle the construction of 'Region' objects for the lattice box
-        # subfaces, if any
-        if self.__lattice_box:
-            box_subfaces = self.__extract_box_subfaces(cmpd, geo_type)
-            print("No. lattice box subfaces", len(box_subfaces))
-            # Add the 'Region' objects for the lattice box subfaces
-            self.regions.extend(
-                self.__build_regions_for_subfaces(
-                    len(self.regions), box_subfaces, [self.__lattice_box]))
-            # Update the lattice found subfaces
-            subfaces += box_subfaces
-
-        print("Total no. regions in lattice:", len(self.regions))
-        print("Total no. subfaces in lattice:", len(subfaces))
-        # Check if the number of subfaces coincides with the one of the built
-        # regions
-        if len(subfaces) != len(self.regions):
-            raise AssertionError("Mismatch between the number of lattice "
-                                 f"subfaces ({len(subfaces)}) and that of "
-                                 f"found regions ({len(self.regions)})")
-        # Set that there is no longer a need to update the lattice geometry
-        self.is_update_needed = False
-
-    def __build_regions_for_subfaces(
-            self,
-            indx: int,
-            faces: List[Any],
-            lattice_cells: List[Cell]
-            ) -> List[Region]:
-        """
-        Method that builds a list of ``Region`` objects for each of the given
-        face objects.
-        The names of the regions are set with an increasing index with a
-        given starting value.
-        Properties to associate to each ``Region`` object are taken from the
-        properties dictionary for the cell corresponding to the region. Cells
-        are provided as third input to the method.
-
-        Parameters
-        ----------
-        indx : int
-            The starting value for the index used when assigning the name of
-            the region.
-        faces : List[Any]
-            A list of face objects for which ``Region`` objects are built.
-        lattice_cells : List[Cell]
-            A list of ``Cell`` objects representing the lattice cells.
-
-        Returns
-        -------
-        List[Region]
-            A list of ``Region`` objects each corresponding to a specific face
-            object.
-        """
-        # List of regions to build
-        regions = []
-        # Loop through the faces
-        for face in faces:
-            found = False
-            # Get a vertex inside the subface
-            subface_point = make_vertex_inside_face(face)
-            # Loop through all the regions and properties of each lattice cell
-            for cell in lattice_cells:
-                if not is_point_inside_shape(subface_point, cell.face):
-                    continue
-                for region, properties in cell.tech_geom_props.items():
-                    # Check if the face point is within the lattice region
-                    if is_point_inside_shape(subface_point, region):
-                        # Update the index
-                        indx += 1
-                        # Build a 'Region' object
-                        regions.append(
-                            Region(
-                                face=face,
-                                inner_point=subface_point,
-                                name=f"Region {indx}",
-                                properties=deepcopy(properties)
-                            ))
-                        found = True
-                        break
-                # If a region has been found for the current cell, a new
-                # lattice subface is evaluated
-                if found:
-                    break
-            if not found:
-                raise RuntimeError(
-                    "No cell found for face whose inner point has "
-                    f"coordinates: {get_point_coordinates(subface_point)}")
-        # Return the list
-        return regions
-
-    def __get_compound_from_type(
-            self, geo_type: GeometryType, lattice_cells: List[Cell]) -> Any:
-        """
-        Method that returns the compound object of the lattice according to
-        the given type of geometry and the applied symmetry type.
-        The compound for the given list of cells is extracted correspondingly
-        to the geometry type.
-        In case of a ``FULL`` symmetry, the full lattice compound, eventually
-        cut by the box, is returned. If any symmetry is applied, the shape
-        of the symmetry is built and used to cut the corresponding part of
-        the lattice compound.
-
-        Parameters
-        ----------
-        geo_type : GeometryType
-            Member of the ``GeometryType`` enumeration indicating which cell
-            faces to use for extracting the lattice compound.
-        lattice_cells : List[Cell]
-            List of ``Cell`` objects to extract the full compound from,
-            according to the type of geometry.
-
-        Returns
-        -------
-        Any
-            A compound object containing only the lattice cells. This is
-            built from the technological geometry or the sectorized one;
-            the currently applied symmetry determines the layout of the
-            returned compound.
-        """
-        # Get the lattice compound that matches the indicated geometry type
-        lattice_cmpd = get_compound_from_geometry(geo_type, lattice_cells)
-        # Handle the different type of symmetry to build the final compound
-        match self.symmetry_type:
-            case SymmetryType.FULL:
-                # If any lattice box is present, cut it out from the lattice
-                # compound object
-                return self.__cut_lattice_with_box(lattice_cmpd)
-            case _:
-                # Extract the shape of the symmetry by extracting its
-                # borders and building a face object
-                shape = make_face(
-                    build_compound_borders(self.lattice_symm))
-                # If any lattice box is present, cut it out from the lattice
-                # compound object. Then, perform a common operation of the
-                # result with the symmetry shape.
-                return make_common(
-                    self.__cut_lattice_with_box(lattice_cmpd), shape)
-
-    def __cut_lattice_with_box(self, cmpd: Any) -> Any:
-        """
-        Method that cuts the given compound object with the box area closest
-        to the lattice center, if any container has been declared.
-        If not, the same compound is returned untouched.
-
-        Parameters
-        ----------
-        cmpd : Any
-            The compound object to cut with the inmost box area.
-
-        Returns
-        -------
-        Any
-            The given compound object cut by the inmost box area or the same
-            compound, if no container has been declared.
-        """
-        # If any lattice box is present, cut it out from the
-        # lattice compound object (the one with only the cells
-        # and no box)
-        if self.__lattice_box:
-            return make_common(cmpd, self.__extract_inner_box())
-        return cmpd
+        # Initialise the superclass
+        super().__init__(cells=cells, centre=centre, name=name)
+        # Update the state of the lattice
+        self.state.is_update_needed = True
 
     def add_ring_of_cells(
             self,
             cell: Cell,
-            ring_indx: int,
-            layer_indx: int | None = None) -> None:
+            ring_index: int,
+            layer_index: int | None = None
+        ) -> None:
         """
-        Method that adds a ring of cells of the same type to the lattice at
-        a given ring index and layer.
+        Method that adds a ring of ``Cell`` objects to the lattice at the
+        positions that correspond to the given ring index and layer.
         This method iteratively adds the provided ``Cell`` object at specific
-        construction points determined by the `ring_indx` parameter, which
-        indicates the ring (distance from the center) where the cells should
-        be placed. Optionally, a ``layer_indx`` can be provided to specify the
-        layer to which the ring of cells is added; if not provided, the cells
-        are added to a new layer.
-
-        Notes
-        -----
-        - Index 0 refers to the center cell of the lattice (valid for lattices
-          with hexagonal cells or cartesian ones, the latter if an odd number
-          of cells is provided on the side); indices greater than 0 refer to
-          rings around the center.
-        - The method ensures that the cells to add have the same ``CellType``
-          of the ones in the lattice.
+        construction points determined by the `ring_index` parameter, which
+        indicates the ring where the cells should be placed.
+        Optionally, a ``layer_index`` can be provided to specify the layer to
+        which the ring of cells is added; if not provided, the cells are
+        added to a new layer.
 
         Parameters
         ----------
         cell : Cell
             The ``Cell`` instance to be added repeatedly to form a ring.
-        ring_indx : int
+        ring_index : int
             The index indicating which ring to add the cells to.
-        layer_indx : int | None = None
+        layer_index : int | None = None
             The index of the layer to which the cells are added. If ``None``,
             a new layer is created.
 
         Raises
         ------
-        RuntimeError
-            If the cell's ``CellType`` does not match the one of the lattice
-            cells.
-        RuntimeError
+        ValueError
             If indicating ``0`` as the ring index where cells should be added.
-        RuntimeError
-            If the cell to add has an invalid rotation angle.
-        RuntimeError
-            If the type of cells of the lattice is not supported.
+        ValueError
+            If indicating a layer index not falling within the valid range
+            of existing layers.
+
+        Notes
+        -----
+        Index 0 refers to the lattice centre (for lattices with an even
+        number of cells on one if the sides) or the central cell (valid for
+        lattices with an odd number of cells on both sides); indices greater
+        than 0 refer to rings around the centre.
         """
-        try:
-            # Check that the cell to add has the same type of the ones already
-            # present
-            self.__check_cell_type(cell.cell_type)
-            # Check the validity of the indicated ring index
-            if ring_indx == 0:
-                raise RuntimeError(
-                    "It is not possible to add a ring of cells at the "
-                    "indicated 0 index.")
-            # Check the validity of the cell's rotation angle and update the
-            # value representative of the main pattern of cells
-            self.__set_main_rotation_angle(math.degrees(cell.rotation))
-        except RuntimeError as e:
-            raise RuntimeError(f"Error when adding a ring of cells: {e}")
-        # If no layer index is provided, the ring of cells is added to a new
-        # layer
-        if layer_indx is None:
-            layer_indx = len(self.layers)
-            self.layers.append([])
+        # Check the validity of the indicated ring index
+        ensure_not_zero(
+            ring_index,
+            "It is not possible to add a ring of cells at the given 0 index"
+        )
+        # Include the given layout at the end of the layer sublist specified
+        # by the indicated index, if any; otherwise, either create a new
+        # sublist or raise an exception
+        layer_index = self._compute_layer_index(layer_index)
+        # Get the cell's dimensions
+        cell_width = cell.shape.dimensions[0]
+        cell_heigth = cell.shape.dimensions[1]
+
         # Evaluate the multiplication factor for determining the construction
         # figure where the centers of the cells will be placed
-        if not cell.cell_type == CellType.HEX:
-            for cell in self.lattice_cells:
-                if get_min_distance(cell.figure.o,
-                                    self.lattice_center) < 1e-5:
-                    n = 2*ring_indx
-                    break
-            else:
-                n = 2*ring_indx - 1
-        else:
-            n = 2*ring_indx
-        # Build the construction figure accordingly with the type of lattice
-        # cells (either a rectangle or a hexagon figure)
-        match self.cells_type:
-            case CellType.RECT:
-                construction_fig = Rectangle(
-                    get_point_coordinates(self.lattice_center),
-                    n*cell.figure.ly,
-                    n*cell.figure.lx)
-                # Rotate by 90° the construction figure if the cells have
-                # a rotation angle of 90°
-                if math.isclose(90.0, self.__cells_rot):
-                    construction_fig.rotate(90.0)
-            case CellType.HEX:
-                construction_fig = Hexagon(
-                    get_point_coordinates(self.lattice_center),
-                    n*cell.figure.ly)
-                # Rotate by 90° the construction figure if the cells have
-                # a rotation angle of 0°
-                if math.isclose(0.0, self.__cells_rot):
-                    construction_fig.rotate(90.0)
-                # Parameter for identifying the subdivision points
-                n = int(n/2)
-            case _:
-                raise RuntimeError(f"The {self.cells_type} is not handled.")
-        # Loop through the borders of the construction figure and place a
-        # cell on each subdivision point, given by the ring index and the
-        # subdivision parameter
-        for border in construction_fig.borders:
-            for i in range(0, n):
-                # Build a subdivision point onto the figure borders
-                p = get_point_coordinates(make_vertex_on_curve(border, i/(n)))
-                # Add the cell at the position of the subdivision point
-                self.__add_cell_to_layer(cell, p, layer_indx)
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
+        n = self._evaluate_ring_factor(ring_index)
+        # Build the construction figure
+        construction_fig = self._build_ring_construction_figure(
+            cell_width, cell_heigth, n
+        )
+        # Compute the positions of the centres of the cells along the
+        # indicated ring
+        centres = compute_subdivision_points_on_borders(n, construction_fig)
 
-    def __check_cell_type(self, cell_type: CellType) -> None:
+        # If needed, update the cell's tree before adding the cell
+        cell.update_hierarchical_structure()
+        # Add the cell at the given centre positions
+        self.layers[layer_index].extend(
+            get_cell_at_centres(
+                cell,
+                centres,
+                self.rot_angle,
+                wrap_shape(build_z_axis_from_vertex(self.o))
+            )
+        )
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
+        self.state.is_update_needed = True
+
+    def add_rings_of_cells(
+            self,
+            cell: Cell,
+            no_rings: int,
+            ring_index: int = 1,
+            layer_index: int | None = None
+        ) -> None:
         """
-        Method that checks the consistency of the given cell type with the
-        one associated to the lattice cells.
-
-        If the lattice does not have a defined cell type yet, it is set to
-        the provided one. If the cell type for the lattice is defined, an
-        exception is raised if the provided one differs from it.
-
-        Parameters
-        ----------
-        cell_type : CellType
-            The geometric type of the cell to check or set.
-
-        Raises
-        ------
-        RuntimeError
-            If the provided ``cell_type`` does not match the existing lattice
-            cell type.
-        """
-        # Store the value, if not already set
-        if not self.cells_type:
-            self.cells_type = cell_type
-        else:
-            if cell_type != self.cells_type:
-                raise RuntimeError(
-                    f"The geometric type '{cell_type}' differs from the "
-                    f"'{self.cells_type}' one of the cells in the lattice.")
-
-    def add_rings_of_cells(self, cell: Cell, no_rings: int) -> None:
-        """
-        Method that adds to the lattice several rings of cells of the same
-        type. The cell is provided as an object of one of the ``Cell``
-        subclasses, which is iteratively added, for each index of rings, at
-        specific construction points.
-        The rings of cells are added starting from the current maximum value
-        of rings for the lattice and to a new layer.
+        Method that adds several rings of ``Cell`` objects to the lattice at
+        the positions calculated for each ring indicated by the total number
+        of rings, starting from the `ring_index` parameter.
+        Optionally, a ``layer_index`` can be provided to specify the layer to
+        which the ring of cells is added; if not provided, the cells are
+        added to a new layer.
 
         Parameters
         ----------
         cell : Cell
-            The cell instance to be iteratively added in order to build the
-            rings of cells.
+            The ``Cell`` instance to be iteratively added in order to build
+            the rings of cells.
         no_rings : int
-            The number of rings to add starting from the current maximum
-            value of rings for the lattice.
+            The number of rings to add starting from the indicated ring index.
+        ring_index : int = 1
+            The index indicating the starting ring index. Default value is 1.
+        layer_index : int | None = None
+            The index of the layer to which the cells are added. If ``None``,
+            a new layer is created.
 
         Raises
         ------
-        RuntimeError
-            If the cell's ``CellType`` does not match the one of the lattice
-        RuntimeError
-            If the cell's ``CellType`` does not match the one of the lattice
-            cells.
-        RuntimeError
-            If indicating ``0`` as the ring index where cells should be added.
-        RuntimeError
-            If the cell to add has an invalid rotation angle.
-        RuntimeError
-            If the type of cells of the lattice is not supported.
-        """
-        # Raise an exception if the number of rings to add is less than 1
-        if no_rings < 1:
-            raise RuntimeError(f"Wrong number ({no_rings}) of rings of "
-                               "cells to add has been indicated.")
-        # Initialize a new sub list identifying a new layer of cells
-        self.layers.append([])
-        # Loop through the ring indices starting from the current number of
-        # rings of cells
-        n0 = self.rings_no
-        for i_ring in range(n0+1, n0+no_rings+1):
-            # Add a ring of cells at the current index
-            self.add_ring_of_cells(cell, i_ring, len(self.layers) - 1)
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-
-    def set_lattice_box_properties(
-            self, properties: Dict[PropertyType, List[str]]) -> None:
-        """
-        Method that allows to set the properties of the lattice box itself and
-        to the area between the cells and the box contour, if any.
-        The assumed convention for the elements in the list is outwards from
-        the lattice center.
-
-        Parameters
-        ----------
-        properties : Dict[PropertyType, List[str]]
-            Dictionary collecting the properties for each region of the
-            lattice box; different types, provided by the ``PropertyType``
-            enumeration, can be provided.
-
-        Raises
-        ------
-        RuntimeError
-            If no properties are provided.
-        RuntimeError
-            If calling this method after directly assigning a lattice's box
-            instead of providing its layers.
-        RuntimeError
-            If there is no correspondence between the number of box regions
-            and that of the properties.
-        """
-        if not properties:
-            raise RuntimeError("No properties have been provided")
-        if not self.box_layers and self.__lattice_box:
-            raise RuntimeError(
-                "The lattice box has been declared by directly assigning the "
-                "cell instance instead of providing its layers. This method "
-                "only works when building the box from the layers by calling "
-                "the method 'build_lattice_box().'")
-        # Check if the number of box regions coincides with the number of
-        # property elements for all the given property types: for hexagonal
-        # lattices it is needed to consider also the area between the cells
-        # and the box, hence the number of regions are 1 more than the case
-        # for cartesian cells.
-        no_regions = len(self.box_layers)
-        if self.cells_type == CellType.RECT:
-            no_regions -= 1
-        for type, values in properties.items():
-            if not no_regions == len(values):
-                message = "There is no correspondence between the number " +\
-                          f"of box regions ({no_regions}) and that of the " +\
-                          f"properties with type '{type.name}' (no. " +\
-                          f"{len(values)})"
-                raise RuntimeError(message)
-
-        # Clear any previously set entry in the dictionary associating the
-        # regions to the properties, as this method sets the properties for
-        # all.
-        self.__lattice_box.tech_geom_props.clear()
-        # Extract the lattice box subfaces
-        box_subfaces = extract_sorted_sub_shapes(self.__lattice_box.face,
-                                                 ShapeType.FACE)
-        # Sort the box regions according to their distance from the lattice
-        # center and their perimeter in reverse order: this so that the
-        # outmost layer of the box is the first element and so on with the
-        # others.
-        box_subfaces = sorted(
-            box_subfaces,
-            key=lambda subface: get_min_distance(self.lattice_center,
-                                                 make_cdg(subface))
-                                and get_basic_properties(subface)[0],
-            reverse=True)
-        indx = 0
-        # Assign the value for each property type to all the box regions
-        for region in box_subfaces:
-            prop_types = {}
-            for type, values in properties.items():
-                # Reverse-sort the values
-                values = values[::-1]
-                if indx < len(values) - 1:
-                    prop_types[type] = values[indx]
-                else:
-                    # Properties for regions between cells and layers
-                    prop_types[type] = values[-1]
-            # Associate a region with its properties
-            self.__lattice_box.tech_geom_props[region] = prop_types
-            # Update the index
-            indx += 1
-
-    def __extract_box_subfaces(
-            self, lattice_cmpd: Any, geom_type: GeometryType) -> List[Any]:
-        """
-        Method that extracts the lattice box subfaces, i.e. the box layers
-        and the areas between the cells and the container layers, if any
-        (as depending on the cells geometry).
-        If any symmetry type, other than ``FULL``, is applied, the common part
-        between the box and the shape of the symmetry is extracted first.
-        By cutting the box with the compound made of lattice cells only, the
-        remaining parts are the ones only strictly belonging to the box.
-
-        Parameters
-        ----------
-        lattice_cmpd : Any
-            The lattice compound object made by the cells only.
-        geom_type : GeometryType
-            Indicating the geometry layout of the box cell from which face
-            objects are extracted.
-
-        Raises
-        ------
-        RuntimeError
-            If no face objects are available after cutting the box face
-            with the compound made from the lattice cells only.
-        RuntimeError
-            In case the geometry type is different from ``TECHNOLOGICAL``
-            or ``SECTORIZED`` cases.
-
-        Returns
-        -------
-        List[Any]
-            A list of face objects of the container layers and the areas
-            between the cells and the box. Elements are sorted according to
-            their distance from the lattice center and their perimeter in
-            reverse order. The result is that the outmost layer of the box
-            occupies the first position in the returned list and so on with
-            the others.
-        """
-        # Get the box geometry layout according to the given geometry type
-        box = get_compound_from_geometry(geom_type, [self.__lattice_box])
-        # Handle symmetry types other than FULL
-        if self.symmetry_type != SymmetryType.FULL:
-            # Get the shape of the symmetry
-            shape = make_face(build_compound_borders(self.lattice_symm))
-            # Extract the common part between the box and the symmetry shape
-            box = make_common(box, shape)
-        # Cut the box with the lattice cells, so that only the box areas
-        # remain, and extract its face objects, if any
-        box_faces = extract_sorted_sub_shapes(
-            make_cut(box, lattice_cmpd), ShapeType.FACE)
-        if not box_faces:
-            raise RuntimeError(
-                "Error in extracting the box areas of the lattice.")
-        # Return the sorted box regions
-        return sorted(
-            box_faces,
-            key=lambda subface: get_min_distance(self.lattice_center,
-                                                 make_cdg(subface))
-                                and get_basic_properties(subface)[0],
-            reverse=True)
-
-    def get_regions_info(self) -> None:
-        """
-        Method for retrieving descriptive information about any of the lattice
-        regions whose corresponding object has been selected in the SALOME
-        study.
-        """
-        # Extract the geometrical objects the given ID corresponds to in the
-        # current SALOME study
-        shape = retrieve_selected_object(
-            "Please, select a single region whose data to show.")
-        # Get the region that corresponds to the given shape and print the
-        # corresponding data
-        print(get_region_info(shape, self.regions))
-
-    def rotate(self, angle: float = 0.0) -> None:
-        """
-        Method that rotates all the lattice's geometric elements by the given
-        angle in degrees around the Z-axis originating from the lattice's
-        centre.
-        The rotated elements are the lattice's compound objects representing
-        its full and partial (if any symmetry is applied) geometry layouts,
-        the contained cells, including the box, if present, and all the
-        ``Region`` objects.
-
-        Parameters
-        ----------
-        angle : float
-            The rotation angle in degrees.
-
-        Raises
-        ------
-        RuntimeError
-            If the lattice's cells have an invalid rotation angle after their
-            rotation.
-        """
-        # Return immediately if the rotation angle is 0.0
-        if math.isclose(angle, 0.0):
-            print("No rotation is performed as the given angle is 0.0°")
-            return
-        # Build the Z-axis of rotation
-        x, y, _ = get_point_coordinates(self.lattice_center)
-        z_axis = make_vector_from_points(
-            self.lattice_center, make_vertex((x, y, 1)))
-        # Apply the rotation of all the lattice's geometric elements around
-        # the given axis
-        self.__apply_rotation(angle, z_axis)
-
-    def rotate_from_axis(self, angle: float, axis: Any) -> None:
-        """
-        Method that rotates all the lattice's geometric elements by the given
-        angle in degrees around the given axis object.
-        The rotated elements are the lattice's compound objects representing
-        its full and partial (if any symmetry is applied) geometry layouts,
-        the contained cells, including the box, if present, and all the
-        ``Region`` objects.
-
-        Parameters
-        ----------
-        angle : float
-            The angle of rotation in degrees.
-        axis : Any
-            The vector object representing the rotation axis.
-
-        Raises
-        ------
-        RuntimeError
-            If the lattice's cells have an invalid rotation angle after their
-            rotation.
-        """
-        # Return immediately if the rotation angle is 0.0
-        if math.isclose(angle, 0.0):
-            print("No rotation is performed as the given angle is 0.0°")
-            return
-        # Apply the rotation of all the lattice's geometric elements around
-        # the given axis
-        self.__apply_rotation(angle, axis)
-
-    def __apply_rotation(self, angle: float, axis: Any) -> None:
-        """
-        Method that rotates all the lattice's geometric elements by the given
-        angle in degrees around the given axis object.
-        The rotated elements are the lattice's compound objects representing
-        its full and partial (if any symmetry is applied) geometry layouts,
-        the contained cells, including the box, if present, and all the
-        ``Region`` objects.
-
-        Parameters
-        ----------
-        angle : float
-            The angle of rotation in degrees.
-        axis : Any
-            The vector object representing the rotation axis.
-
-        Raises
-        ------
-        RuntimeError
-            If lattice's cells do not share the same rotation angle after
-            applying the rotation or the value is not among the admitted
-            ones according to the cell's type.
-        """
-        # Convert the rotation angle in radians
-        rotation = math.radians(angle)
-        # Rotate the lattice center
-        self.lattice_center = make_rotation(
-            self.lattice_center, axis, rotation
-        )
-        # Rotate the lattice compound
-        self.lattice_cmpd = make_rotation(self.lattice_cmpd, axis, rotation)
-        # Loop through all the layers to rotate the cells
-        rotated_layers: List[List[Cell]] = []
-        for layer in self.layers:
-            rotated_layers.append(
-                self.__rotate_cells(layer, angle, axis))
-        # Update the data structure holding the rotated cells for each layer
-        self.layers = [
-            [cell for cell in layer] for layer in rotated_layers]
-        # Update the list of lattice cells
-        self.lattice_cells = [cell for layer in self.layers for cell in layer]
-        # Rotate the lattice box, if any
-        if self.__lattice_box:
-            self.__lattice_box.rotate_from_axis(angle, axis)
-        # Rotate the lattice compound on which a symmetry operation has been
-        # applied, if any
-        if self.symmetry_type != SymmetryType.FULL:
-            self.lattice_symm = make_rotation(
-                self.lattice_symm, axis, rotation)
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-        # Show the new lattice compound in the current SALOME study
-        self.show()
-
-    def __rotate_cells(self,
-                       cells: List[Cell],
-                       angle: float,
-                       axis: Any) -> List[Cell]:
-        """
-        Method that applies the rotation operation to all the cells of the
-        given list of ``Cell`` objects. It returns a list of the rotated
-        cells.
-
-        Parameters
-        ----------
-        cells : List[Cell]
-            List of ``Cell`` objects to rotate.
-        angle : float
-            The rotation angle in degrees.
-        axis : Any
-            The vector object being the rotation axis.
-
-        Returns
-        -------
-        List[Cell]
-            The list of rotated cells.
-        """
-        rotated_cells = []
-        for cell in cells:
-            cell.rotate_from_axis(angle, axis)
-            rotated_cells.append(deepcopy(cell))
-        return rotated_cells
-
-    def set_region_property(
-            self,
-            property_type: PropertyType,
-            value: str,
-            region: Any | None = None) -> None:
-        """
-        Method that allows to set the value of the given type of property for
-        the lattice region which is currently selected in the SALOME study.
-        After applying the modification, when calling the method for showing
-        the lattice in the SALOME 3D viewer, the region is displayed with the
-        color associated to the value of the property type that has been set.
-
-        Parameters
-        ----------
-        property_type : PropertyType
-            The member of the ``PropertyType`` enumeration indicating which
-            type of property to modify for the selected region.
-        value : str
-            The value of the property type to assign to the selected region.
-        region : Any | None = None
-            The lattice's region of the technological geometry whose property
-            to change. When not provided, the region currently selected is
-            considered.
-
-        Raises
-        ------
-        RuntimeError
-            If the lattice's geometry layout currently displayed in the SALOME
-            viewer is not the technological one.
-        RuntimeError
-            If no region or more than one has been selected.
-        """
-        # Check which cell geometry type is currently shown; if different
-        # from the TECHNOLOGICAL one, raise an exception
-        if self.displayed_geom != GeometryType.TECHNOLOGICAL:
-            raise RuntimeError(
-                f"Currently showing the {self.displayed_geom.name} type of "
-                "geometry. To set lattice regions properties, show the '"
-                "TECHNOLOGICAL' geometry first.")
-        # Extract the geometrical object currently selected in the current
-        # SALOME study, if no one is provided as input
-        if region is None:
-            region = retrieve_selected_object(
-                "Please, select a single region to assign a property to.")
-
-        # Get the list of cells, eventually cut by the lattice box
-        cells = self.__get_cells_and_box()
-        # Get the region that corresponds to the given shape and set the
-        # value for the indicated property
-        self.__set_region_property(region, cells, property_type, value)
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-
-    def __get_cells_and_box(self) -> List[Cell]:
-        """
-        Method that provides a copy of the list of ``Cell`` objects comprising
-        all the cells in the lattice including the box, if present.
-        The ``Cell`` object for the lattice box is cut by removing all the
-        area occupied by the cells.
-
-        Returns
-        -------
-        List[Cell]
-            A list of ``Cell`` objects made by the lattice cells and the box
-            cell, if any.
-        """
-        # Get the compound corresponding to the technological geometry of the
-        # cells and the currently applied symmetry
-        cmpd = self.__get_compound_from_type(GeometryType.TECHNOLOGICAL,
-                                             self.lattice_cells)
-        # Store all the cells to look for the region to update
-        cells: List[Cell] = []
-        # If a box is present, add it to the list of cells
-        if self.__lattice_box:
-            # Copy the lattice box cell and update its face by cutting out the
-            # cells; this to prevent to select the box region instead of a
-            # cell as the box is not empty
-            lattice_box = deepcopy(self.__lattice_box)
-            lattice_box.face = make_compound(
-                self.__extract_box_subfaces(cmpd, GeometryType.TECHNOLOGICAL))
-            cells.append(lattice_box)
-        # Add all the lattice cells traversing the layers in reverse order
-        cells.extend([cell for layer in self.layers[::-1] for cell in layer])
-        return cells
-
-    def __set_region_property(
-            self,
-            shape: Any,
-            cells: List[Cell],
-            property_type: PropertyType,
-            value: str) -> None:
-        """
-        Method that looks for the given region in the dictionary of cells'
-        regions vs properties and sets the value for the indicated property
-        type.
-
-        Parameters
-        ----------
-        shape : Any
-            The lattice's region of the technological geometry whose property
-            to change.
-        cells : List[Cell]
-            The list of ``Cell`` objects made by all the lattice's cells and
-            the box.
-        property_type : PropertyType
-            Indicating the type of property the value associated to the
-            region needs to be changed.
-        value : str
-            The value of the property type to set.
-
-        Raises
-        ------
-        RuntimeError
-            If no region can be found among the ones stored in the properties
-            dictionary for each of the analysed cells.
-        """
-        # Point for idendifying the shape in the geometry
-        point = make_vertex_inside_face(shape)
-        # Get the region that corresponds to the given shape
-        for i, cell in enumerate(cells):
-            # Continue with another cell if the shape is not contained within
-            # the cell's area (reference point inside cell's face and common
-            # area between cell and shape is the shape itself)
-            if (not is_point_inside_shape(point, cell.face)):
-                continue
-            # Search for the region among the faces stored in the cell
-            # dictionary of regions VS properties (box case, if any)
-            if i == 0 and self.__lattice_box is not None:
-                for zone in self.__lattice_box.tech_geom_props:
-                    if (is_point_inside_shape(point, zone)):
-                        self.__lattice_box.tech_geom_props[zone][
-                            property_type] = value
-                        return
-                else:
-                    continue
-            # Search for the region among the cells (lattice's cells)
-            for region in cell.tech_geom_props:
-                if is_point_inside_shape(point, region):
-                    cell.tech_geom_props[region][property_type] = value
-                    return
-        # Raise an exception if no region has been found
-        else:
-            raise RuntimeError(
-                "No lattice region could be found for the selected shape.")
-
-    def restore_cells(self,
-                      cells: List[Cell],
-                      properties: Dict[PropertyType, str],
-                      ignore_not_cut: bool = True) -> None:
-        """
-        Method that restores the geometry layout of the given cells by
-        removing any circular region, while setting properties accordingly
-        with the provided dictionary.
-        If any cell has no centered circular regions, the restore operation
-        is not performed.
-        If the ``ignore_not_cut`` boolean flag is ``True``, this operation is
-        performed only if the compound made of the circular regions is cut
-        by the cell's face. Otherwise, if ``True``, all the given cells are
-        restored.
-
-        Parameters
-        ----------
-        cells: List[Cell]
-            List of shallow copies of the ones in the lattice that should
-            be restored.
-        properties : Dict[PropertyType, str]
-            Providing the values for each type of property to assign to the
-            cells being restored.
-        ignore_not_cut : bool = True
-            Boolean flag indicating whether the cells whose circular regions
-            are not cut should also be restored or not.
+        ValueError
+            If indicating a value less than ``1`` for the total number of
+            rings to add.
+        ValueError
+            If indicating ``0`` as the ring index from which the rings of
+            cells should be added.
+        ValueError
+            If indicating a layer index not falling within the valid range
+            of existing layers.
 
         Notes
         -----
-        This method should be called after building the lattice
-        regions by overlapping all the layers of cells, i.e. after calling
-        either the ``show`` or the ``build_regions`` methods.
-        This method has an effect only if the given list of cells contains
-        shallow copies of the `Cell` objects included in the present
-        ``Lattice`` instance.
+        Index 0 refers to the lattice centre (for lattices with an even
+        number of cells on one if the sides) or the central cell (valid for
+        lattices with an odd number of cells on both sides); indices greater
+        than 0 refer to rings around the centre.
         """
-        # Filter the cells to be restored
-        if ignore_not_cut:
-            # Loop through all the given cells to get the ones to restore
-            cells_to_restore = [
-                cell for cell in cells if check_cell_circle_are_cut(cell)
-            ]
+        # Raise an exception if the number of rings to add is less than 1
+        if no_rings < 1:
+            raise ValueError(
+                f"Wrong number ({no_rings}) of rings of cells to add has "
+                "been indicated."
+            )
+        # Check the validity of the indicated ring index
+        ensure_not_zero(
+            ring_index,
+            "It is not possible to add a ring of cells at the given 0 index"
+        )
+        # Include the layouts at the end of the layer sublist specified
+        # by the indicated index, if any; otherwise, either create a new
+        # sublist or raise an exception
+        layer_index = self._compute_layer_index(layer_index)
+        # Loop through the ring indices starting from the indicated one
+        for i_ring in range(ring_index, ring_index+no_rings):
+            # Add a ring of cells at the current index
+            self.add_ring_of_cells(cell, i_ring, layer_index)
+
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
+        self.state.is_update_needed = True
+
+    def _build_ring_construction_figure(
+            self, width: float, heigth: float, n: int
+        ) -> Rectangle:
+        """
+        Method that builds and return a ``Rectangle`` object representing
+        the construction figure on whose borders the cells belonging to the
+        same ring will be placed. The dimensions of the rectangle depends on
+        the given dimensions and the multiplication factor.
+        The resulting figure is built with centre in the lattice centre, and,
+        if needed, is rotated accordingly with the rotation angle of the
+        lattice.
+
+        Parameters
+        ----------
+        width : float
+            The width of the ``Rectangle`` object.
+        heigth : float
+            The heigth of the ``Rectangle`` object.
+        n : int
+            The scaling factor for the dimensions of the ``Rectangle`` object.
+
+        Returns
+        -------
+        Rectangle
+            The ``Rectangle`` object built accordingly with the given
+            dimensions.
+        """
+        construction_fig = Rectangle(
+            get_point_coordinates(self.o), n*heigth, n*width
+        )
+        # Rotate the construction figure, if needed
+        construction_fig.rotate(self.rot_angle)
+        return construction_fig
+
+    @use_symmetry_logic(build_cartesian_symmetry_shape)
+    def _build_symmetry_shape(
+            self,
+            symmetry: SymmetryType,
+            domain: SymmetryDomain
+        ) -> Surface:
+        """
+        Method that builds the geometric shape that corresponds to the given
+        symmetry type and domain for a Cartesian-type layout.
+        In addition to the symmetry types available for all the geometry
+        layouts, this method supports those symmetries specific for a
+        Cartesian layout.
+
+        Supported symmetries are:
+
+        - FULL: returns the characteristic shape of the cell.
+        - HALF: builds a rectangle representing half of the cell.
+        - QUARTER: builds a rectangle representing one quarter of the cell.
+        - EIGHTH: builds a right triangle representing one eighth of the cell.
+        - DIAG: builds a right triangle representing the diagonal symmetry of
+          the cell.
+
+        Parameters
+        ----------
+        symmetry : SymmetryType
+            The symmetry type for which the characteristic shape is built.
+        domain : SymmetryDomain
+            Instance providing the domain of the full layout in terms of
+            XY-bounding extents, full shape and its centre.
+
+        Returns
+        -------
+        Surface
+            A geometric shape representing the requested symmetry.
+
+        Raises
+        ------
+        RuntimeError
+            If the indicated symmetry type is not supported for a Cartesian
+            layout.
+
+        Notes
+        -----
+        The method is decorated so that it calls the function handling the
+        construction of the symmetry shape for hexagonal-type layouts. For
+        this reason, no implementation is included here.
+        """
+        pass
+
+    def _evaluate_ring_factor(self, ring_indx: int) -> int:
+        """
+        Method that evaluates the multiplication factor used to derive
+        the construction figure along whose borders the cells belonging
+        to the same ring index will be placed.
+        The returned value depends on whether a central cell is present.
+
+        Parameters
+        ----------
+        ring_indx : int
+            The index of the ring for which the factor has to be derived.
+
+        Returns
+        -------
+        int
+            The multiplication factor dependent on the presence of a central
+            cell in the Cartesian lattice.
+        """
+        for layer in self.layers:
+            for layout in layer:
+                if are_same_shapes(layout.o, self.o, ShapeType.VERTEX):
+                    return 2*ring_indx
+            else:
+                continue
         else:
-            cells_to_restore = cells
-        # Restore the geometry and properties of the cells
-        for cell in cells_to_restore:
-            cell.restore()
-            cell.set_properties({k: [v] for k, v in properties.items()})
+            return 2*ring_indx - 1
 
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-
-    def set_type_geo(self, type_geo: LatticeGeometryType) -> None:
+    def _update_shape(self) -> None:
         """
-        Method that sets the geometry type for the lattice, as item of the
-        ``LatticeGeometryType`` enumeration.
-        It checks if the provided geometry type is valid for the type of
-        cells of the lattice and the currently applied type of symmetry.
-        In case of types involving TRAN-type of BCs, the assignement is done
-        only if the lattice is either made by a single cell or if enclosed in
-        a box.
-        An exception is raised if the geometry type is not compatible.
-
-        Parameters
-        ----------
-        type_geo : LatticeGeometryType
-            The geometry type to set for the lattice.
-
-        Raises
-        ------
-        RuntimeError
-            If the given geometry type is not compatible with the type of
-            cells and the applied symmetry type.
+        Method that updates the ``Rectangle`` object representing the shape
+        that encloses the lattice.
         """
-        # Check if the given type of geometry is valid for the type of cells
-        # in the lattice and the currently applied type of symmetry.
-        try:
-            # Get the list of types of geometry available for the lattice
-            types_geo = CELL_VS_SYMM_VS_TYP_GEO[self.cells_type][
-                self.symmetry_type]
-            if type_geo not in types_geo:
-                raise KeyError
-        except KeyError:
-            raise RuntimeError(
-                f"The given type of geometry '{type_geo}' is not compatible "
-                "with the type of cells of the lattice (i.e. "
-                f"'{self.cells_type}') and the applied symmetry type '"
-                f"{self.symmetry_type}'. Expected values are {types_geo}.")
-
-        # Check if the given type of geometry is compatible with the lattice
-        # layout; types involving TRAN-type of BCs can be applied only if the
-        # lattice has either a single cell or is enclosed in a box
-        if type_geo in [LatticeGeometryType.HEXAGON_TRAN,
-                        LatticeGeometryType.RECTANGLE_TRAN]:
-            if len(self.lattice_cells) > 1 and self.__lattice_box is None:
-                raise RuntimeError(
-                    f"The given type of geometry '{type_geo}' is not "
-                    "compatible with the current lattice geometry layout as "
-                    "made by more than one cell without being enclosed in a "
-                    "box."
-                )
-        # Assign the lattice type of geometry
-        self.__type_geo = type_geo
-
-    def __update_attributes(self, cells: List[Cell]) -> None:
-        """
-        Method that updates the instance attributes according to the provided
-        list of ``Cell`` objects, unless it is empty.
-
-        This method performs the following checks:
-          - verifies that all provided cells are of the same type;
-          - evaluates and verifies that all the cells have the same rotation
-            angle.
-        It updates:
-          - the ``CellType`` of the cells in the lattice;
-          - the common rotation angle of the given cells;
-          - the ``LatticeGeometryType`` indicating the lattice type of
-            geometry;
-          - the characteristic dimensions of the lattice using the ones of the
-            first cell in the given list;
-          - the compound object for the whole lattice;
-          - the total number of rings of cells based on the provided cells.
-
-        Parameters
-        ----------
-        cells : List[Cell]
-            List of ``Cell`` objects to use for updating the lattice
-            attributes.
-
-        Raises
-        ------
-        RuntimeError
-            If the provided cells have different geometry types.
-        RuntimeError
-            If there is no common rotation angle or any cell does not have
-            one of the admitted values.
-        """
-        # If no cells are provided, return immediately without assembling the
-        # lattice compound
-        if not cells:
-            return
-        # Check that the input cells are all of the same type
-        self.cells_type = cells[0].cell_type
-        if not all(cell.cell_type == self.cells_type for cell in cells):
-            raise RuntimeError(
-                "The lattice presents cells with different geometry types.")
-        # Check if the rotation angle of the given cells is the same for all.
-        # If so, store the value.
-        self.__cells_rot = self.__evaluate_cells_rotation(cells)
-        # Set the lattice type of geometry according to the cells' type and
-        # the number of cells
-        self.__configure_lattice_type(self.cells_type,
-                                      len(self.lattice_cells))
-        # Update the characteristic dimensions of the lattice with the ones
-        # of the first of the given cells
-        self.lx = cells[0].figure.lx
-        self.ly = cells[0].figure.ly
-
-        # Build the GEOM compound object assembling all the cells' faces
-        # of the lattice, eventually with the box
-        self.__build_lattice()
-
-        # Update the total number of cells' rings
-        for cell in cells:
-            self.__evaluate_no_rings(get_point_coordinates(cell.figure.o))
-
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
-
-    def assign_macro_to_cells(
-            self, index_0: int = 1, base_name: str = "MAC") -> None:
-        """
-        Method that assignes the names of the property ``PropertyType.MACRO``
-        to the cells the lattice is made of.
-        Given the starting index and the base name of the macros, a loop
-        through all the cells and the lattice's box is performed. All the
-        regions of a cell will share the same name of the macro made by the
-        base name plus the increasing index.
-
-        Parameters
-        ----------
-        index_0: int
-            The index to start from when setting the macros to the cells'
-            regions.
-        base_name : str
-            The base name of the macros which defaults to 'MAC'.
-        """
-        box_layer = []
-        if self.lattice_box:
-            box_layer = [self.lattice_box]
-        # Loop through the lattice's cells first and then the box cell, if any
-        for layer in self.layers + [box_layer]:
-            for cell in layer:
-                cell.update_properties(
-                    {PropertyType.MACRO: [
-                        f"{base_name}{index_0:03d}"]*len(cell.tech_geom_props)
-                    }
-                )
-                index_0 += 1
-
-        # Set the need to update the lattice geometry
-        self.is_update_needed = True
+        # Get the min/max dimensions of the current compound made from the
+        # lattice regions
+        xmin, xmax, ymin, ymax = get_bounding_box(
+            make_compound(self.get_regions())
+        )
+        # Re-instantiate the shape with the new dimensions, rotating the
+        # shape, if needed
+        self.shape = Rectangle(
+            get_point_coordinates(self.o), (ymax - ymin), (xmax - xmin)
+        )
+        self.shape.rotate(self.rot_angle)
 
 
-def get_compound_from_geometry(
-        geo_type: GeometryType, lattice_cells: List[Cell]) -> Any:
+class HexLattice(Lattice):
     """
-    Function that gets the lattice compound that matches the indicated
-    geometry type.
+    Class for representing a hexagonal lattice characterised in terms of its
+    geometry layout made of cells arranged according to a hexagonal grid.
+    This class can be used to model a full hexagonal lattice assembled either
+    by providing its cells directly or successively calling the methods for
+    adding one or more cells to the layout.
+    By default, the hexagonal lattice expects cells are provided so that the
+    characteristic shape of the lattice follows a X-oriented hexagon. This
+    means that cells should be rotated by 90° before being added.
 
     Parameters
     ----------
-    geo_type : GeometryType
-        The type of geometry of the cells to build a compound from.
-    lattice_cells : List[Cell]
-        The list of cells whose face objects to use to build a compound.
+    cells : List[Cell] = []
+        The list of cells that constitute the lattice, as objects of the class
+        ``Cell`` or of its subclasses. Considered if no ``setup`` is provided.
+    centre : Tuple[float, float, float] | None = None
+        The coordinates of the lattice centre, if any.
+    name : str = "HexLattice"
+        The name of the lattice when added to the current SALOME study.
+
+    Attributes
+    ----------
+    dimensions : Tuple[float, float]
+        The X-Y characteristic dimensions of the shape of the lattice.
+    entry_id : str | None
+        The ID attributed by SALOME when the GEOM object is added to the
+        study.
+    geom_obj : Any | None
+        The internal `GEOM_Object` representative of the layout this instance
+        refers to.
+    geometry_maps : Dict[GeometryType, Compound]
+        A mapping from ``GeometryType`` values to ``Compound`` objects.
+        Each entry provides a different representation for the geometry
+        layout this instance refers to. It is used to switch between
+        different visualisation types (e.g., technological, refined).
+    layers : List[List[Region | Self]]
+        A list of layers, each layer itself being a list of ``Region`` objects
+        or ``Fillable`` instances. Layers represent the hierarchical structure
+        of the geometry layout.
+    name : str | None = None
+        The name of the GEOM object identifying the layout this instance
+        refers to. It is used when the lattice is added to the current SALOME
+        study.
+    o : Vertex
+        The ``Vertex`` object being the centre of the GEOM object which
+        represents the geometry layout of the lattice.
+    regions : List[Region]
+        A flat list of ``Region`` objects obtained by collapsing all the
+        layers. Maintained in addition to the `layers` structure to allow
+        the visualization of the layout with a property colour map.
+    rot_angle : float
+        The rotation angle (in degrees) of the lattice's GEOM object wrt the
+        X-axis.
+    shape : Surface
+        The ``Surface`` object representing the characteristic shape of the
+        lattice.
+    state : LayoutState
+        Providing the state of the layout in the SALOME study.
+    symmetry_map : Dict[SymmetryType, Face]
+        A mapping from ``SymmetryType`` values to ``Face`` objects. Each
+        entry provides the characteristic shape of the corresponding symmetry
+        type.
+    """
+    def __init__(
+            self,
+            cells: List[Cell] = [],
+            centre : Tuple[float, float, float] | None = None,
+            name: str = "HexLattice"
+        ) -> None:
+        # Initialise the superclass
+        super().__init__(cells=cells, centre=centre, name=name)
+        # Update the state of the lattice
+        self.state.is_update_needed = True
+
+    def add_ring_of_cells(
+            self,
+            cell: Cell,
+            ring_index: int,
+            layer_index: int | None = None
+        ) -> None:
+        """
+        Method that adds a ring of ``Cell`` objects to the lattice at the
+        positions that correspond to the given ring index and layer.
+        This method iteratively adds the provided ``Cell`` object at specific
+        construction points determined by the `ring_index` parameter, which
+        indicates the ring where the cells should be placed.
+        Optionally, a ``layer_index`` can be provided to specify the layer to
+        which the ring of cells is added; if not provided, the cells are
+        added to a new layer.
+
+        Parameters
+        ----------
+        cell : Cell
+            The ``Cell`` instance to be added repeatedly to form a ring.
+        ring_index : int
+            The index indicating which ring to add the cells to.
+        layer_index : int | None = None
+            The index of the layer to which the cells are added. If ``None``,
+            a new layer is created.
+
+        Raises
+        ------
+        ValueError
+            If indicating ``0`` as the ring index where cells should be added.
+        ValueError
+            If indicating a layer index not falling within the valid range
+            of existing layers.
+
+        Notes
+        -----
+        Index 0 refers to the central cell of the lattice; indices greater
+        than 0 refer to rings around the centre.
+        """
+        # Check the validity of the indicated ring index
+        ensure_not_zero(
+            ring_index,
+            "It is not possible to add a ring of cells at the given 0 index"
+        )
+        # Include the given layout at the end of the layer sublist specified
+        # by the indicated index, if any; otherwise, either create a new
+        # sublist or raise an exception
+        layer_index = self._compute_layer_index(layer_index)
+        # Get the cell's apothem
+        cell_apothem = cell.shape.dimensions[1]
+
+        # Evaluate the multiplication factor for determining the construction
+        # figure where the centers of the cells will be placed
+        n = 2*ring_index
+        # Build the construction figure
+        construction_fig = self._build_ring_construction_figure(
+            cell_apothem, n
+        )
+        # Compute the positions of the centres of the cells along the
+        # indicated ring
+        centres = compute_subdivision_points_on_borders(
+            ring_index, construction_fig
+        )
+
+        # If needed, update the cell's tree before adding the cell
+        cell.update_hierarchical_structure()
+        # Add the cell at the given centre positions
+        self.layers[layer_index].extend(
+            get_cell_at_centres(
+                cell,
+                centres,
+                self.rot_angle,
+                wrap_shape(build_z_axis_from_vertex(self.o))
+            )
+        )
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
+        self.state.is_update_needed = True
+
+    def add_rings_of_cells(
+            self,
+            cell: Cell,
+            no_rings: int,
+            ring_index: int = 1,
+            layer_index: int | None = None
+        ) -> None:
+        """
+        Method that adds several rings of ``Cell`` objects to the lattice at
+        the positions calculated for each ring indicated by the total number
+        of rings, starting from the `ring_index` parameter.
+        Optionally, a ``layer_index`` can be provided to specify the layer to
+        which the ring of cells is added; if not provided, the cells are
+        added to a new layer.
+
+        Parameters
+        ----------
+        cell : Cell
+            The ``Cell`` instance to be iteratively added in order to build
+            the rings of cells.
+        no_rings : int
+            The number of rings to add starting from the indicated ring index.
+        ring_index : int = 1
+            The index indicating the starting ring index. Default value is 1.
+        layer_index : int | None = None
+            The index of the layer to which the cells are added. If ``None``,
+            a new layer is created.
+
+        Raises
+        ------
+        ValueError
+            If indicating a value less than ``1`` for the total number of
+            rings to add.
+        ValueError
+            If indicating ``0`` as the ring index from which the rings of
+            cells should be added.
+        ValueError
+            If indicating a layer index not falling within the valid range
+            of existing layers.
+
+        Notes
+        -----
+        Index 0 refers to the central cell of the lattice; indices greater
+        than 0 refer to rings around the centre.
+        """
+        # Raise an exception if the number of rings to add is less than 1
+        if no_rings < 1:
+            raise ValueError(
+                f"Wrong number ({no_rings}) of rings of cells to add has "
+                "been indicated."
+            )
+        # Check the validity of the indicated ring index
+        ensure_not_zero(
+            ring_index,
+            "It is not possible to add a ring of cells at the given 0 index"
+        )
+        # Include the layouts at the end of the layer sublist specified
+        # by the indicated index, if any; otherwise, either create a new
+        # sublist or raise an exception
+        layer_index = self._compute_layer_index(layer_index)
+        # Loop through the ring indices starting from the indicated one
+        for i_ring in range(ring_index, ring_index+no_rings):
+            # Add a ring of cells at the current index
+            self.add_ring_of_cells(cell, i_ring, layer_index)
+
+        # Update the characteristic shape and the dimensions of the lattice
+        self._update_shape()
+        self.dimensions = self.shape.dimensions
+        # Update the state
+        self.state.is_update_needed = True
+
+    def _build_ring_construction_figure(
+            self, apothem: float, n: int
+        ) -> Rectangle:
+        """
+        Method that builds and return a ``Hexagon`` object representing
+        the construction figure on whose borders the cells belonging to the
+        same ring will be placed. The dimensions of the hexagon depends on
+        the given apothem and the scaling factor.
+        The resulting figure is built with centre in the lattice centre, and,
+        if needed, is rotated accordingly with the rotation angle of the
+        lattice.
+
+        Parameters
+        ----------
+        apothem : float
+            The apothem of the ``Hexagon`` object.
+        n : int
+            The scaling factor for the dimensions of the ``Hexagon`` object.
+
+        Returns
+        -------
+        Rectangle
+            The ``Rectangle`` object built accordingly with the given
+            dimensions.
+        """
+        construction_fig = Hexagon(
+            get_point_coordinates(self.o), n*apothem
+        )
+        # Rotate the construction figure, if needed
+        construction_fig.rotate(self.rot_angle)
+        return construction_fig
+
+
+    @use_symmetry_logic(build_hex_symmetry_shape)
+    def _build_symmetry_shape(
+            self,
+            symmetry: SymmetryType,
+            domain: SymmetryDomain
+        ) -> Surface:
+        """
+        Method that builds the geometric shape that corresponds to the given
+        symmetry type and domain for a hexagonal-type layout.
+        In addition to the symmetry types available for all the geometry
+        layouts, this method supports those symmetries specific for a
+        hexagonal layout.
+
+        Supported symmetries are:
+
+        - FULL: returns the characteristic shape of the layout.
+        - HALF: builds a rectangle representing half of the layout.
+        - QUARTER: builds a rectangle representing one quarter of the layout.
+        - THIRD: builds a parallelogram representing one third of the layout.
+        - SIXTH: builds a regular triangle representing one sixth of the
+          layout.
+        - TWELFTH: builds a right triangle representing one twelfth of the
+          layout.
+
+        Parameters
+        ----------
+        symmetry : SymmetryType
+            The symmetry type for which the characteristic shape is built.
+        domain : SymmetryDomain
+            Instance providing the domain of the full layout in terms of
+            XY-bounding extents, full shape and its centre.
+
+        Returns
+        -------
+        Surface
+            A geometric shape representing the requested symmetry.
+
+        Raises
+        ------
+        RuntimeError
+            If the indicated symmetry type is not supported for a generic
+            layout.
+
+        Notes
+        -----
+        The method is decorated so that it calls the function handling the
+        construction of the symmetry shape for hexagonal-type layouts. For
+        this reason, no implementation is included here.
+        """
+        pass
+
+    def _update_shape(self) -> None:
+        """
+        Method that updates the ``Hexagon`` object representing the shape
+        that encloses the lattice.
+        """
+        # Get the min/max dimensions of the current compound made from the
+        # lattice regions
+        xmin, xmax, ymin, ymax = get_bounding_box(
+            make_compound(self.get_regions())
+        )
+        # Calculate the dimensions of the hexagon
+        apothem = min((xmax - xmin), (ymax - ymin)) / 2
+        side = apothem / math.sin(math.pi/3)
+        # Re-instantiate the shape with the new dimensions, rotating the
+        # shape, if needed
+        self.shape = Hexagon(get_point_coordinates(self.o), side)
+        self.shape.rotate(self.rot_angle)
+
+
+# -------------------------------------------------------------------------- #
+#                                FUNCTIONS                                   #
+# -------------------------------------------------------------------------- #
+
+def compute_subdivision_points_on_borders(
+        no_vrtcs: int, surface: Surface
+    ) -> List[Tuple[float, float, float]]:
+    """
+    Function that loops through the borders of the given ``Surface`` object
+    and builds a list of evenly spaced vertices for each. For each border,
+    the vertices start from the starting point of the edge, which is included.
+
+    Parameters
+    ----------
+    no_vrtcs : int
+        The number of evenly spaced vertices to subdivide the edge into.
+    surface : Surface
+        The geometric surface on which borders vertices are built.
 
     Returns
     -------
-    Any
-        A compound object collecting all the faces, either from the
-        technological geometry or the sectorized one, of the given cells.
+    List[Tuple[float, float, float]]
+        The list of XYZ coordinates for the vertices built on the borders of
+        the given ``Surface`` object.
     """
-    cell_faces = []
-    match geo_type:
-        case GeometryType.TECHNOLOGICAL:
-            cell_faces = [cell.face for cell in lattice_cells]
-        case GeometryType.SECTORIZED:
-            for cell in lattice_cells:
-                if not cell.sectorized_face:
-                    print(f"The {cell.name} cell has not been sectorized: "
-                          "the non sectorized face will be used.")
-                    cell_faces.append(cell.face)
-                    continue
-                cell_faces.append(cell.sectorized_face)
-        case _:
-            raise ValueError(f"{geo_type}: unhandled type.")
-    return make_compound(cell_faces)
+    centres = []
+    for border in surface.borders:
+        centres.extend(
+            [
+                get_point_coordinates(p)
+                for p in build_subdvision_vertices_on_edge(no_vrtcs, border)
+            ]
+        )
+    return centres
 
-def get_changed_cells(lattice: Lattice) -> List[Cell]:
+
+def ensure_not_zero(value: int, message="Value must not be zero.") -> None:
     """
-    Function that returns a list of ``Cell`` objects belonging to the given
-    ``Lattice`` instance. These cells have their geometry layout changed
-    compared to their original one.
-    For each cell in each layer, the current shape of the cell is built and
-    its area compared with the area of its specific characteristic figure (as
-    a ``Surface`` instance).
-    Those showing a different value for the area indicates a change in their
-    geometry layout has occurred and are collected into the returned list.
-
-    This function retrieves cells that have been modified within the lattice,
-    such as by overlap with a superior layer of cells.
+    Function that raises a ``ValueError`` exception if the given value is
+    zero.
 
     Parameters
     ----------
-    lattice : Lattice
-        The lattice instance to check for cells whose geometry layout has
-        changed.
+    value : int
+        The value to validate.
+    message : str
+        Error message to raise if ``value`` is zero.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is equal to zero.
+    """
+    if value == 0:
+        raise ValueError(message)
+
+
+def get_cell_at_centres(
+        cell: Cell,
+        centres: List[Tuple[float, float, float]],
+        rot_angle: float,
+        rot_axis: Edge
+    ) -> List[Cell]:
+    """
+    Function that builds a list of the same given ``Cell`` instance where
+    every element is placed according to the XYZ coordinates indicated by
+    the elements of the input list.
+    The ``Cell`` object is first cloned and rotated, then for each point
+    in the list, the copied instance is cloned, translated and stored in the
+    returned list.
+
+    Parameters
+    ----------
+    cell : Cell
+        The ``Cell`` instance to position according to the provided centres.
+    centres : List[Tuple[float, float, float]]
+        The list of the XYZ coordinates of the centres each cell should be
+        placed at.
+    rot_angle : float
+        The rotation angle by which each cell should be rotated.
+    rot_axis : Edge
+        The rotation axis.
 
     Returns
     -------
     List[Cell]
-        A list of ``Cell`` objects whose geometry layout differs from their
-        original one.
+        A list of ``Cell`` instances each positioned according to the
+        provided centres.
     """
+    # Initialise the list of cells to return
     cells = []
-    for layer in lattice.layers:
-        for cell in layer:
-            # Build a face object over the borders of the cell
-            cell_shape = make_face(build_compound_borders(cell.face))
-            # Compare the area of the current cell's face with the one of its
-            # original shape
-            if get_basic_properties(cell_shape)[1] != \
-                get_basic_properties(cell.figure.face)[1]:
-                cells.append(cell)
-    # Return the list of changed cells
+    for centre in centres:
+        # Clone, translate in the given centre, rotate, and append the cell
+        # to the list to return
+        new_cell = cell.clone()
+        new_cell.translate(centre)
+        new_cell.rotate(rot_angle, rot_axis)
+        cells.append(new_cell)
     return cells

@@ -1,41 +1,62 @@
 import math
 import os
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Dict, List
 
-from glow.support.types import GeometryType, LatticeGeometryType, \
+from glow.geometry_layouts.cells import CartesianCell, Cell, HexCell
+from glow.geometry_layouts.fillable_layouts import Fillable
+from glow.support.types import GeometryType, LayoutGeometryType, LayoutType, \
     PropertyType, SymmetryType
-from glow.geometry_layouts.lattices import Lattice
+from glow.geometry_layouts.lattices import CartesianLattice, HexLattice, \
+    Lattice
 from glow.support.utility import check_type_geo_consistency
 
+
+# Dictionary associating the type of layout to each of the available classes
+# describing either a cell or a lattice.
+CLASS_VS_LAYOUT_TYPE: Dict[Fillable, LayoutType] = {
+    CartesianCell: LayoutType.RECT,
+    CartesianLattice: LayoutType.RECT,
+    Cell: LayoutType.GENERIC,
+    HexCell: LayoutType.HEX,
+    HexLattice: LayoutType.HEX,
+    Lattice: LayoutType.GENERIC
+}
 
 @dataclass
 class TdtSetup:
     """
     Dataclass holding the settings for configuring how to export the TDT
-    file for the lattice's geometry layout.
+    file for the current geometry layout.
 
     Notes
     -----
     The `albedo` attribute can have values between ``0.0`` and ``1.0``, with
     the latter case indicating the `ALBE 1.0` BC used in DRAGON5 with a
-    uniform tracking (i.e. ``LatticeGeometryType.ISOTROPIC``). If ``None``,
-    the value that corresponds to the type of geometry of the lattice is used,
-    i.e. ``0.0`` for values of ``LatticeGeometryType`` greater than zero,
+    uniform tracking (i.e. ``LayoutGeometryType.ISOTROPIC``). If ``None``,
+    the value that corresponds to the type of geometry of the layout is used,
+    i.e. ``0.0`` for values of ``LayoutGeometryType`` greater than zero,
     ``1.0`` otherwise.
     """
     geom_type: GeometryType = GeometryType.TECHNOLOGICAL
-    """Identifying the type of geometry of the lattice's cells."""
+    """Identifying the type of geometry layout."""
     property_types: PropertyType | List[PropertyType] = PropertyType.MATERIAL
-    """Identifying the type(s) of property associated to lattice's regions."""
+    """
+    Identifying the type(s) of property associated to the layout's regions.
+    """
     albedo: float | None = None
-    """Identifying the value for the albedo applied to the lattice's BCs."""
-    type_geo: LatticeGeometryType = LatticeGeometryType.ISOTROPIC
-    """Identifying the value for the typegeo related to the layout."""
+    """Identifying the value for the albedo applied to the layout's BCs."""
+    type_geo: LayoutGeometryType = LayoutGeometryType.ISOTROPIC
+    """
+    Identifying the value for the `typgeo` index used by the `SALT` module of
+    DRAGON5.
+    """
     symmetry_type: SymmetryType = SymmetryType.FULL
-    """Identifying the value for the symmetry type applied to the lattice."""
+    """Identifying the value for the symmetry type applied to the layout."""
+    layout_type: LayoutType = field(init=False, repr=False)
+    """Identifying the type of the layout."""
 
     def __post_init__(self) -> None:
         """
@@ -62,73 +83,81 @@ class TdtSetup:
             self.property_types = [self.property_types]
 
 
-def analyse_and_generate_tdt(
-        lattices: List[Lattice],
+def export_layout_to_tdt(
+        layout: Fillable,
         filename: str,
-        tdt_config: TdtSetup = TdtSetup(
+        tdt_setup: TdtSetup = TdtSetup(
             GeometryType.TECHNOLOGICAL,
             PropertyType.MATERIAL,
             None),
         compound_to_export: Any | None = None
     ) -> None:
     """
-    Function that analyses the given lattices, as instance of the ``Lattice``
+    Function that analyses the given layout, as instance of the ``Fillable``
     class, to extract information about the characteristics of its geometry
     and the properties associated to its regions.
     A TDT file, whose name is provided as second parameter, is generated,
     collecting all this information.
-    Users can also specify to analyse the lattice according to:
 
-    - the geometry type of its cells;
-    - the type of property associated to the lattice regions;
-    - the value for the albedo applied to the lattice's BCs. If ``None``, a
-      default value that corresponds to the lattice's geometry type is
+    By properly configuring the ``TdtSetup`` instance, provided as third
+    parameter, users can indicate which information about the geometry needs
+    to be extracted from the layout and the tracking setup. In particular,
+    the available options are:
+
+    - the geometry type of the layout (either the technological or the refined
+      geometry);
+    - the type(s) of property associated to the regions of the layout;
+    - the value for the albedo applied to the BCs of the layout. If ``None``,
+      a default value that corresponds to the geometry type of the layout is
       adopted;
-    - the value for the `typegeo` parameter;
-    - the type of symmetry applied to the single lattice or the colorset.
+    - the value for the `type_geo` attribute which drives the type of tracking
+      (either TISO or TSPC) to adopt accordingly with what requested by the
+      `SALT:` module of DRAGON5;
+    - the type of symmetry applied to the layout.
 
-    When exporting one or more ``Lattice`` instances provided by the input
-    list, the `typegeo` and the symmetry type values of the ``TdtSetup``
-    instance are neglected. The values of the corresponding attributes for
-    the first lattice in the list (taken as reference) are considered instead.
+    When specifying values for the type of symmetry which differ from the one
+    currently applied to the layout, and specified in the the `state`
+    attribute of the given ``Fillable`` object, the indicated symmetry is
+    applied, if the corresponding shape of symmetry has already been built
+    by calling the ``apply_symmetry`` method.
 
     If the ``compound_to_export`` parameter is provided, it will be the one
     to be analysed and exported, according to the property information stored
-    in the provided lattices. The indicated compound object must be a portion
-    of the lattices, otherwise the successive steps of the analysis will fail.
-    The values for the `typegeo` parameter and the symmetry type provided in
-    the ``TdtSetup`` instance are considered regardless of what set in the
-    list of involved lattices, even if only one lattice is present.
-    Users should note that these two values must match with the provided
-    compound. If values that do not match with the shape of the compound are
-    provided, the validity of the results in DRAGON cannot be assured.
+    in the layout. The indicated compound object must be a portion of the
+    entire layout, otherwise the successive steps of the analysis will fail.
 
     Parameters
     ----------
-    lattices : List[Lattice]
-        The object storing the information about the geometry and the
-        properties of the lattices.
+    layout : Fillable
+        The layout, as instance of the ``Fillable`` subclasses, storing the
+        information about the geometry and the assigned properties.
     filename : str
         The name of the output TDT file.
-    tdt_config : TdtSetup
+    tdt_setup : TdtSetup
         Dataclass providing the settings for exporting the TDT representation
-        of the geometry layout of the lattice.
+        of the geometry layout.
     compound_to_export: Any | None = None
-        The compound object to analyse and export to TDT, if present. If
-        ``None`` is given, the lattices are considered instead.
+        The compound object (as portion of the layout) to analyse and export
+        to TDT, if provided.
 
     Raises
     ------
     RuntimeError
-        When multiple lattices, and no compound, are provided and they do
-        not have the same ``SymmetryType.FULL`` symmetry.
-        When a compound is provided and the corresponding lattices do not
-        have the same ``SymmetryType.FULL`` symmetry.
-        In case of inconsistencies in the values of the ``TdTSetup``
-        settings.
-        If the analysis fails due to the compound not been part of the
-        lattices, no property found for a region, the impossibility to get
-        the borders of the layout to export.
+        In case of inconsistencies in the values of the ``TdTSetup`` settings.
+        If the analysis fails due to the compound not being part of the
+        layout, no properties being found for any region of the layout, or the
+        layout borders being impossible to obtain.
+
+    Notes
+    -----
+    Users should note that:
+
+    - The configuration values provided in the ``TdtSetup`` instance are
+      considered regardless of what set in the given ``Fillable`` object.
+    - The configuration values provided in the ``TdtSetup`` instance must
+      match with the indicated compound object. If values that do not match
+      with the shape of the compound are provided, the validity of the results
+      in DRAGON cannot be assured.
     """
     # Import the 'time' module for evaluating the analysis performance
     import time
@@ -136,62 +165,34 @@ def analyse_and_generate_tdt(
     start_time = time.time()
 
     # Import the classes and functions for performing the geometry conversion
-    from glow.generator.geom_extractor import analyse_lattice
+    from glow.generator.geom_extractor import analyse_layout
     from glow.generator.generator import TdtData, write_tdt_file
 
-    # The reference lattice is the first instance in the given list
-    ref_lattice = lattices[0]
-    # Choose whether to use data from the 'TdtSetup' instance or the lattice;
-    # in the latter case, update the 'TdtSetup' instance values accordingly
-    if compound_to_export is None:
-        # If multiple lattices are provided, they must not have any symmetry
-        if len(lattices) > 1 and not all(
-            lattice.symmetry_type == SymmetryType.FULL
-                for lattice in lattices
-        ):
-            raise RuntimeError(
-                "When considering a colorset, the type of symmetry of all "
-                "the involved lattices must be 'SymmetryType.FULL'. If a "
-                "portion of the colorset is meant to be considered, run the "
-                "analysis with a compound from the lattices.")
-        # Modify the typegeo and symmetry type values of the 'TdtSetup'
-        # instance
-        tdt_config.symmetry_type = ref_lattice.symmetry_type
-        tdt_config.type_geo = ref_lattice.type_geo
-    else:
-        # If a compound is provided, the lattices must not have any symmetry
-        if not all(
-            lattice.symmetry_type == SymmetryType.FULL
-                for lattice in lattices
-        ):
-            raise RuntimeError(
-                "When a portion of the lattices is provided, the type of "
-                "symmetry of all the involved lattices must be "
-                "'SymmetryType.FULL'.")
-        # Check the correctness of the 'TdtSetup' settings
-        check_type_geo_consistency(
-            tdt_config.type_geo,
-            ref_lattice.cells_type,
-            tdt_config.symmetry_type
-        )
+    # Get the type of the layout and set the corresponding attribute in the
+    # given 'TdtSetup' instance
+    tdt_setup.layout_type = CLASS_VS_LAYOUT_TYPE[layout.__class__]
 
-    # Perform the lattice faces and edges analysis for the given geometry and
-    # property types
-    data_extractor = analyse_lattice(lattices, tdt_config, compound_to_export)
+    # Check the correctness of the 'TdtSetup' settings
+    check_type_geo_consistency(
+        tdt_setup.type_geo, tdt_setup.layout_type, tdt_setup.symmetry_type
+    )
+
+    # Perform the analysis on the layout according to the given settings
+    data_extractor = analyse_layout(layout, tdt_setup, compound_to_export)
 
     t1 = time.time()
     print(f"--- Lattice analysis executed in {t1 - start_time} seconds ---")
 
-    # Instantiate the dataclass storing the needed lattice data
-    tdt = TdtData(filename=os.path.join(
-                      Path(os.getcwd()).resolve().parent,
-                      filename + ".dat"),
-                  edges=data_extractor.edges,
-                  faces=data_extractor.subfaces,
-                  boundaries=data_extractor.boundaries,
-                  type_geo=tdt_config.type_geo,
-                  type_sym=tdt_config.symmetry_type,
-                  albedo=tdt_config.albedo)
+    # Instantiate the dataclass storing the needed data of the layout
+    tdt = TdtData(
+        filename=Path(os.getcwd()).resolve().parent / f"{filename}.dat",
+        edges=data_extractor.edges,
+        faces=data_extractor.subfaces,
+        boundaries=data_extractor.boundaries,
+        type_geo=tdt_setup.type_geo,
+        type_sym=tdt_setup.symmetry_type,
+        albedo=tdt_setup.albedo
+    )
 
     print("--- TdtData class instantiation executed in " + \
           f"{time.time() - t1} seconds ---")

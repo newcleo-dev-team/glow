@@ -1,20 +1,25 @@
 """
-Module containing the classes enabling the creation of the visualisation of
+Module containing the classes enabling the creation and the visualisation of
 geometry layouts built in GLOW.
 """
 import math
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from copy import deepcopy
 from typing import Any, Dict, List, Self, Sequence, Tuple
 
 from glow.interface.geom_entities import Compound, Edge, Face, Vertex, \
     wrap_shape
-from glow.interface.geom_interface import add_to_study, clear_view, \
-    display_shape, get_basic_properties, get_bounding_box, get_object_from_id, get_point_coordinates, make_cdg, make_common, \
-    make_rotation, make_scale, make_translation, make_vector_from_points, \
-    make_vertex, remove_from_study, update_salome_study
-from glow.support.types import GeometryType, PropertyType
+from glow.interface.geom_interface import ShapeType, add_to_study, clear_view, \
+    display_shape, extract_sub_shapes, get_basic_properties, get_bounding_box, \
+    get_object_from_id, get_point_coordinates, is_point_inside_shape, \
+    make_cdg, make_common, make_rotation, make_scale, make_translation, \
+    make_vector_from_points, make_vertex, make_vertex_inside_face, \
+    remove_from_study, update_salome_study
+from glow.support.types import GeometryType, PropertyType, SymmetryType
+from glow.support.utility import are_same_shapes, build_z_axis_from_vertex, \
+    generate_unique_random_colors
 
 
 DEFAULT_REGION_COLOR: Tuple[int, int, int] = (167, 167, 167)
@@ -48,7 +53,7 @@ class Layout(ABC):
     o : Vertex
         The ``Vertex`` object representing the centre of the GEOM object.
     rot_angle : float
-        The rotation angle of the GEOM object wrt the X-axis.
+        The rotation angle (in degrees) of the GEOM object wrt the X-axis.
     """
     def __init__(self) -> None:
         super().__init__()
@@ -59,45 +64,38 @@ class Layout(ABC):
         self.rot_angle: float = 0.0
 
     @abstractmethod
-    def rotate(self, angle: float) -> None:
+    def rotate(self, angle: float, axis: Edge | None = None) -> None:
         """
         Abstract method for rotating the layout by the given angle (in
-        degrees) around the axis perpendicular to the layout and passing
-        through its centre.
+        degrees) around the given axis, if any is provided, otherwise the
+        axis perpendicular to the layout and passing through its centre.
 
         Parameters
         ----------
         angle : float
             The rotation angle in degrees.
+        axis : Edge | None = None
+            The ``Edge`` object representing the rotation axis, if any.
         """
 
     @abstractmethod
-    def rotate_from_axis(self, angle: float, axis: Edge) -> None:
+    def scale(self, factor: float, origin: Vertex | None = None) -> None:
         """
-        Abstract method for rotating the layout by the given angle (in
-        degrees) around the given axis.
-
-        Parameters
-        ----------
-        angle : float
-            The rotation angle in degrees.
-        axis : Edge
-            An ``Edge`` object representing the rotation axis.
-        """
-
-    @abstractmethod
-    def scale(self, factor: float) -> None:
-        """
-        Abstract method for scaling the layout by the given factor.
+        Abstract method for scaling the layout by the given factor wrt the
+        ``Vertex`` object, if any. If no reference vertex is provided, the
+        scaling is performed wrt the centre of the layout.
 
         Parameters
         ----------
         factor : float
             The scaling factor.
+        origin : Vertex | None = None
+            Identifying the point wrt the scaling is performed. If ``None``,
+            the reference point is the layout's centre.
         """
 
     @abstractmethod
-    def show(self, *args: Any, **kwargs: Any) -> None:
+    def show(self, *args: Any) -> None:
         """
         Abstract method for displaying the layout in the 3D viewer of SALOME
         according to the given settings.
@@ -105,9 +103,7 @@ class Layout(ABC):
         Parameters
         ----------
         *args : Any
-            Positional arguments.
-        **kwargs : Any
-            Key arguments.
+            Positional arguments providing the display settings.
         """
 
     @abstractmethod
@@ -136,8 +132,8 @@ class Layout(ABC):
 
 class Region(Face, Layout):
     """
-    Class that groups information regarding a generic region of the cell's
-    or the lattice's geometry layout.
+    Class that groups information regarding a generic region of the geometry
+    layout.
     A ``Region`` instance represents any 2D surface bounded by one or two
     edges that is filled by properties, e.g. the material.
     Properties are expressed as a dictionary of items of the ``PropertyType``
@@ -164,17 +160,23 @@ class Region(Face, Layout):
         The tuple whose values represent the RGB color code associated to the
         region when displayed in the SALOME viewer according to a property
         map.
+    dimensions : Tuple[float, float]
+        The X-Y characteristic dimensions of the GEOM object.
     entry_id : str | None
         The ID of the region used in the current SALOME study.
     geom_obj : Any | None
         The internal `GEOM_Object` representative of the region's surface.
     name : str | None = None
         The name associated to the region used in the current SALOME study.
+    o : Vertex
+        The ``Vertex`` object representing the centre of the GEOM object.
     properties : Dict[PropertyType, str] | None = None
         The dictionary of property types and value names associated to the
         region.
     region_id : int
         The ID used to globally identify a ``Region`` object.
+    rot_angle : float
+        The rotation angle (in degrees) of the GEOM object wrt the X-axis.
     """
     def __init__(
             self,
@@ -186,8 +188,8 @@ class Region(Face, Layout):
         # Initialize attributes
         self.color: Tuple[int, int, int] = DEFAULT_REGION_COLOR
         self.properties: Dict[PropertyType, str] | None = properties
-        self.region_id: int = id(self._geom_obj)
-        self.name = name if name else f"Region {self.region_id}"
+        self.region_id: int = id(self)
+        self.name = name if name else f"Region_{self.region_id}"
         # Initialize superclass attributes
         self.entry_id = None
         self.o = wrap_shape(make_cdg(self.geom_obj))
@@ -221,55 +223,59 @@ class Region(Face, Layout):
         """
         self.color = DEFAULT_REGION_COLOR
 
-    def rotate(self, angle: float) -> None:
+    def rotate(self, angle: float, axis: Edge | None = None) -> None:
         """
-        Method for rotating the layout by the given angle (in degrees)
-        around the axis perpendicular to the layout and passing through
-        its centre.
+        Method for rotating the region by the given angle (in degrees) around
+        the given axis, if any is provided, otherwise around the axis
+        perpendicular to the region and passing through its centre.
 
         Parameters
         ----------
         angle : float
             The rotation angle in degrees.
+        axis : Edge | None = None
+            The ``Edge`` object representing the rotation axis, if any.
         """
-        # Get the figure center coordinates
-        center = get_point_coordinates(self.o)
-        # Build the Z-axis of rotation positioned in the figure center
-        z_axis = wrap_shape(
-            make_vector_from_points(
-                self.o, make_vertex((center[0], center[1], 1))
-            )
-        )
+        # Return immediately if the angle is zero
+        if math.isclose(angle, 0.0, abs_tol=1e-6):
+            return
+        # Build a Z-axis, if none is provided
+        if not axis:
+            # Build the Z-axis of rotation positioned in the figure center
+            axis = wrap_shape(build_z_axis_from_vertex(self.o))
         # Rotate the surface elements
-        self.rotate_from_axis(angle, z_axis)
+        self._rotate_from_axis(angle, axis)
 
-    def rotate_from_axis(self, angle: float, axis: Edge) -> None:
+    def scale(self, factor: float, origin: Vertex | None = None) -> None:
         """
-        Method for rotating the region by the given angle (in degrees)
-        around the given axis.
-
-        Parameters
-        ----------
-        angle : float
-            The rotation angle in degrees.
-        axis : Edge
-            An ``Edge`` object representing the rotation axis.
-        """
-        # Convert the rotation angle in radians
-        self.rot_angle = math.radians(angle)
-        # Rotate the geometric elements of the surface
-        self.geom_obj = make_rotation(self, axis, self.rot_angle)
-
-    def scale(self, factor: float) -> None:
-        """
-        Method for scaling the region by the given factor.
+        Method for scaling the region by the given factor wrt the ``Vertex``
+        object, if any. If no reference vertex is provided, the scaling is
+        performed wrt the centre of the region.
 
         Parameters
         ----------
         factor : float
             The scaling factor.
+        origin : Vertex | None = None
+            Identifying the point wrt the scaling is performed. If ``None``,
+            the reference point is the region's centre.
+
+        Raises
+        ------
+        ValueError
+            If the scaling factor is less than or equal to zero.
         """
-        self.geom_obj = make_scale(self.geom_obj, self.o, factor)
+        # Check the validity of the scaling factor
+        if factor <= 0.0:
+            raise ValueError(
+                f"The indicated scaling factor of {factor} is not valid. "
+                "Please, provide a value greater than zero."
+            )
+        # Perform the scaling wrt to the given origin, otherwise the region's
+        # centre
+        if origin is None:
+            origin = self.o
+        self.geom_obj = make_scale(self.geom_obj, origin, factor)
 
     def set_region_color(self, color: Tuple[int, int, int]) -> None:
         """
@@ -290,7 +296,7 @@ class Region(Face, Layout):
         # Store the RGB color
         self.color = color
 
-    def show(self, *args: Any, **kwargs: Any) -> None:
+    def show(self, *args: Any) -> None:
         """
         Method for displaying the region in the 3D viewer of SALOME
         according to the given settings.
@@ -298,13 +304,12 @@ class Region(Face, Layout):
         Parameters
         ----------
         *args : Any
-            Positional arguments.
-        **kwargs : Any
-            Key arguments.
+            Positional arguments providing the display settings. Must not
+            be provided.
         """
-        # Check that no args or kwargs are provided
-        if args or kwargs:
-            raise ValueError(f"No arguments are accepted for 'show()'.")
+        # Check that no args are provided
+        if args:
+            raise ValueError("No arguments are accepted for 'show()'.")
         # Erase all objects from the current view
         clear_view()
         # Delete the region from the study if already present
@@ -326,6 +331,10 @@ class Region(Face, Layout):
         new_cntr : Tuple[float, float, float]
             The XYZ coordinates the region centre should be placed at.
         """
+        # Return immediately if the new centre coincides with the current one
+        new_cntr_vrtx = make_vertex(new_cntr)
+        if are_same_shapes(self.o, new_cntr_vrtx, ShapeType.VERTEX):
+            return
         # Build a vector from the current center to the new one
         transl_vect = make_vector_from_points(self.o, make_vertex(new_cntr))
         # Translate the wrapped GEOM face object
@@ -342,6 +351,25 @@ class Region(Face, Layout):
             The new layout to update the current region with.
         """
         self.geom_obj = layout.geom_obj
+        self.o = wrap_shape(make_cdg(layout))
+
+    def _rotate_from_axis(self, angle: float, axis: Edge) -> None:
+        """
+        Method for rotating the region by the given angle (in degrees)
+        around the given axis.
+
+        Parameters
+        ----------
+        angle : float
+            The rotation angle in degrees.
+        axis : Edge
+            The ``Edge`` object representing the rotation axis.
+        """
+        self.rot_angle += angle
+        angle_rad = math.radians(angle)
+        # Rotate the GEOM objects of the region
+        self.geom_obj = make_rotation(self, axis, angle_rad)
+        self.o = Vertex(make_rotation(self.o, axis, angle_rad))
 
     def __add__(self, other: Self | Sequence[Self]) -> Self:
         """
@@ -368,8 +396,7 @@ class Region(Face, Layout):
             at least one of them uses a different value.
         """
         # Extract a list of the given regions
-        regions = [
-            o for o in (other if isinstance(other, Sequence) else [other])]
+        regions = list(other if isinstance(other, Sequence) else [other])
         # Properties belonging to the fused region
         fused_properties = deepcopy(self.properties)
         # If the regions have different values for the same properties,
@@ -413,7 +440,7 @@ class Region(Face, Layout):
             the current region and the given one.
         """
         return Region(
-            wrap_shape(self.geom_obj) * wrap_shape(other).geom_obj,
+            wrap_shape(self.geom_obj) * wrap_shape(other.geom_obj).geom_obj,
             properties=deepcopy(other.properties)
         )
 
@@ -421,6 +448,7 @@ class Region(Face, Layout):
         """
         Return a descriptive string about the current ``Region`` instance
         indicating its characteristics, i.e.:
+
         - the region name;
         - the associated properties;
         - the color associated to the GEOM face the region corresponds to;
@@ -432,8 +460,7 @@ class Region(Face, Layout):
             A descriptive string containing information about the current
             ``Region`` instance.
         """
-        return f"{self.name}, {self.properties}, {self.color}, " + \
-            f"{wrap_shape(make_cdg(self.geom_obj))}"
+        return f"{self.name}, {self.properties}, {self.color}, {self.o}"
 
     def __sub__(self, other: Self) -> Self:
         """
@@ -457,174 +484,231 @@ class Region(Face, Layout):
         )
 
 
-class Fillable(Compound, Layout):
+@dataclass
+class LayoutState():
     """
-    Class to represent any geometry layout that can be filled with regions
-    each associated to properties, such as the material.
+    Dataclass storing the state of the layout in the SALOME study according
+    to the geometry displayed, the need to update the layout, the type of
+    applied symmetry and the index identifing the layout in DRAGON5.
+    """
+    displayed_geom : GeometryType = GeometryType.TECHNOLOGICAL
+    """
+    Identifying the type of geometry of the elements of the layout currently
+    displayed in the SALOME 3D viewer.
+    """
+    is_update_needed : bool = False
+    """
+    Indicating whether the layout needs to be updated (e.g., rebuilding the
+    entire geometry layout).
+    """
+    symmetry_type : SymmetryType = SymmetryType.FULL
+    """Identifying the currently applied type of symmetry."""
 
-    This class inherits from the ``Compound`` wrapper class; this guarantees
-    that subclasses of ``Fillable`` behave like the corresponding GEOM
-    compound object when used with GEOM functions.
-    In addition, this class inherits from the ``Layout`` class, meaning that
-    a proper implementation of each abstract method of ``Layout`` is included
-    herein or in subclasses of ``Fillable``.
 
-    This class offers to its subclasses the capability to represent their
-    geometry layout as the superimposition of multiple layers made either by
-    ``Region`` or ``Fillable`` objects. By relying on this layer concept,
-    the whole layout can be represented in a tree-like structure where nodes
-    are represented by ``Fillable`` objects, while leaves by ``Region`` ones.
-    In addition, it enables a mapping between different geometry views,
-    according to the ``GeometryType`` enumeration.
+# -------------------------------------------------------------------------- #
+#                                FUNCTIONS                                   #
+# -------------------------------------------------------------------------- #
 
-    Attributes
+def associate_colors_to_regions(
+        property_type: PropertyType | None, regions: List[Region]) -> None:
+    """
+    Function that assigns the same color to all the regions having the same
+    value for the given property type.
+
+    Parameters
     ----------
-    layers : List[List[Region | Self]]
-        A list of layers, each layer itself being a list of ``Region`` objects
-        or nested ``Fillable`` instances. Layers represent the hierarchical
-        structure of the geometry layout.
-    geometry_maps : Dict[GeometryType, Compound]
-        A mapping from ``GeometryType`` values to ``Compound`` objects. Each
-        entry provides a different representation for the geometry layout this
-        instance refers. It is used to switch between different visualisation
-        types (e.g., technological, sectorized).
-    is_update_needed : bool
-        Flag that indicates whether an update is required (e.g., geometry
-        layout rebuilding).
-    displayed_geom : GeometryType
-        The currently ``GeometryType`` displayed in the SALOME 3D viewer.
+    property_type : PropertyType | None
+        The type of property for which colors must be assigned to regions
+        having the same property type value. If ``None``, the regions
+        color is reset to its default value.
     regions : List[Region]
-        A flat list of Region objects contained by the current instance.
-        Maintained in addition to the layered `layers` structure to allow
-        quick iteration or lookups over all regions.
+        The list of ``Region`` objects to colour according to the value of
+        the associated property type.
+
+    Raises
+    ------
+    RuntimeError
+        Showing the coordinates of the points of the regions having any
+        issue with their properties.
     """
-    def __init__(self) -> None:
-        super().__init__(None)
-        # Initialize attributes
-        self.layers: List[List[Region | Self]] = [[]]
-        self.geometry_maps: Dict[GeometryType, Compound] = {}
-        self.is_update_needed: bool = False
-        self.displayed_geom: GeometryType = GeometryType.TECHNOLOGICAL
-        self.regions: List[Region] = []
+    # If no colour map to display, reset the region colors
+    if not property_type:
+        for region in regions:
+            # Set the region color to its default value
+            region.reset_region_color()
+        return
+    # Extract the unique values of the given property type associated to
+    # each region
+    values = get_unique_values_for_property(property_type, regions)
+    # Generate a specific amount of colors as the number of different
+    # values for the same given property type
+    colors = generate_unique_random_colors(len(values))
+    # Build a dictionary of values for the given property type VS color
+    property_vs_color = dict(zip(values, colors))
+    # Loop through all the regions and assign a color corresponding to
+    # the value of the given property type
+    for region in regions:
+        # Get the value of the given property type associated to the
+        # region
+        value = region.properties[property_type]
+        # Set the region color
+        region.set_region_color(property_vs_color[value])
 
-    def add(self,
-            layout: Region | Self,
-            position: Tuple[float, float, float] | None = None,
-            layer_index: int | None = None) -> None:
-        """
-        Method that adds a generic layout, i.e. either a ``Region`` or a
-        `Fillable` object, to the technological geometry layout of this
-        instance at the indicated layer.
 
-        The given layout object is first translated, if needed, so that the
-        coordinates of its CDG match the indicated position. If no position
-        is provided, the layout object is placed in the CDG of this instance.
-        The given layout is stored at the end of the sublist of the ``layers``
-        attribute that is specified by the indicated parameter
-        ``layer_index``, if any. Otherwise, a new sublist (i.e. a new layer)
-        is created with the given layout.
-        If the layer index value is not valid, an exception is raised.
+def build_compound_regions(
+        compound: Any, layout_regions: List[Region]
+    ) -> List[Region]:
+    """
+    Function that builds a ``Region`` object for each face of the given
+    compound. Properties are assigned by identifying the corresponding
+    ``Region`` object from the given list.
 
-        This method simply updates the list of layers of the technological
-        geometry layout with the given layout without collapsing the layers
-        and updating the entire GEOM compound object this instance refers to.
-        To collapse the layers and build the regions of this instance without
-        displaying the geometry in the 3D viewer of SALOME, call the method
-        ``build_regions``. To build and display the geometry layout, call the
-        method ``show``.
+    Parameters
+    ----------
+    compound : Any
+        The compound object for whose faces ``Region`` objects are built.
+    layout_regions : List[Region]
+        The list of ``Region`` objects to use as reference.
 
-        Parameters
-        ----------
-        layout : Region | Self
-            The generic layout object to add.
-        position : Tuple[float, float, float] | None
-            The XYZ coordinates of the layout's centre, if any. It defaults
-            to ``None``, meaning that the layout is added at the current
-            instance centre.
-        layer_index : int | None
-            The index identifying the layer at which the given layout should
-            be added. It defaults to ``None``, meaning that the layout is
-            stored in a new layer.
+    Returns
+    -------
+    List[Region]
+        A list of ``Region`` objects for each of the faces contained in the
+        input compound. The faces correspond to the given regions.
 
-        Raises
-        ------
-        RuntimeError
-            If the size of the given layout object is greater than the size
-            of the current compound domain.
-        ValueError
-            If the indicated layer index is not valid.
-        """
-        # Check whether the given layout is within the current compound domain
-        if not is_layout_contained(self, layout):
-            raise RuntimeError(
-                f"The size of the given '{layout.name}' layout object "
-                "exceeds that of the current compound domain.")
-        # Set the given layout name to include the one of the current compound
-        layout.name = f"{self.name}_{layout.name}"
-        # Set the given layout position to the current compound centre, if no
-        # position is provided.
-        if not position:
-            position = get_point_coordinates(self.o)
-        # Translate the given layout if its position differs from the compound
-        # centre
-        if not all(math.isclose(i, 0.0) for i in position):
-            layout = layout.clone()
-            layout.translate(position)
-
-        # Include the given layout at the end of the sublist specified by the
-        # indicated index, if any; otherwise, either create a new sublist or
-        # raise an exception
-        if layer_index is None or layer_index == len(self.layers):
-            # Create a new layer
-            self.layers.append([layout])
-        elif layer_index >= 0 or layer_index < len(self.layers):
-            # Add to existing layer
-            self.layers[layer_index].append(layout)
+    Raises
+    ------
+    RuntimeError
+        If any of the face objects of the compound does not have a
+        corresponding ``Region`` object among the given ones.
+    """
+    regions = []
+    # Build the 'Region' objects corresponding to the faces of the given
+    # compound
+    for i, f in enumerate(extract_sub_shapes(compound, ShapeType.FACE)):
+        # Build a reference vertex to match a region
+        ref_vertex = make_vertex_inside_face(f)
+        # Get the 'Region' object that corresponds to the GEOM face by
+        # looping through the regions of the geometry layout
+        for region in layout_regions:
+            if is_point_inside_shape(ref_vertex, region):
+                # Build and store a new 'Region' having the shape of the
+                # face and the properties of the found region
+                regions.append(
+                    Region(f, f"Region {i}", deepcopy(region.properties))
+                )
+                break
         else:
-            raise ValueError(f"Invalid layer index {layer_index}.")
+            raise RuntimeError(f"Missing region for subface {i}.")
+    if not regions:
+        raise RuntimeError(
+            "No regions matching the faces of the compound could be found."
+        )
+    return regions
 
-        # Indicate the need to update the layout by building its regions
-        self.is_update_needed = True
+
+def get_unique_values_for_property(
+        property_type: PropertyType, regions: List[Region]) -> List[str]:
+    """
+    Function that gets the unique values of the given property type for the
+    given regions. If any ``Region`` object does not have any property
+    or the given property type is missing, a reference point for the
+    region is stored for logging purposes.
+    An exception showing the coordinates of the points of the problematic
+    regions is raised.
+
+    Parameters
+    ----------
+    property_type : PropertyType
+        The type of property whose unique values to collect.
+    regions : List[Region]
+        The list of ``Region`` objects to select the unique values associated
+        to the indicated ``PropertyType``.
+
+    Returns
+    -------
+    List[str]
+        A list of the unique names for the given property type that have
+        been associated to the given regions.
+
+    Raises
+    ------
+    RuntimeError
+        Showing the coordinates of the points of the regions having any
+        issue with their properties.
+    """
+    values = set()
+    missing_regions_points = []
+    for region in regions:
+        if not region.properties or property_type not in region.properties:
+            missing_regions_points.append(
+                get_point_coordinates(
+                    make_vertex_inside_face(region)))
+            region.set_region_color((255, 0, 0))
+            continue
+        values.add(region.properties[property_type])
+    # Raise an exception if there are regions with missing property
+    if missing_regions_points:
+        message = (
+            f"No {property_type.name} property type has been found "
+            "for the regions identified by the inner points with "
+            f"coordinates: ")
+        for point in missing_regions_points[:-1]:
+            message += f"'{point}', "
+        message += (
+            f"'{missing_regions_points[-1]}'. Please, for each of the "
+            + f"higlighted regions with the missing {property_type.name} "
+            + "call the method 'set_region_properties()', after selecting "
+            + "each of them, to assign the property to."
+        )
+        raise RuntimeError(message)
+    return list(values)
 
 
 def is_layout_contained(
         container: Compound | Face,
         candidate: Compound | Face,
-        tolerance: float = 1e-6) -> bool:
-    """
-    Check if `candidate` layout is entirely contained within `container`
-    layout. The containment check consists of:
+        tolerance: float = 1e-6
+    ) -> bool:
 
-    - Area comparison: ``False`` is returned if the candidate area is larger
-      than container area.
-    - Bounding box check: ``False`` is returned if the candidate extends
-      beyond container bounds.
-    - Precise containment: The common area is computed and compared with the
-      candidate area. ``True`` is returned if the two areas are the same.
+    """
+    Function that checks whether a `candidate` planar shape is entirely
+    contained within a `container` planar shape.
+
+    This containment check is based on three successive steps:
+
+    - areas comparison;
+    - bounding box comparison;
+    - exact geometric intersection area check.
+
+    The candidate is considered contained if the candidate passes all the
+    checks with the last one verifying if the area of the geometric
+    intersection equals the candidate's area within the given relative
+    tolerance.
 
     Parameters
     ----------
     container : Compound | Face
-        The geometry layout acting as the container.
+        The outer planar shape that is expected to contain the `candidate`.
     candidate : Compound | Face
-        The geometry layout to check for containment.
-    tolerance : float
-        Numerical tolerance for area and bounding box comparisons. Default
-        valus is 1e-6.
+        The inner planar shape to be tested for containment.
+    tolerance : float = 1e-6
+        Relative tolerance used for area comparisons and bounding-box guards.
+        Its default value is ``1e-6``.
 
     Returns
     -------
     bool
-        ``True`` if `candidate` layout is fully contained within the layout of
-        the `container` by the given tolerance; ``False`` otherwise.
+        ``True`` if the `candidate` is fully contained in the `container`
+        (within the specified tolerance), otherwise ``False``.
     """
-    # Area check
+    # Compare areas of container and candidate
     area_container = get_basic_properties(container)[1]
     area_candidate = get_basic_properties(candidate)[1]
     if area_candidate > area_container + tolerance * area_container:
         return False
 
-    # Bounding box check
+    # Compare bounding box extensions of container and candidate
     bbox_container = get_bounding_box(container)
     bbox_candidate = get_bounding_box(candidate)
     if any([
@@ -634,7 +718,9 @@ def is_layout_contained(
     ]):
         return False
 
-    # Precise geometric intersection
-    common = make_common(container, candidate)
-    area_common = get_basic_properties(common)[1]
+    # Compare areas of common part between container and candidate with the
+    # one of the candidate
+    area_common = get_basic_properties(
+        make_common(container, candidate)
+    )[1]
     return abs(area_common - area_candidate) < tolerance * area_candidate

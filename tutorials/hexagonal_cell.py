@@ -6,26 +6,29 @@ geometry. A sectorization is applied to the cell and the result graphically
 shown in the SALOME 3D viewer.
 """
 from glow.geometry_layouts.cells import HexCell
+from glow.geometry_layouts.geometries import Circle
+from glow.geometry_layouts.layouts import Region
 from glow.support.types import GeometryType, PropertyType
 
 
-# Build the cell's geometry layout by adding three circular regions
-cell = HexCell(name="Hexagonal Cell")
+# Intialise two lists, one storing the circular regions radii, the other the
+# names of the materials, sorted from the inner to the outer region
 radii = [0.25, 0.4, 0.6]
-for radius in radii:
-    cell.add_circle(radius)
-# Show the cell's technological geometry in the SALOME 3D viewer
-cell.show()
-
-# Assign the materials to each zone in the cell
-cell.set_properties(
-      {PropertyType.MATERIAL: ["MAT_1", "MAT_2", "MAT_3", "MAT_4"]}
+materials = ["MAT_1", "MAT_2", "MAT_3"]
+# Build the cell's geometry layout by adding three circular regions from the
+# outer to the inner
+cell = HexCell(
+    name="Hexagonal cell", base_props={PropertyType.MATERIAL: "MAT_4"}
 )
-# Show the regions by applying a colorset
+for radius, mat in zip(radii[::-1], materials[::-1]):
+    cell.add(
+        Region(Circle(radius=radius), properties={PropertyType.MATERIAL: mat})
+    )
+
+# Show the regions according to the 'MATERIAL' colour map
 cell.show(PropertyType.MATERIAL)
 
-# Build the cell's sectorized geometry
+# Build the cell's sectorised geometry
 cell.sectorize([1, 1, 6, 6], [0]*4)
-# Show the sectorized cell with regions colored according to the 'MATERIAL'
-# property
+# Show the cell's sectorised layout according to the 'MATERIAL' colour map
 cell.show(PropertyType.MATERIAL, GeometryType.SECTORIZED)
