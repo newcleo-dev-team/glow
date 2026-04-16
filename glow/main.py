@@ -49,7 +49,10 @@ class TdtSetup:
     albedo: float | None = None
     """Identifying the value for the albedo applied to the layout's BCs."""
     type_geo: LayoutGeometryType = LayoutGeometryType.ISOTROPIC
-    """Identifying the value for the `SALT:` `typgeo` index."""
+    """
+    Identifying the value for the `typgeo` index used by the `SALT` module of
+    DRAGON5.
+    """
     symmetry_type: SymmetryType = SymmetryType.FULL
     """Identifying the value for the symmetry type applied to the layout."""
     layout_type: LayoutType = field(init=False, repr=False)
