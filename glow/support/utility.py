@@ -9,11 +9,11 @@ from typing import Any, Generator, List, Tuple
 
 from glow.interface.geom_interface import ShapeType, \
     extract_sub_shapes, fuse_edges_in_wire, get_basic_properties, \
-    get_closed_free_boundary, get_kind_of_shape, get_min_distance, \
+    get_bounding_box, get_closed_free_boundary, get_min_distance, \
     get_point_coordinates, get_selected_object, get_shape_name, \
-    get_shape_type, is_gui_available, make_arc_center, make_cdg,  \
-    make_compound, make_cut, make_edge, make_face, make_fuse, make_partition, \
-    make_translation, make_vector_from_points, make_vertex, \
+    get_shape_type, get_tolerances, is_gui_available, make_arc_center, \
+    make_cdg, make_compound, make_cut, make_edge, make_face, make_fuse, \
+    make_partition, make_translation, make_vector_from_points, make_vertex, \
     make_vertex_on_curve, remove_extra_edges
 from glow.support.types import LAYOUT_VS_SYMM_VS_TYP_GEO, LayoutGeometryType, \
     LayoutType, SymmetryType
@@ -693,6 +693,63 @@ def get_vertices_on_edges(
     return sorted(
         vertices,
         key=lambda v: get_vertex_polar_position(v, ref_vertex, is_cw=False)
+    )
+
+
+def is_vertex_on_edge(vertex: Any, edge: Any) -> bool:
+    """
+    Function that checks if a GEOM vertex belongs (within a tolerance) to
+    a GEOM edge. The tolerance adopted for the check is calculated as the
+    maximum tolerance for the vertex and the edge, which is, in turn,
+    evaluated by combining the bounding box of the edge, scaled by a fixed
+    factor, its length, scaled by another factor, and the tolerances adopted
+    by GEOM.
+
+    Parameters
+    ----------
+    vertex : Any
+        The GEOM vertex whose distance from the edge has to be checked.
+    edge : Any
+        The GEOM edge relative to which the distance of the vertex is
+        calculated.
+
+    Returns
+    -------
+    bool
+        ``True`` in case the vertex is on the edge (within the calculated
+        tolerance), ``False`` otherwise.
+    """
+    # Declare scaling factors and the min/max tolerances to consider
+    edge_bbox_factor = 1e-7
+    edge_len_factor = 1e-6
+    min_tol = 1e-9
+    max_tol = 1e-3
+
+    # Calculate the tolerance derived from the bounding box of the edge
+    xmin, xmax, ymin, ymax = get_bounding_box(edge)
+    bbox_tol = max(xmax - xmin, ymax - ymin) * edge_bbox_factor
+    # Calculate the tolerance derived from the length of the edge
+    length_tol = get_basic_properties(edge)[0] * edge_len_factor
+    # Get the GEOM tolerances for the edge and its vertices only
+    _, *tols = get_tolerances(edge)
+    geom_edge_tol = max(tols)
+    # Get the GEOM tolerances for the vertex
+    vrtx_tol = max(get_tolerances(vertex)[-2:-1])
+
+    # Calculate the edge tolerance by combining all the three values and
+    # comparing wrt the minimum and maximum allowed values
+    edge_total_tol = max(bbox_tol, length_tol, geom_edge_tol)
+    edge_total_tol = min(max(edge_total_tol, min_tol), max_tol)
+    # Calculate the final tolerance as the maximum value between the tolerance
+    # of the edge and the vertex
+    combined_tol = max(edge_total_tol, vrtx_tol)
+
+    # Calculate the vertex-edge distance and return if this is within the
+    # tolerance
+    return math.isclose(
+        abs(get_min_distance(vertex, edge)) - combined_tol,
+        0.0,
+        abs_tol=combined_tol
     )
 
 

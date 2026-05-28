@@ -12,12 +12,13 @@ from glow.geometry_layouts.cells import Region
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
     LayoutGeometryType, PropertyType
 from glow.support.utility import check_shape_expected_types, \
-    get_angle_between_points, get_id_from_name, get_id_from_shape
+    get_angle_between_points, get_id_from_name, get_id_from_shape, \
+    is_vertex_on_edge
 from glow.interface.geom_interface import ShapeType, \
     extract_sorted_sub_shapes, extract_sub_shapes, \
-    get_in_place, get_kind_of_shape, get_min_distance, get_point_coordinates, \
-    get_shape_name, is_point_inside_shape, make_vertex, \
-    make_vertex_inside_face, make_vertex_on_curve, set_shape_name
+    get_in_place, get_kind_of_shape, get_point_coordinates, get_shape_name, \
+    is_point_inside_shape, make_vertex, make_vertex_inside_face, \
+    make_vertex_on_curve, set_shape_name
 
 
 # Sufficiently small value used to determine face-edge connectivity by
@@ -552,10 +553,10 @@ class BoundaryData:
                 # or 'TRANSLATION' types of BC, which correspond to the 'ROTA'
                 # or 'TRAN' cases respectively in DRAGON5. The position of the
                 # border wrt the layout centre guides the choice.
-                if get_min_distance(layout_o, self.border) > 1e-7:
-                    self.type = BoundaryType.TRANSLATION
-                else:
+                if is_vertex_on_edge(layout_o, self.border):
                     self.type = BoundaryType.ROTATION
+                else:
+                    self.type = BoundaryType.TRANSLATION
             case LayoutGeometryType.RECTANGLE_TRAN:
                 # The BC information for the case of a cartesian geometry
                 # with TRAN BCs follows the axes definition below:
@@ -571,7 +572,11 @@ class BoundaryData:
                     # and M=3 (dx < 0)
                     self.tx = 0.0
                     self.ty = (dx/abs(dx)) * ly
-                elif math.isclose(math.sin(math.radians(self.angle)), 1.0):
+                elif math.isclose(
+                    math.sin(math.radians(self.angle)),
+                    1.0,
+                    abs_tol=EPSILON
+                ):
                     # The sign of 'dy' discriminates between the M=4 (dy > 0)
                     # and M=2 (dy < 0)
                     self.tx = -(dy/abs(dy)) * lx
@@ -595,7 +600,11 @@ class BoundaryData:
                 #   M=2 (3/2lx, ly) *     *  M=6 (-3/2lx, ly)
                 #                    *****
                 #                     M=1 (0, 2ly)
-                if math.isclose(math.sin(math.radians(self.angle)), 1.0):
+                if math.isclose(
+                    math.sin(math.radians(self.angle)),
+                    1.0,
+                    abs_tol=EPSILON
+                ):
                     raise RuntimeError(
                         "The border refers to a Y-oriented hexagon which "
                         "is not admitted for tracking."
