@@ -12,10 +12,9 @@ from typing import Any, Callable, List, Tuple
 
 from glow.geometry_layouts.cells import Cell, HexCell, CartesianCell
 from glow.geometry_layouts.geometries import Surface
-from glow.geometry_layouts.lattices import CartesianLattice, Lattice
-from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    get_point_coordinates,  make_circle, make_edge, make_vector_from_points, \
-    make_vertex, make_vertex_on_curve
+from glow.geometry_layouts.lattices import CartesianLattice
+from glow.interface.geom_interface import get_point_coordinates,  make_circle, \
+    make_edge, make_vector_from_points, make_vertex, make_vertex_on_curve
 from glow.support.types import BoundaryType, LayoutType, LayoutGeometryType, \
     PropertyType, SymmetryType
 from glow.support.utility import build_contiguous_edges
@@ -138,13 +137,14 @@ def build_bd_sixth_hex(
         corresponding angles (as needed by DRAGON), and the type of boundary,
         assigned to each border depending on the `type_geo` parameter.
     """
-    if type_geo in [LayoutGeometryType.SA60,
-                    LayoutGeometryType.SYMMETRIES_TWO]:
+    if type_geo in [
+        LayoutGeometryType.SA60, LayoutGeometryType.SYMMETRIES_TWO
+    ]:
         bd_type = [BoundaryType.AXIAL_SYMMETRY]*3
     elif type_geo in [LayoutGeometryType.RA60, LayoutGeometryType.ROTATION]:
         bd_type = [
-            BoundaryType.ROTATION,
             BoundaryType.TRANSLATION,
+            BoundaryType.ROTATION,
             BoundaryType.ROTATION
         ]
     return BoundaryInfo(

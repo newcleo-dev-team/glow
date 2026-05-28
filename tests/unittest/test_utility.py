@@ -487,6 +487,36 @@ class TestUtilityFunctions(unittest.TestCase):
         )
         self.__assess_shapes_in_list_coincide(result, [], ShapeType.VERTEX)
 
+    def test_is_vertex_on_edge(self) -> None:
+        """
+        Method that tests the implementation of the function
+        `is_vertex_on_edge` declared in the `utility.py` module.
+        """
+        # Verify that a vertex at the start and end of an edge is detected
+        # as on edge
+        start_vertex = make_vertex((0.0, 0.0, 0.0))
+        end_vertex = make_vertex((1.0, 0.0, 0.0))
+        edge = make_edge(start_vertex, end_vertex)
+        self.assertTrue(is_vertex_on_edge(start_vertex, edge))
+        self.assertTrue(is_vertex_on_edge(end_vertex, edge))
+
+        # Verify that a vertex in the middle of the edge is detected as on
+        # edge
+        test_vertex = make_vertex((0.5, 0.0, 0.0))
+        self.assertTrue(is_vertex_on_edge(test_vertex, edge))
+
+        # Verify that a vertex far from an edge is not detected as on edge
+        test_vertex = make_vertex((0.5, 1.0, 0.0))
+        self.assertFalse(is_vertex_on_edge(test_vertex, edge))
+
+        # Verify that a vertex slightly off an edge is not detected as on edge
+        test_vertex = make_vertex((1.0 + 1e-5, 0.0, 0.0))
+        self.assertFalse(is_vertex_on_edge(test_vertex, edge))
+
+        # Verify that a vertex close to the edge by a tolerance is still
+        # detected as on edge
+        test_vertex = make_vertex((1.0 + 1e-6, 0.0, 0.0))
+        self.assertTrue(is_vertex_on_edge(test_vertex, edge))
 
     def test_retrieve_selected_object(self) -> None:
         """

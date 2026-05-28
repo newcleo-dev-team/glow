@@ -12,14 +12,13 @@ from glow.generator.geom_extractor import BoundaryData, EdgeData, FaceData, \
     build_edge_id
 from glow.geometry_layouts.geometries import Circle, Rectangle
 from glow.geometry_layouts.layouts import Region
-from glow.interface.geom_entities import Edge
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    get_kind_of_shape, is_point_inside_shape, make_arc_center, make_circle, \
-    make_compound, make_edge, make_face, make_partition, make_vertex, \
+    get_kind_of_shape, get_tolerances, is_point_inside_shape, make_arc_center, \
+    make_circle, make_compound, make_edge, make_face, make_vertex, \
     set_shape_name
-from glow.support.types import EDGE_NAME_VS_TYPE, EdgeType, \
+from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
     LayoutGeometryType, LayoutType, PropertyType, SymmetryType
-from glow.support.utility import are_same_shapes
+from glow.support.utility import are_same_shapes, is_vertex_on_edge
 from tests.unittest.support_funcs import BoundaryInfo, build_boundary_info
 
 
@@ -47,7 +46,7 @@ class TestBoundaryData(unittest.TestCase):
         self.border: Any = make_edge(
             make_vertex((0.0, 0.0, 0.0)), make_vertex((2.0, 0.0, 0.0))
         )
-        self.centre: Any = make_vertex((0.0, 0.0, 0.0))
+        self.centre: Any = make_vertex((0.5, math.sqrt(3)/2, 0.0))
         self.dimensions: Dict[LayoutType, Tuple[float, float]] = {
             LayoutType.HEX: (1.0, math.sqrt(3)/2),
             LayoutType.RECT: (1.0, 1.0)
@@ -114,9 +113,7 @@ class TestBoundaryData(unittest.TestCase):
             LayoutType.HEX, SymmetryType.SIXTH, LayoutGeometryType.ROTATION
         )
 
-        # Third of symmetry cases (centre redeclared to fit the case)
-        x, y = self.dimensions[LayoutType.HEX]
-        self.centre = make_vertex((x/2, y, 0.0))
+        # Third of symmetry cases
         self.__assess_init_boundary(
             LayoutType.HEX, SymmetryType.THIRD, LayoutGeometryType.R120
         )
@@ -133,6 +130,63 @@ class TestBoundaryData(unittest.TestCase):
             SymmetryType.TWELFTH,
             LayoutGeometryType.SYMMETRIES_TWO
         )
+
+    def test_init_hex_precision(self) -> None:
+        """
+        Method that tests the initialisation of the `BoundaryData` class for
+        a hexagonal-type layout with `THIRD` and `SIXTH` symmetry types,
+        adopting a rotational BC on the internal borders and a translation BC
+        on the external one. The geometry layout exhibit numerical floating
+        point precision noise on the vertices. The test aims to verify that
+        the code correctly assigns the BC type `BoundaryType.ROTATION` to the
+        internal borders and the `BoundaryType.TRANSLATION` to the external
+        one.
+        """
+        # Declare the XY dimensions of the hexagonal case
+        lx = 20.3214824999
+        ly = lx/2 * math.tan(math.pi/3)
+        self.centre = make_vertex((lx/2.0, ly-1e-5, 0.0))
+        # R120 case
+        bd = BoundaryInfo(
+            vertices=[
+                make_vertex((0.0, 0.0, 0.0)),
+                make_vertex((lx, 0.0, 0.0)),
+                make_vertex((3/2*lx, ly, 0.0)),
+                make_vertex((lx/2, ly, 0.0))
+            ],
+            axis=[(0.0, 0.0), (lx, 0.0), (lx/2, ly), (0.0, 0.0)],
+            angles=[0.0, 60.0, 0.0, 60.0],
+            dimensions=(lx, ly),
+            bd_type=[
+                BoundaryType.TRANSLATION,
+                BoundaryType.TRANSLATION,
+                BoundaryType.ROTATION,
+                BoundaryType.ROTATION
+            ]
+        )
+        # Initialise and verify the 'BoundaryData' for each edge
+        for i, e in enumerate(bd.edges):
+            self.__assess_boundary(bd, i, e, LayoutGeometryType.R120)
+
+        # RA60 case
+        bd = BoundaryInfo(
+            vertices=[
+                make_vertex((0.0, 0.0, 0.0)),
+                make_vertex((lx, 0.0, 0.0)),
+                make_vertex((lx/2, ly, 0.0))
+            ],
+            axis=[(0.0, 0.0), (lx, 0.0), (0.0, 0.0)],
+            angles=[0.0, 120.0, 60.0],
+            dimensions=(lx, ly),
+            bd_type=[
+                BoundaryType.TRANSLATION,
+                BoundaryType.ROTATION,
+                BoundaryType.ROTATION
+            ]
+        )
+        # Initialise and verify the 'BoundaryData' for each edge
+        for i, e in enumerate(bd.edges):
+            self.__assess_boundary(bd, i, e, LayoutGeometryType.RA60)
 
     def test_init_rect(self) -> None:
         """
@@ -326,11 +380,23 @@ class TestBoundaryData(unittest.TestCase):
         )
         # Verify the correct assignment
         self.assertTrue(
-            math.isclose(boundary.angle, boundary_info.angles[i])
+            math.isclose(
+                boundary.angle, boundary_info.angles[i], abs_tol=1e-5
+            ),
+            f"{i}) {boundary.angle} != {boundary_info.angles[i]}"
         )
-        self.assertEqual(boundary.type, boundary_info.bd_type[i])
-        self.assertEqual(boundary.tx, boundary_info.axis[i][0])
-        self.assertEqual(boundary.ty, boundary_info.axis[i][1])
+        self.assertEqual(
+            boundary.type, boundary_info.bd_type[i],
+            f"{i}) {is_vertex_on_edge(self.centre, border)}, {max(get_tolerances(border))}"
+        )
+        self.assertTrue(
+            math.isclose(boundary.tx, boundary_info.axis[i][0]),
+            f"{i}) {boundary.tx}, {boundary_info.axis[i][0]}"
+        )
+        self.assertTrue(
+            math.isclose(boundary.ty, boundary_info.axis[i][1]),
+            f"{i}) {boundary.ty}, {boundary_info.axis[i][1]}"
+        )
         self.assertEqual(len(boundary.edge_indxs), 0)
 
     def __assess_init_boundary(

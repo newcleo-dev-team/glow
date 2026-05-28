@@ -596,8 +596,9 @@ def is_point_inside_shape(point: Any, shape: Any) -> bool:
     bool
         ``True``, if the point is inside the shape, ``False`` otherwise.
     """
-    return geompy.AreCoordsInside(shape,
-                                  list(get_point_coordinates(point)))[0]
+    return geompy.AreCoordsInside(
+        shape, list(get_point_coordinates(point))
+    )[0]
 
 
 def is_gui_available() -> None:
