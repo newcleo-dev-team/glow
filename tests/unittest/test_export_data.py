@@ -382,20 +382,16 @@ class TestBoundaryData(unittest.TestCase):
         self.assertTrue(
             math.isclose(
                 boundary.angle, boundary_info.angles[i], abs_tol=1e-5
-            ),
-            f"{i}) {boundary.angle} != {boundary_info.angles[i]}"
+            )
         )
         self.assertEqual(
-            boundary.type, boundary_info.bd_type[i],
-            f"{i}) {is_vertex_on_edge(self.centre, border)}, {max(get_tolerances(border))}"
+            boundary.type, boundary_info.bd_type[i]
         )
         self.assertTrue(
-            math.isclose(boundary.tx, boundary_info.axis[i][0]),
-            f"{i}) {boundary.tx}, {boundary_info.axis[i][0]}"
+            math.isclose(boundary.tx, boundary_info.axis[i][0])
         )
         self.assertTrue(
-            math.isclose(boundary.ty, boundary_info.axis[i][1]),
-            f"{i}) {boundary.ty}, {boundary_info.axis[i][1]}"
+            math.isclose(boundary.ty, boundary_info.axis[i][1])
         )
         self.assertEqual(len(boundary.edge_indxs), 0)
 
