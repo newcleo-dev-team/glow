@@ -15,9 +15,10 @@ from glow.generator.export_data import EdgeData, FaceData, build_edge_id, \
 from glow.generator.geom_extractor import LayoutDataExtractor, analyse_layout
 from glow.geometry_layouts.cells import HexCell, CartesianCell
 from glow.geometry_layouts.geometries import Circle, Hexagon, Rectangle
-from glow.geometry_layouts.lattices import CartesianLattice, HexLattice, Lattice
+from glow.geometry_layouts.lattices import CartesianLattice, HexLattice, \
+    Lattice
 from glow.geometry_layouts.layouts import Region
-from glow.interface.geom_entities import Face, Vertex, wrap_shape
+from glow.interface.geom_entities import Face, wrap_shape
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     get_shape_name, limit_tolerance, make_circle, make_common, make_compound, \
     make_edge, make_face, make_partition, make_translation, make_vector, \
@@ -449,7 +450,7 @@ class TestLayoutDataExtractor(unittest.TestCase):
 
     def test_get_unique_edges(self) -> None:
         """
-        Method that tests the implementation of the `__get_unique_edges`
+        Method that tests the implementation of the `_get_unique_edges`
         method of the `LayoutDataExtractor` class.
 
         Notes
@@ -478,6 +479,7 @@ class TestLayoutDataExtractor(unittest.TestCase):
             ]
         ]
         id_vs_edge = classify_layout_edges(layout_edges)
+        layout_edges_cmpd = make_compound(layout_edges)
 
         # Instantiate the 'LayoutDataExtractor' class without attributes
         # and only initialise the needed attributes
@@ -489,7 +491,9 @@ class TestLayoutDataExtractor(unittest.TestCase):
         # ones
         edge_to_test = list(id_vs_edge.values())[0]
         edge_id = list(id_vs_edge.keys())[0]
-        found_edges = lde._get_unique_edges(edge_to_test, edge_id)
+        found_edges = lde._get_unique_edges(
+            edge_to_test, edge_id, layout_edges_cmpd
+        )
         # Verify only one edge is returned and that is present among the
         # stored ones
         self.assertEqual(len(found_edges), 1)
@@ -503,7 +507,9 @@ class TestLayoutDataExtractor(unittest.TestCase):
             make_vertex((1.0, 1.0, 0.0)), make_vertex((1.0, 0.0, 0.0))
         )
         edge_id = build_edge_id(edge_to_test)
-        found_edges = lde._get_unique_edges(edge_to_test, edge_id)
+        found_edges = lde._get_unique_edges(
+            edge_to_test, edge_id, layout_edges_cmpd
+        )
         # Verify two edges are returned and that are the ones belonging to
         # the first cell
         self.assertEqual(len(found_edges), 2)
@@ -519,8 +525,79 @@ class TestLayoutDataExtractor(unittest.TestCase):
         invalid_edge = make_circle(make_vertex((0.0, 0.0, 0.0)), None, 1.0)
         with self.assertRaises(RuntimeError):
             _ = lde._get_unique_edges(
-                invalid_edge, build_edge_id(invalid_edge)
+                invalid_edge, build_edge_id(invalid_edge), layout_edges_cmpd
             )
+
+    def test_get_unique_edges_degenerate(self) -> None:
+        """
+        Method that tests that the `_get_unique_edges` method returns an empty
+        list when an edge cannot be retrieved from the layout and its length
+        is below the degeneracy tolerance.
+        The test reproduces a hexagonal assembly geometry known to generate
+        degenerate edges when the whole geometry layout is assembled and
+        confirms that such edges are skipped rather than treated as an error.
+        """
+        edge_length = 0.78521393995
+        cell = HexCell(side=edge_length)
+        cell.rotate(90)
+        lattice = HexLattice([cell], name="Fuel lattice")
+        lattice.add_rings_of_cells(cell, 6)
+        # Enclose the lattice in a hexagonal cell being its box
+        layer_thickness = 0.05
+        assembly = HexCell(
+            side=lattice.dimensions[0] + 2*layer_thickness*cos(pi/3),
+        )
+        assembly.add(
+            Region(
+                Hexagon(
+                    edge_length=(
+                        lattice.dimensions[0] + layer_thickness*cos(pi/3)
+                    )
+                ) - lattice.shape
+            )
+        )
+        assembly.add(lattice)
+        # Apply the 'SIXTH' symmetry type
+        assembly.apply_symmetry(SymmetryType.SIXTH)
+        # Extract the unique edges from the partition of the regions
+        layout_edges = extract_sub_shapes(
+            make_partition(
+                assembly.get_regions_with_symmetry(SymmetryType.SIXTH),
+                [],
+                ShapeType.EDGE
+            ),
+            ShapeType.EDGE
+        )
+        id_vs_edge = classify_layout_edges(layout_edges)
+        # Translate the edges so that the layout's origin coincides with the
+        # one considered during the analysis
+        layout_edges_cmpd = make_translation(
+            make_compound(layout_edges),
+            make_vector((4.55846632, 7.89549527, 0.0))
+        )
+
+        # Instantiate the 'LayoutDataExtractor' class without attributes
+        # and only initialise the needed attributes
+        lde = LayoutDataExtractor.__new__(LayoutDataExtractor)
+        lde.layout_edges = layout_edges
+        lde.id_vs_edge = id_vs_edge
+
+        # Verify the returned list of edges is empty in case the provided
+        # edge is not found among the edges of the whole compound, but it
+        # is degenerate, i.e. its length is lower the 1e-5 tolerance. This
+        # case is not treated as an error, but it is simply skipped.
+        degenerate_edge = make_edge(
+            make_vertex((0.478343, 0.0433013, 0.0)),
+            make_vertex((0.478343, 0.0433009, 0.0))
+        )
+        self.assertListEqual(
+            lde._get_unique_edges(
+                degenerate_edge,
+                build_edge_id(degenerate_edge),
+                layout_edges_cmpd
+            ),
+            []
+        )
 
     def test_print_log_analysis(self) -> None:
         """

@@ -15,7 +15,7 @@ from glow.geometry_layouts.fillable_layouts import Fillable
 from glow.geometry_layouts.layouts import build_compound_regions
 from glow.interface.geom_entities import Compound, wrap_shape
 from glow.interface.geom_interface import ShapeType, add_to_study, \
-    extract_sub_shapes, get_bounding_box, get_in_place, \
+    extract_sub_shapes, get_basic_properties, get_bounding_box, get_in_place, \
     get_in_place_by_hystory, get_point_coordinates, get_shape_name, \
     get_shape_type, make_compound, make_face, make_partition, \
     make_partition_non_self_intersecting, make_vertex, update_salome_study
@@ -202,6 +202,7 @@ class LayoutDataExtractor():
         # Initialize the dictionary storing the edges names VS the list of
         # connected faces
         edges_name_vs_faces : Dict[str, List[Any | FaceData]] = {}
+        layout_edges_cmpd = make_compound(self.layout_edges)
         # Loop through all the layout subfaces ('FaceData' objects)
         print("LEN SUBFACES", len(self.subfaces))
         for subface in self.subfaces:
@@ -210,10 +211,13 @@ class LayoutDataExtractor():
             # Loop through all the edges of the current subface
             for subface_edge, edge_id in subface.edge_vs_id.items():
                 # Extract the corresponding GEOM edge object(s)
-                unique_edges = self._get_unique_edges(subface_edge, edge_id)
+                unique_edges = self._get_unique_edges(
+                    subface_edge, edge_id, layout_edges_cmpd
+                )
                 # Update the dictionary of edge names VS connected faces
                 self._update_edge_face_association(
-                    edges_name_vs_faces, subface, unique_edges)
+                    edges_name_vs_faces, subface, unique_edges
+                )
         # Return the dictionary of edge names VS the list of connected faces
         return edges_name_vs_faces
 
@@ -445,6 +449,10 @@ class LayoutDataExtractor():
                 [refined_cmpd],
                 ShapeType.FACE
             )
+        logging.info(
+            "Created the partition between the regions and the compound of "
+            + "edges of the SECTORIZED geometry."
+        )
         # For each region, recover its image in the partition, i.e. the faces
         # in which it has been partitioned
         refined_regions = []
@@ -565,7 +573,7 @@ class LayoutDataExtractor():
         return self.geometry_layout.geometry_maps[tdt_setup.geom_type]
 
     def _get_unique_edges(
-            self, subface_edge: Any, edge_id: str
+            self, subface_edge: Any, edge_id: str, layout_edges_cmpd: Any
         ) -> List[Any]:
         """
         Method that retrieves the GEOM edge objects associated to the given
@@ -592,6 +600,9 @@ class LayoutDataExtractor():
             The GEOM edge object to retrieve the corresponding sub-edges from.
         edge_id : str
             The ID of the edge to look for in the dictionary of IDs VS edges.
+        layout_edges_cmpd : Any
+            The GEOM compound of edges where the given edge has to be looked
+            for.
 
         Raises
         ------
@@ -603,22 +614,31 @@ class LayoutDataExtractor():
         List[Any]
             A list of GEOM edge objects that is either directly associated to
             the given ID, or representing the sub-edges the edge can be
-            subdivided into.
+            subdivided into. It can be empty in case of a degenerate edge.
         """
         try:
             return [self.id_vs_edge[edge_id]]
         except KeyError as exc:
             # Get the sub-edges the given edge can be subdivided into: these
             # are associated to a different face of the layout
-            edge = get_in_place(make_compound(self.layout_edges),
-                                subface_edge)
+            edge = get_in_place(layout_edges_cmpd, subface_edge)
+            error_message = "No corresponding edge in the layout could " +\
+                f"be retrieved for the subface edge whose data is {edge_id}."
+            # Handle the case no results from "get_in_place" are given
+            if not edge:
+                degen_tol = 1e-5
+                if get_basic_properties(subface_edge)[0] <= degen_tol:
+                    logging.warning(
+                        f"{error_message} In addition, the edge length is "
+                        f"below the degeneracy tolerance of {degen_tol}. For "
+                        "this reason, the edge will be ignored."
+                    )
+                    return []
+                raise RuntimeError(error_message) from exc
             # Only edge and compound of edges are treated
             edge_type = get_shape_type(edge)
-            error_message = "No corresponding edge in the layout could " +\
-                f"be retrieved for the subface edge whose data is {edge_id}"
-            if not edge or edge_type not in [ShapeType.COMPOUND,
-                                             ShapeType.EDGE]:
-                raise RuntimeError(error_message) from exc
+            if edge_type not in [ShapeType.COMPOUND, ShapeType.EDGE]:
+                raise RuntimeError(error_message + f"{edge_type}") from exc
             # EDGE-type case
             if not edge_type == ShapeType.COMPOUND:
                 return [self.id_vs_edge[build_edge_id(edge)]]
