@@ -13,7 +13,7 @@ from glow.geometry_layouts.layouts import Region
 from glow.geometry_layouts.symmetry_management import SymmetryDomain, \
     build_cartesian_symmetry_shape, build_hex_symmetry_shape, \
     use_symmetry_logic
-from glow.interface.geom_entities import Edge, wrap_shape
+from glow.interface.geom_entities import Compound, Edge, wrap_shape
 from glow.interface.geom_interface import get_bounding_box, get_min_distance, \
     get_point_coordinates, make_cdg, make_compound, make_edge, \
     make_intersection, make_rotation
@@ -380,7 +380,9 @@ class Cell(Fillable):
         #   the 'windmill' option is active)
         edges = self._build_sectorization_edges(sectors_no, angles, windmill)
         # Store the GEOM compound of the edges in the mapping
-        self.geometry_maps[GeometryType.SECTORIZED] = make_compound(edges)
+        self.geometry_maps[GeometryType.SECTORIZED] = Compound(
+            make_compound(edges)
+        )
 
     def _translate_layout_specific_elems(
             self, new_cntr: Tuple[float, float, float]

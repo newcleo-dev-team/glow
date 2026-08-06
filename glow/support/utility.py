@@ -719,6 +719,36 @@ def is_vertex_on_edge(vertex: Any, edge: Any) -> bool:
         ``True`` in case the vertex is on the edge (within the calculated
         tolerance), ``False`` otherwise.
     """
+    # Get the GEOM tolerances for the vertex
+    vrtx_tol = max(get_tolerances(vertex)[-2:-1])
+    # Calculate the final tolerance as the maximum value between the tolerance
+    # of the edge and the vertex
+    combined_tol = max(get_edge_tolerance(edge), vrtx_tol)
+
+    # Calculate the vertex-edge distance and return if this is within the
+    # tolerance
+    return math.isclose(
+        abs(get_min_distance(vertex, edge)) - combined_tol,
+        0.0,
+        abs_tol=combined_tol
+    )
+
+def get_edge_tolerance(edge: Any) -> float:
+    """
+    Calculate the tolerance the given edge based on its bounding box, length,
+    and tolerances assigned to the edge itself and the vertex objects it is
+    made of.
+
+    Parameters
+    ----------
+    edge : Any
+        The edge object to calculate tolerance for.
+
+    Returns
+    -------
+    float
+        The calculated edge tolerance.
+    """
     # Declare scaling factors and the min/max tolerances to consider
     edge_bbox_factor = 1e-7
     edge_len_factor = 1e-6
@@ -733,24 +763,10 @@ def is_vertex_on_edge(vertex: Any, edge: Any) -> bool:
     # Get the GEOM tolerances for the edge and its vertices only
     _, *tols = get_tolerances(edge)
     geom_edge_tol = max(tols)
-    # Get the GEOM tolerances for the vertex
-    vrtx_tol = max(get_tolerances(vertex)[-2:-1])
-
     # Calculate the edge tolerance by combining all the three values and
     # comparing wrt the minimum and maximum allowed values
     edge_total_tol = max(bbox_tol, length_tol, geom_edge_tol)
-    edge_total_tol = min(max(edge_total_tol, min_tol), max_tol)
-    # Calculate the final tolerance as the maximum value between the tolerance
-    # of the edge and the vertex
-    combined_tol = max(edge_total_tol, vrtx_tol)
-
-    # Calculate the vertex-edge distance and return if this is within the
-    # tolerance
-    return math.isclose(
-        abs(get_min_distance(vertex, edge)) - combined_tol,
-        0.0,
-        abs_tol=combined_tol
-    )
+    return min(max(edge_total_tol, min_tol), max_tol)
 
 
 def retrieve_selected_object(error_msg: str) -> Any:
