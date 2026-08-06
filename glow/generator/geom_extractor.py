@@ -22,7 +22,7 @@ from glow.interface.geom_interface import ShapeType, add_to_study, \
 from glow.main import TdtSetup
 from glow.support.types import GeometryType, LayoutGeometryType, LayoutType, \
     PropertyType, SymmetryType
-from glow.support.utility import are_same_shapes, build_compound_borders, get_edge_tolerance, \
+from glow.support.utility import are_same_shapes, build_compound_borders, \
     translate_wrt_reference
 
 

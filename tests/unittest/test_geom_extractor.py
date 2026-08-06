@@ -15,9 +15,10 @@ from glow.generator.export_data import EdgeData, FaceData, build_edge_id, \
 from glow.generator.geom_extractor import LayoutDataExtractor, analyse_layout
 from glow.geometry_layouts.cells import HexCell, CartesianCell
 from glow.geometry_layouts.geometries import Circle, Hexagon, Rectangle
-from glow.geometry_layouts.lattices import CartesianLattice, HexLattice, Lattice
+from glow.geometry_layouts.lattices import CartesianLattice, HexLattice, \
+    Lattice
 from glow.geometry_layouts.layouts import Region
-from glow.interface.geom_entities import Face, Vertex, wrap_shape
+from glow.interface.geom_entities import Face, wrap_shape
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
     get_shape_name, limit_tolerance, make_circle, make_common, make_compound, \
     make_edge, make_face, make_partition, make_translation, make_vector, \
