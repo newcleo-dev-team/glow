@@ -7,18 +7,18 @@ import unittest
 
 from typing import Any, Dict, List, Tuple
 
-from build.lib.glow.generator.geom_extractor import classify_lattice_edges
+from glow.generator.geom_extractor import classify_layout_edges
 from glow.generator.geom_extractor import BoundaryData, EdgeData, FaceData, \
     build_edge_id
 from glow.geometry_layouts.geometries import Circle, Rectangle
 from glow.geometry_layouts.layouts import Region
 from glow.interface.geom_interface import ShapeType, extract_sub_shapes, \
-    get_kind_of_shape, get_tolerances, is_point_inside_shape, make_arc_center, \
+    get_kind_of_shape, is_point_inside_shape, make_arc_center, \
     make_circle, make_compound, make_edge, make_face, make_vertex, \
     set_shape_name
 from glow.support.types import EDGE_NAME_VS_TYPE, BoundaryType, EdgeType, \
     LayoutGeometryType, LayoutType, PropertyType, SymmetryType
-from glow.support.utility import are_same_shapes, is_vertex_on_edge
+from glow.support.utility import are_same_shapes
 from tests.unittest.support_funcs import BoundaryInfo, build_boundary_info
 
 
@@ -777,9 +777,9 @@ class TestExportDataFunctions(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             _ = build_edge_id(make_face([self.circle]))
 
-    def test_classify_lattice_edges(self) -> None:
+    def test_classify_layout_edges(self) -> None:
         """
-        Method that tests the implementation of the `classify_lattice_edges`
+        Method that tests the implementation of the `classify_layout_edges`
         function.
         """
         # Reference dictionary of strings VS edges with which compare the
@@ -791,7 +791,7 @@ class TestExportDataFunctions(unittest.TestCase):
         }
 
         # Build the classificaton of the edges
-        ids_edges = classify_lattice_edges(
+        ids_edges = classify_layout_edges(
             [self.segment, self.arc_circle, self.circle]
         )
 
@@ -810,4 +810,4 @@ class TestExportDataFunctions(unittest.TestCase):
         # Verify an exception is raised if any of the elements in the list
         # is not among the allowed edges' types
         with self.assertRaises(RuntimeError):
-            _ = classify_lattice_edges([make_face(self.circle)])
+            _ = classify_layout_edges([make_face(self.circle)])

@@ -13,7 +13,7 @@ from glow.main import *
 from glow.support.types import *
 from glow.support.utility import *
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Davide Manzione, Daniele Tomatis"
 __company__ = "newcleo"
-__date__ = "01 August 2025"
+__date__ = "17 April 2026"

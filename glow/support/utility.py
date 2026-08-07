@@ -509,6 +509,42 @@ def get_angle_between_points(
     return angle
 
 
+def get_edge_tolerance(edge: Any) -> float:
+    """
+    Calculate the tolerance of the given edge based on its bounding box,
+    length, and tolerances assigned to the edge itself and the vertex objects
+    it is made of.
+
+    Parameters
+    ----------
+    edge : Any
+        The edge object to calculate tolerance for.
+
+    Returns
+    -------
+    float
+        The calculated edge tolerance.
+    """
+    # Declare scaling factors and the min/max tolerances to consider
+    edge_bbox_factor = 1e-7
+    edge_len_factor = 1e-6
+    min_tol = 1e-9
+    max_tol = 1e-3
+
+    # Calculate the tolerance derived from the bounding box of the edge
+    xmin, xmax, ymin, ymax = get_bounding_box(edge)
+    bbox_tol = max(xmax - xmin, ymax - ymin) * edge_bbox_factor
+    # Calculate the tolerance derived from the length of the edge
+    length_tol = get_basic_properties(edge)[0] * edge_len_factor
+    # Get the GEOM tolerances for the edge and its vertices only
+    _, *tols = get_tolerances(edge)
+    geom_edge_tol = max(tols)
+    # Calculate the edge tolerance by combining all the three values and
+    # comparing wrt the minimum and maximum allowed values
+    edge_total_tol = max(bbox_tol, length_tol, geom_edge_tol)
+    return min(max(edge_total_tol, min_tol), max_tol)
+
+
 def get_id_from_name(name: str) -> int:
     """
     Function that extracts the index of the shape whose name is provided.
@@ -732,41 +768,6 @@ def is_vertex_on_edge(vertex: Any, edge: Any) -> bool:
         0.0,
         abs_tol=combined_tol
     )
-
-def get_edge_tolerance(edge: Any) -> float:
-    """
-    Calculate the tolerance the given edge based on its bounding box, length,
-    and tolerances assigned to the edge itself and the vertex objects it is
-    made of.
-
-    Parameters
-    ----------
-    edge : Any
-        The edge object to calculate tolerance for.
-
-    Returns
-    -------
-    float
-        The calculated edge tolerance.
-    """
-    # Declare scaling factors and the min/max tolerances to consider
-    edge_bbox_factor = 1e-7
-    edge_len_factor = 1e-6
-    min_tol = 1e-9
-    max_tol = 1e-3
-
-    # Calculate the tolerance derived from the bounding box of the edge
-    xmin, xmax, ymin, ymax = get_bounding_box(edge)
-    bbox_tol = max(xmax - xmin, ymax - ymin) * edge_bbox_factor
-    # Calculate the tolerance derived from the length of the edge
-    length_tol = get_basic_properties(edge)[0] * edge_len_factor
-    # Get the GEOM tolerances for the edge and its vertices only
-    _, *tols = get_tolerances(edge)
-    geom_edge_tol = max(tols)
-    # Calculate the edge tolerance by combining all the three values and
-    # comparing wrt the minimum and maximum allowed values
-    edge_total_tol = max(bbox_tol, length_tol, geom_edge_tol)
-    return min(max(edge_total_tol, min_tol), max_tol)
 
 
 def retrieve_selected_object(error_msg: str) -> Any:
